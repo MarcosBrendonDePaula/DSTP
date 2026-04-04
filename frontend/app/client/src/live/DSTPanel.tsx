@@ -249,38 +249,23 @@ function InventoryView({ inventory }: { inventory: any }) {
 
 // ─── Character Avatar ────────────────────────────────
 
-const PREFAB_COLORS: Record<string, string> = {
-  wilson: '#B8860B', willow: '#DC143C', wolfgang: '#8B4513', wendy: '#DDA0DD',
-  wx78: '#708090', wickerbottom: '#9370DB', woodie: '#228B22', wes: '#F5F5F5',
-  waxwell: '#2F4F4F', wigfrid: '#CD853F', webber: '#4A4A4A', winona: '#DAA520',
-  warly: '#FF6347', wormwood: '#32CD32', wurt: '#3CB371', walter: '#87CEEB',
-  wanda: '#FFD700', wonkey: '#D2691E', wortox: '#FF4500', wortox_soul: '#FF4500',
-}
+const BASE_CHARACTERS = new Set([
+  'wilson', 'willow', 'wolfgang', 'wendy', 'wx78', 'wickerbottom', 'woodie',
+  'wes', 'maxwell', 'wigfrid', 'webber', 'winona', 'warly', 'wormwood',
+  'wurt', 'walter', 'wanda', 'wonkey', 'wortox',
+])
 
 function CharacterAvatar({ prefab, isGhost, size = 40 }: { prefab: string; isGhost?: boolean; size?: number }) {
   const [imgError, setImgError] = useState(false)
-  const capPrefab = prefab ? prefab.charAt(0).toUpperCase() + prefab.slice(1) : 'Unknown'
-  const ghostPrefix = isGhost ? 'Ghost_' : ''
-  const imgUrl = `https://dontstarve.wiki.gg/images/thumb/${ghostPrefix}${capPrefab}_Portrait.png/${size * 2}px-${ghostPrefix}${capPrefab}_Portrait.png`
-  const bgColor = PREFAB_COLORS[prefab] || '#555'
-
-  if (imgError) {
-    return (
-      <div
-        className="rounded-lg flex items-center justify-center shrink-0 font-bold text-white/80"
-        style={{ width: size, height: size, backgroundColor: bgColor + '33', border: `1px solid ${bgColor}44` }}
-      >
-        <span style={{ fontSize: size * 0.4 }}>{capPrefab.charAt(0)}</span>
-      </div>
-    )
-  }
+  const isBase = BASE_CHARACTERS.has(prefab)
+  const imgUrl = isBase && !imgError ? `/avatars/${prefab}.png` : '/avatars/unknown.svg'
 
   return (
-    <div className="shrink-0 rounded-lg overflow-hidden" style={{ width: size, height: size, backgroundColor: '#111' }}>
+    <div className="shrink-0 rounded-lg overflow-hidden bg-[#111]" style={{ width: size, height: size }}>
       <img
         src={imgUrl}
-        alt={prefab}
-        className={`w-full h-full object-cover ${isGhost ? 'opacity-50 grayscale' : ''}`}
+        alt={prefab || 'unknown'}
+        className={`w-full h-full object-cover ${isGhost ? 'opacity-40 grayscale' : ''}`}
         onError={() => setImgError(true)}
         loading="lazy"
       />
