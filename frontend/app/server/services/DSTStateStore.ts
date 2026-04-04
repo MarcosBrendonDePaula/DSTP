@@ -1,0 +1,167 @@
+// DSTStateStore - Server-side cache for DST server state
+// Each DST server has 1-2 shards: master (overworld) and caves
+// State is keyed by shard_id (e.g. "server-1:master", "server-1:caves")
+// Grouped by server_id for the frontend
+
+const MAX_EVENTS_PER_SHARD = 200
+
+interface ShardEntry {
+  shard_id: string
+  server_id: string
+  shard_type: string  // "master" | "caves"
+  server: any
+  players: any[]
+  events: any[]
+  last_seen: number
+  online: boolean
+}
+
+export interface ServerGroup {
+  server_id: string
+  name: string
+  shards: ShardEntry[]
+  all_players: any[]     // merged from all shards
+  online: boolean
+  last_seen: number
+}
+
+class DSTStateStore {
+  private shards: Map<string, ShardEntry> = new Map()
+  private commandQueues: Map<string, any[]> = new Map()
+  version: number = 0
+
+  // Called by REST route when a DST shard syncs
+  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[]): any[] {
+    let entry = this.shards.get(shard_id)
+    if (!entry) {
+      entry = {
+        shard_id, server_id, shard_type,
+        server: null, players: [], events: [],
+        last_seen: 0, online: true,
+      }
+      this.shards.set(shard_id, entry)
+    }
+
+    entry.server = server
+    entry.players = players
+    entry.last_seen = Date.now()
+    entry.online = true
+
+    if (events && events.length > 0) {
+      for (const evt of events) {
+        entry.events.push({ ...evt, shard_id, server_id, shard_type, received_at: Date.now() })
+      }
+      while (entry.events.length > MAX_EVENTS_PER_SHARD) {
+        entry.events.shift()
+      }
+    }
+
+    this.version++
+
+    // Drain command queue for this shard
+    const queue = this.commandQueues.get(shard_id) || []
+    this.commandQueues.set(shard_id, [])
+    return queue
+  }
+
+  // Get servers grouped by server_id
+  getServerGroups(): ServerGroup[] {
+    const groups = new Map<string, ServerGroup>()
+
+    for (const shard of this.shards.values()) {
+      let group = groups.get(shard.server_id)
+      if (!group) {
+        group = {
+          server_id: shard.server_id,
+          name: '',
+          shards: [],
+          all_players: [],
+          online: false,
+          last_seen: 0,
+        }
+        groups.set(shard.server_id, group)
+      }
+
+      group.shards.push(shard)
+
+      // Use master shard name as server name
+      if (shard.shard_type === 'master' && shard.server?.name) {
+        group.name = shard.server.name
+      }
+
+      // Merge players from all shards, tag with shard info
+      for (const p of shard.players) {
+        group.all_players.push({ ...p, shard_id: shard.shard_id, shard_type: shard.shard_type })
+      }
+
+      if (shard.online) group.online = true
+      if (shard.last_seen > group.last_seen) group.last_seen = shard.last_seen
+    }
+
+    return Array.from(groups.values())
+  }
+
+  getAllEvents(): any[] {
+    const all: any[] = []
+    for (const shard of this.shards.values()) {
+      all.push(...shard.events)
+    }
+    return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
+  }
+
+  // Queue command for a specific shard
+  pushCommand(shard_id: string, type: string, data: any = {}) {
+    if (!this.commandQueues.has(shard_id)) {
+      this.commandQueues.set(shard_id, [])
+    }
+    this.commandQueues.get(shard_id)!.push({ type, data, queued_at: Date.now() })
+  }
+
+  // Send command to all shards of a server
+  pushCommandToServer(server_id: string, type: string, data: any = {}) {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        this.pushCommand(shard.shard_id, type, data)
+      }
+    }
+  }
+
+  // Find which shard a player is on
+  findPlayerShard(server_id: string, userid: string): string | null {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        if (shard.players.find(p => p.userid === userid)) {
+          return shard.shard_id
+        }
+      }
+    }
+    return null
+  }
+
+  // Broadcast to all shards globally
+  broadcastCommand(type: string, data: any = {}) {
+    for (const shard_id of this.shards.keys()) {
+      this.pushCommand(shard_id, type, data)
+    }
+  }
+
+  checkHealth() {
+    const now = Date.now()
+    let changed = false
+    for (const entry of this.shards.values()) {
+      const online = now - entry.last_seen < 30000
+      if (entry.online !== online) {
+        entry.online = online
+        changed = true
+      }
+    }
+    if (changed) this.version++
+  }
+}
+
+const STORE_KEY = '__dstp_state_store__'
+if (!(globalThis as any)[STORE_KEY]) {
+  (globalThis as any)[STORE_KEY] = new DSTStateStore()
+}
+
+export const dstStateStore: DSTStateStore = (globalThis as any)[STORE_KEY]
