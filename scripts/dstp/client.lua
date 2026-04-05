@@ -291,6 +291,20 @@ local function RegisterBuiltinCommands()
         if data.userid then _G.TheNet:Ban(data.userid) end
     end)
 
+    DSTP.RegisterCommand("add_admin", function(data)
+        if data.userid then
+            _G.TheNet:SetIsClientAdmin(data.userid, true)
+            Log("Admin added: " .. tostring(data.userid))
+        end
+    end)
+
+    DSTP.RegisterCommand("remove_admin", function(data)
+        if data.userid then
+            _G.TheNet:SetIsClientAdmin(data.userid, false)
+            Log("Admin removed: " .. tostring(data.userid))
+        end
+    end)
+
     DSTP.RegisterCommand("kill", function(data)
         local player = FindPlayer(data.userid)
         if player and player.components.health then

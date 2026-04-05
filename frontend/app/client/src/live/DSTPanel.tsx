@@ -371,6 +371,15 @@ function PlayerActionsModal({ player, open, onClose, onAction }: any) {
           </div>
         </div>
 
+        {/* Admin */}
+        <div>
+          <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Admin</h4>
+          <div className="flex gap-1.5 flex-wrap">
+            <Btn color="#22c55e" size="md" onClick={() => onAction('add_admin', player)}>👑 Set Admin</Btn>
+            <Btn color="#6b7280" size="md" onClick={() => onAction('remove_admin', player)}>Remove Admin</Btn>
+          </div>
+        </div>
+
         {/* Danger zone */}
         <div>
           <h4 className="text-[11px] font-semibold text-red-400/60 uppercase tracking-wider mb-2">Danger Zone</h4>
@@ -708,6 +717,8 @@ export function DSTPanel() {
       kick: { title: 'Kick Player', message: `Tem certeza que deseja kickar ${player.name}?`, btn: 'Kick' },
       ban: { title: '⛔ Ban Player', message: `Tem certeza que deseja BANIR ${player.name}? Esta ação é permanente.`, btn: 'Banir' },
       kill: { title: '💀 Kill Player', message: `Tem certeza que deseja matar ${player.name}?`, btn: 'Kill' },
+      add_admin: { title: '👑 Set Admin', message: `Dar permissão de admin para ${player.name}?`, btn: 'Confirmar' },
+      remove_admin: { title: 'Remove Admin', message: `Remover permissão de admin de ${player.name}?`, btn: 'Remover' },
     }
     const action = dangerActions[type]
     if (action) {
