@@ -527,6 +527,7 @@ local function DoPoll()
         server = GetServerInfo(),
         players = GetAllPlayersData(),
         events = events,
+        active_events = evt_config,
     }
 
     local json_data = SafeEncode(payload)
@@ -543,6 +544,10 @@ local function DoPoll()
                     state.last_successful_poll = _G.GetTime()
                     if data.commands and #data.commands > 0 then
                         ProcessCommands(data.commands)
+                    end
+                    -- Hot-toggle event categories from backend
+                    if data.enable_events then
+                        HotToggleEvents(data.enable_events)
                     end
                 end
             else
@@ -562,6 +567,52 @@ end
 -- Game event listeners (by category)
 -------------------------------------------------
 local evt_config = {}
+local evt_initialized = {}  -- tracks which categories have been registered
+local world_inst = nil      -- reference to TheWorld for hot-toggle
+
+-- Hot-toggle: enable/disable event categories at runtime
+local function HotToggleEvents(requested)
+    if not requested or not world_inst then return end
+    local changed = false
+
+    for category, enabled in pairs(requested) do
+        if evt_config[category] ~= enabled then
+            evt_config[category] = enabled
+            changed = true
+            Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely")
+
+            -- Register new listeners if enabling a category not yet initialized
+            if enabled and not evt_initialized[category] then
+                evt_initialized[category] = true
+                if category == "players" then
+                    RegisterPlayerEvents(world_inst)
+                elseif category == "world" then
+                    RegisterWorldEvents(world_inst)
+                elseif category == "weather" then
+                    RegisterWeatherEvents(world_inst)
+                elseif category == "bosses" then
+                    RegisterBossEvents(world_inst)
+                elseif category == "chat" and config.shard_type == "master" then
+                    HookChat()
+                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" then
+                    -- Re-hook per-player events for all current players
+                    hooked_players = {}
+                    for _, player in ipairs(_G.AllPlayers) do
+                        RegisterPerPlayerEvents(player)
+                    end
+                end
+            end
+        end
+    end
+
+    if changed then
+        local active = {}
+        for k, v in pairs(evt_config) do
+            if v then table.insert(active, k) end
+        end
+        Log("Active events: " .. table.concat(active, ", "))
+    end
+end
 
 local function RegisterPlayerEvents(inst)
     inst:ListenForEvent("ms_playerspawn", function(world, player)
@@ -758,20 +809,26 @@ local function RegisterPerPlayerEvents(player)
 end
 
 local function RegisterGameEvents(inst)
+    world_inst = inst
+
     if evt_config.players then
         RegisterPlayerEvents(inst)
+        evt_initialized.players = true
     end
 
     if evt_config.world then
         RegisterWorldEvents(inst)
+        evt_initialized.world = true
     end
 
     if evt_config.weather then
         RegisterWeatherEvents(inst)
+        evt_initialized.weather = true
     end
 
     if evt_config.bosses then
         RegisterBossEvents(inst)
+        evt_initialized.bosses = true
     end
 
     -- Hook per-player events for existing players
@@ -779,6 +836,10 @@ local function RegisterGameEvents(inst)
         for _, player in ipairs(_G.AllPlayers) do
             RegisterPerPlayerEvents(player)
         end
+        evt_initialized.combat = evt_config.combat
+        evt_initialized.crafting = evt_config.crafting
+        evt_initialized.inventory = evt_config.inventory
+        evt_initialized.health = evt_config.health
     end
 
     local enabled = {}

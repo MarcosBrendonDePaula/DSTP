@@ -32,6 +32,7 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
     'sendCommand',
     'sendPlayerCommand',
     'broadcastCommand',
+    'toggleEventCategory',
     'refresh',
   ] as const
 
@@ -79,6 +80,7 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
         online: g.online,
         last_seen: g.last_seen,
         player_count: g.all_players.length,
+        active_events: dstStateStore.getActiveEvents(g.server_id),
         shards: g.shards.map(s => ({
           shard_id: s.shard_id,
           shard_type: s.shard_type,
@@ -148,6 +150,13 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
   async broadcastCommand(payload: { type: string; data?: Record<string, any> }) {
     dstStateStore.broadcastCommand(payload.type, payload.data || {})
     return { success: true }
+  }
+
+  async toggleEventCategory(payload: { server_id: string; category: string; enabled: boolean }) {
+    const { server_id, category, enabled } = payload
+    if (!server_id || !category) throw new Error('server_id and category required')
+    dstStateStore.requestEventToggleForServer(server_id, category, enabled)
+    return { success: true, category, enabled }
   }
 
   async refresh() {

@@ -14,6 +14,8 @@ interface ShardEntry {
   events: any[]
   last_seen: number
   online: boolean
+  active_events: Record<string, boolean>
+  requested_events: Record<string, boolean> | null  // pending event toggles from frontend
 }
 
 export interface ServerGroup {
@@ -31,13 +33,14 @@ class DSTStateStore {
   version: number = 0
 
   // Called by REST route when a DST shard syncs
-  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[]): any[] {
+  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>): { commands: any[]; enable_events?: Record<string, boolean> } {
     let entry = this.shards.get(shard_id)
     if (!entry) {
       entry = {
         shard_id, server_id, shard_type,
         server: null, players: [], events: [],
         last_seen: 0, online: true,
+        active_events: {}, requested_events: null,
       }
       this.shards.set(shard_id, entry)
     }
@@ -56,12 +59,25 @@ class DSTStateStore {
       }
     }
 
+    // Store active events from the game
+    if (active_events) {
+      entry.active_events = active_events
+    }
+
     this.version++
 
-    // Drain command queue for this shard
+    // Drain command queue
     const queue = this.commandQueues.get(shard_id) || []
     this.commandQueues.set(shard_id, [])
-    return queue
+
+    // Check for pending event toggle requests
+    const result: { commands: any[]; enable_events?: Record<string, boolean> } = { commands: queue }
+    if (entry.requested_events) {
+      result.enable_events = entry.requested_events
+      entry.requested_events = null
+    }
+
+    return result
   }
 
   // Get servers grouped by server_id
@@ -143,6 +159,38 @@ class DSTStateStore {
     for (const shard_id of this.shards.keys()) {
       this.pushCommand(shard_id, type, data)
     }
+  }
+
+  // Request event category toggle for a shard (delivered on next sync)
+  requestEventToggle(shard_id: string, category: string, enabled: boolean) {
+    const entry = this.shards.get(shard_id)
+    if (!entry) return
+    if (!entry.requested_events) {
+      entry.requested_events = { ...entry.active_events }
+    }
+    entry.requested_events[category] = enabled
+  }
+
+  // Request event toggle for all shards of a server
+  requestEventToggleForServer(server_id: string, category: string, enabled: boolean) {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        this.requestEventToggle(shard.shard_id, category, enabled)
+      }
+    }
+  }
+
+  // Get active events for a server (merged from all shards)
+  getActiveEvents(server_id: string): Record<string, boolean> {
+    const merged: Record<string, boolean> = {}
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        for (const [k, v] of Object.entries(shard.active_events)) {
+          if (v) merged[k] = true
+        }
+      }
+    }
+    return merged
   }
 
   checkHealth() {

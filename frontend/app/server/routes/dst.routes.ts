@@ -5,26 +5,27 @@ setInterval(() => dstStateStore.checkHealth(), 15000)
 
 export const dstRoutes = new Elysia({ prefix: "/dst" })
   .post("/sync", ({ body }) => {
-    const { server_id, shard_id, shard_type, server, players, events } = body as any
+    const { server_id, shard_id, shard_type, server, players, events, active_events } = body as any
 
     if (!server_id || !shard_id) {
       return { error: 'missing server_id or shard_id' }
     }
 
-    const commands = dstStateStore.handleSync(
+    const result = dstStateStore.handleSync(
       server_id,
       shard_id,
       shard_type || 'master',
       server,
       players || [],
-      events || []
+      events || [],
+      active_events
     )
 
     // Notify live component
     const { notifyLiveDSTP } = require("../live/LiveDSTP")
     notifyLiveDSTP?.()
 
-    return { commands }
+    return result
   }, {
     detail: {
       tags: ['DST'],
