@@ -454,6 +454,7 @@ local function RegisterBuiltinCommands()
         if data.lua then
             local fn, err = loadstring(data.lua)
             if fn then
+                setfenv(fn, _G)
                 local ok, result = pcall(fn)
                 if not ok then LogError("Execute failed: " .. tostring(result)) end
             else
@@ -650,50 +651,6 @@ end
 -------------------------------------------------
 -- (evt_config, evt_initialized, world_inst declared at top of module)
 
--- Hot-toggle: enable/disable event categories at runtime
-local function HotToggleEvents(requested)
-    if not requested or not world_inst then return end
-    local changed = false
-
-    for category, enabled in pairs(requested) do
-        if evt_config[category] ~= enabled then
-            evt_config[category] = enabled
-            changed = true
-            Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely")
-
-            -- Register new listeners if enabling a category not yet initialized
-            if enabled and not evt_initialized[category] then
-                evt_initialized[category] = true
-                if category == "players" then
-                    RegisterPlayerEvents(world_inst)
-                elseif category == "world" then
-                    RegisterWorldEvents(world_inst)
-                elseif category == "weather" then
-                    RegisterWeatherEvents(world_inst)
-                elseif category == "bosses" then
-                    RegisterBossEvents(world_inst)
-                elseif category == "chat" and config.shard_type == "master" then
-                    HookChat()
-                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" then
-                    -- Re-hook per-player events for all current players
-                    hooked_players = {}
-                    for _, player in ipairs(_G.AllPlayers) do
-                        RegisterPerPlayerEvents(player)
-                    end
-                end
-            end
-        end
-    end
-
-    if changed then
-        local active = {}
-        for k, v in pairs(evt_config) do
-            if v then table.insert(active, k) end
-        end
-        Log("Active events: " .. table.concat(active, ", "))
-    end
-end
-
 local function RegisterPlayerEvents(inst)
     inst:ListenForEvent("ms_playerspawn", function(world, player)
         DSTP.PushEvent("player_spawn", {
@@ -710,6 +667,7 @@ local function RegisterPlayerEvents(inst)
             userid = player.userid,
             name = player.name,
         })
+        hooked_players[player.userid] = nil
     end)
 
     inst:ListenForEvent("entity_death", function(world, data)
@@ -975,6 +933,51 @@ local function HookChat()
             })
             return OldNetworkSay(guid, userid, name, prefab, message, colour, ...)
         end
+    end
+end
+
+-- Hot-toggle: enable/disable event categories at runtime
+-- NOTE: Must be defined after all Register* and HookChat functions
+local function HotToggleEvents(requested)
+    if not requested or not world_inst then return end
+    local changed = false
+
+    for category, enabled in pairs(requested) do
+        if evt_config[category] ~= enabled then
+            evt_config[category] = enabled
+            changed = true
+            Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely")
+
+            -- Register new listeners if enabling a category not yet initialized
+            if enabled and not evt_initialized[category] then
+                evt_initialized[category] = true
+                if category == "players" then
+                    RegisterPlayerEvents(world_inst)
+                elseif category == "world" then
+                    RegisterWorldEvents(world_inst)
+                elseif category == "weather" then
+                    RegisterWeatherEvents(world_inst)
+                elseif category == "bosses" then
+                    RegisterBossEvents(world_inst)
+                elseif category == "chat" and config.shard_type == "master" then
+                    HookChat()
+                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" then
+                    -- Re-hook per-player events for all current players
+                    hooked_players = {}
+                    for _, player in ipairs(_G.AllPlayers) do
+                        RegisterPerPlayerEvents(player)
+                    end
+                end
+            end
+        end
+    end
+
+    if changed then
+        local active = {}
+        for k, v in pairs(evt_config) do
+            if v then table.insert(active, k) end
+        end
+        Log("Active events: " .. table.concat(active, ", "))
     end
 end
 

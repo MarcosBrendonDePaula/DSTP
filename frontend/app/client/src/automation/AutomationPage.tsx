@@ -16,6 +16,7 @@ export function AutomationPage() {
   const [flowName, setFlowName] = useState('')
   const [editorNodes, setEditorNodes] = useState<Node[]>([])
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
+  const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
 
   const flows = auto.$state.flows || []
   const logs = auto.$state.logs || []
@@ -33,6 +34,7 @@ export function AutomationPage() {
     setFlowName('Novo Fluxo')
     setEditorNodes([])
     setEditorEdges([])
+    setOriginalCreatedAt(null)
   }
 
   const editFlow = (flow: any) => {
@@ -40,6 +42,7 @@ export function AutomationPage() {
     setFlowName(flow.name)
     setEditorNodes(flow.nodes || [])
     setEditorEdges(flow.edges || [])
+    setOriginalCreatedAt(flow.created_at || null)
   }
 
   const saveFlow = async (nodes: Node[], edges: Edge[]) => {
@@ -52,7 +55,7 @@ export function AutomationPage() {
         server_id: urlServer,
         nodes: nodes.map(n => ({ id: n.id, type: n.type as any, data: n.data, position: n.position })),
         edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || undefined, targetHandle: e.targetHandle || undefined })),
-        created_at: Date.now(),
+        created_at: originalCreatedAt || Date.now(),
         trigger_count: 0,
       }
     })

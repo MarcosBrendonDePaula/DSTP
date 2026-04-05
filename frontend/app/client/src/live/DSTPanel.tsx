@@ -13,6 +13,43 @@ interface ConfirmOptions {
   danger?: boolean
 }
 
+function ConfirmDialog({ state, onConfirm, onCancel }: {
+  state: { options: ConfirmOptions; resolve: (v: boolean) => void } | null
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!state) return null
+  const { options } = state
+  const btnColor = options.danger ? '#ef4444' : '#3b82f6'
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" onClick={onCancel}>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-[#141414] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 w-full max-w-sm p-5 animate-in fade-in zoom-in-95 duration-150"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-semibold text-white mb-2">{options.title}</h3>
+        <p className="text-xs text-gray-400 mb-5 leading-relaxed">{options.message}</p>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onCancel}
+            className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
+          >{options.cancelText || 'Cancelar'}</button>
+          <button
+            onClick={onConfirm}
+            autoFocus
+            className="text-xs px-4 py-2 rounded-lg font-medium transition-colors border"
+            style={{ background: `${btnColor}20`, color: btnColor, borderColor: `${btnColor}30` }}
+            onMouseEnter={e => { e.currentTarget.style.background = `${btnColor}35` }}
+            onMouseLeave={e => { e.currentTarget.style.background = `${btnColor}20` }}
+          >{options.confirmText || 'Confirmar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function useConfirm() {
   const [state, setState] = useState<{ options: ConfirmOptions; resolve: (v: boolean) => void } | null>(null)
 
@@ -32,40 +69,7 @@ function useConfirm() {
     setState(null)
   }, [state])
 
-  const ConfirmDialog = () => {
-    if (!state) return null
-    const { options } = state
-    const btnColor = options.danger ? '#ef4444' : '#3b82f6'
-
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" onClick={handleCancel}>
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
-        <div
-          className="relative bg-[#141414] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 w-full max-w-sm p-5 animate-in fade-in zoom-in-95 duration-150"
-          onClick={e => e.stopPropagation()}
-        >
-          <h3 className="text-sm font-semibold text-white mb-2">{options.title}</h3>
-          <p className="text-xs text-gray-400 mb-5 leading-relaxed">{options.message}</p>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={handleCancel}
-              className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
-            >{options.cancelText || 'Cancelar'}</button>
-            <button
-              onClick={handleConfirm}
-              autoFocus
-              className="text-xs px-4 py-2 rounded-lg font-medium transition-colors border"
-              style={{ background: `${btnColor}20`, color: btnColor, borderColor: `${btnColor}30` }}
-              onMouseEnter={e => { e.currentTarget.style.background = `${btnColor}35` }}
-              onMouseLeave={e => { e.currentTarget.style.background = `${btnColor}20` }}
-            >{options.confirmText || 'Confirmar'}</button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return { confirm, ConfirmDialog }
+  return { confirm, confirmState: state, handleConfirm, handleCancel }
 }
 
 // ─── Icons (inline SVG) ─────────────────────────────
@@ -344,6 +348,14 @@ function PlayerActionsModal({ player, open, onClose, onAction }: any) {
   const [giveCount, setGiveCount] = useState('1')
   const [tpX, setTpX] = useState(player?.position?.x?.toString() || '')
   const [tpZ, setTpZ] = useState(player?.position?.z?.toString() || '')
+
+  // Reset state when switching players
+  useEffect(() => {
+    setTpX(player?.position?.x?.toString() || '')
+    setTpZ(player?.position?.z?.toString() || '')
+    setGiveItem('')
+    setGiveCount('1')
+  }, [player?.userid])
 
   if (!player) return null
 
@@ -664,7 +676,7 @@ function RightPanel({ events, onChatSend }: { events: any[]; onChatSend: (msg: s
 
 export function DSTPanel() {
   const dstp = Live.use(LiveDSTP, { initialState: LiveDSTP.defaultState })
-  const { confirm: showConfirm, ConfirmDialog } = useConfirm()
+  const { confirm: showConfirm, confirmState, handleConfirm, handleCancel } = useConfirm()
 
   const urlServer = useMemo(() => new URLSearchParams(window.location.search).get('server'), [])
   const state = dstp.$state
@@ -759,7 +771,7 @@ export function DSTPanel() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-4">
       {/* Confirm Dialog */}
-      <ConfirmDialog />
+      <ConfirmDialog state={confirmState} onConfirm={handleConfirm} onCancel={handleCancel} />
 
       {/* Modals */}
       <Modal open={!!inventoryPlayerData} onClose={() => setInventoryPlayer(null)} title={`🎒 ${inventoryPlayerData?.name} — Inventário`}>

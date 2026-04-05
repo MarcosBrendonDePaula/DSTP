@@ -52,7 +52,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
-    this.setState({ flows, logs })
+    this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs } as any)
   }
 
   // ─── Flow CRUD ─────────────────────────────────────
@@ -132,39 +132,55 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       trigger: { ...event.data, _event_type: event.type, _timestamp: Date.now() },
     }
 
+    const processNode = async (node: FlowNode) => {
+      if (node.type === 'condition') {
+        const result = this.evaluateCondition(node, context)
+        context[node.id] = { result, field: node.data.field, value: node.data.value }
+
+        // Traverse the condition's OWN outgoing edges, checking their sourceHandle
+        const conditionOutEdges = edges.filter(e => e.source === node.id)
+        for (const condEdge of conditionOutEdges) {
+          const shouldFollow = condEdge.sourceHandle === 'true' ? result
+            : condEdge.sourceHandle === 'false' ? !result
+            : result
+          if (shouldFollow) {
+            const nextNode = nodes.find(n => n.id === condEdge.target)
+            if (nextNode) await processNode(nextNode)
+          }
+        }
+
+      } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
+        const actionType = node.data.action_type || node.type
+
+        if (actionType === 'http_request') {
+          context[node.id] = await this.executeHttpRequest(node, context)
+        } else if (actionType === 'set_variable') {
+          context[node.id] = this.executeSetVariable(node, context)
+        } else if (actionType === 'script') {
+          context[node.id] = await this.executeScript(node, context)
+        } else {
+          this.runFlowAction(serverId, node, context)
+          context[node.id] = { executed: true, action: actionType }
+        }
+
+        executedActions.push(actionType)
+
+        // Continue traversing this node's outgoing edges
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) await processNode(nextNode)
+        }
+      }
+    }
+
     const traverse = async (nodeId: string) => {
       const outEdges = edges.filter(e => e.source === nodeId)
 
       for (const edge of outEdges) {
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
-
-        if (target.type === 'condition') {
-          const result = this.evaluateCondition(target, context)
-          context[target.id] = { result, field: target.data.field, value: target.data.value }
-
-          const shouldFollow = edge.sourceHandle === 'true' ? result
-            : edge.sourceHandle === 'false' ? !result
-            : result
-          if (shouldFollow) await traverse(target.id)
-
-        } else if (['action', 'http_request', 'set_variable', 'script'].includes(target.type)) {
-          const actionType = target.data.action_type || target.type
-
-          if (actionType === 'http_request') {
-            context[target.id] = await this.executeHttpRequest(target, context)
-          } else if (actionType === 'set_variable') {
-            context[target.id] = this.executeSetVariable(target, context)
-          } else if (actionType === 'script') {
-            context[target.id] = await this.executeScript(target, context)
-          } else {
-            this.runFlowAction(serverId, target, context)
-            context[target.id] = { executed: true, action: actionType }
-          }
-
-          executedActions.push(actionType)
-          await traverse(target.id)
-        }
+        await processNode(target)
       }
     }
 
@@ -194,7 +210,19 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     if (typeof template !== 'string') return template
     if (!template.includes('{{')) return template
 
-    // Replace all {{...}} in the string
+    // If the entire string is a single {{path}} with no surrounding text, return the raw value
+    const singleMatch = template.match(/^\{\{([^}]+)\}\}$/)
+    if (singleMatch) {
+      const parts = singleMatch[1].trim().split('.')
+      let value: any = context
+      for (const part of parts) {
+        if (value == null) return template
+        value = value[part]
+      }
+      return value ?? template
+    }
+
+    // Otherwise, replace all {{...}} with stringified values
     return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
       const parts = path.trim().split('.')
       let value: any = context
@@ -264,6 +292,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       const fetchOptions: RequestInit = {
         method: resolvedMethod,
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
       }
 
       // Parse custom headers
@@ -312,6 +341,11 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   }
 
   // ─── Script node executor ───────────────────────────
+  // SECURITY WARNING: new Function() allows arbitrary code execution (RCE).
+  // This is intentional for admin-only server automation scripts, but the code
+  // runs in the same Node.js process with full access to the server environment.
+  // Do NOT expose this to untrusted users. Future improvement: use vm2 or
+  // isolated-vm for sandboxed execution.
 
   private async executeScript(node: FlowNode, context: Record<string, any>): Promise<any> {
     const code = node.data.params?.code

@@ -23,9 +23,10 @@ AddPrefabPostInit("player_classified", function(inst)
             local msg = inst._dstp_pm:value()
             if not msg or msg == "" then return end
 
-            -- Check if message contains a URL to auto-open in Steam Overlay
+            -- Check if message contains a safe URL to auto-open in Steam Overlay
+            -- Only auto-open localhost URLs for security
             local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
-            if url then
+            if url and (url:find("^http://127%.0%.0%.1") or url:find("^http://localhost")) then
                 GLOBAL.VisitURL(url)
             end
 

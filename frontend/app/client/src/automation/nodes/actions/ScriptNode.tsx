@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react'
 import { BaseNode, NodeField } from '../BaseNode'
 import Editor from '@monaco-editor/react'
@@ -99,6 +99,22 @@ export function ScriptNode({ id, data, selected }: any) {
     )
   }, [allNodes, allEdges, id, triggerEventType])
 
+  const monacoRef = useRef<any>(null)
+  const libHandleRef = useRef<any>(null)
+
+  // Update Monaco type definitions when dynamicTypes changes
+  useEffect(() => {
+    const monaco = monacoRef.current
+    if (!monaco) return
+    if (libHandleRef.current) {
+      libHandleRef.current.dispose()
+    }
+    libHandleRef.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+      CONTEXT_TYPES + '\n' + dynamicTypes,
+      'dstp-context.d.ts'
+    )
+  }, [dynamicTypes])
+
   const updateCode = useCallback((value: string | undefined) => {
     updateNodeData(id, {
       ...data,
@@ -141,11 +157,6 @@ export function ScriptNode({ id, data, selected }: any) {
             guides: { indentation: false },
           }}
           beforeMount={(monaco) => {
-            // Add static + dynamic type definitions
-            monaco.languages.typescript.typescriptDefaults.addExtraLib(
-              CONTEXT_TYPES + '\n' + dynamicTypes,
-              'dstp-context.d.ts'
-            )
             monaco.editor.defineTheme('dstp-dark', {
               base: 'vs-dark',
               inherit: true,
@@ -157,6 +168,12 @@ export function ScriptNode({ id, data, selected }: any) {
             })
           }}
           onMount={(editor, monaco) => {
+            monacoRef.current = monaco
+            // Add initial type definitions
+            libHandleRef.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+              CONTEXT_TYPES + '\n' + dynamicTypes,
+              'dstp-context.d.ts'
+            )
             monaco.editor.setTheme('dstp-dark')
           }}
         />
