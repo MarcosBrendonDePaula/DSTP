@@ -878,6 +878,33 @@ local function RegisterGameEvents(inst)
     Log("Event categories: " .. table.concat(enabled, ", "))
 end
 
+-- Send panel URL to a specific player (if admin)
+local function SendUrlToAdmin(player)
+    if not player or not player:IsValid() then return end
+    local client_table = _G.TheNet:GetClientTable() or {}
+    for _, client in pairs(client_table) do
+        if client.userid == player.userid and client.admin then
+            -- Use Announce with player name prefix so they know it's for them
+            _G.TheNet:Announce("[DSTP] " .. player.name .. ", painel: " .. config.panel_url)
+            return
+        end
+    end
+end
+
+local function SendUrlToAdmins()
+    local client_table = _G.TheNet:GetClientTable() or {}
+    local admin_found = false
+    for _, client in pairs(client_table) do
+        if client.admin then
+            admin_found = true
+            break
+        end
+    end
+    if admin_found then
+        _G.TheNet:Announce("[DSTP] Panel: " .. config.panel_url)
+    end
+end
+
 -- Hook chat via network message handler
 local function HookChat()
     local OldNetworkSay = _G.Networking_Say
@@ -939,11 +966,26 @@ function DSTP.Init(mod_env, mod_config)
         Log("Backend: " .. config.backend_url)
         Log("Poll: " .. config.poll_interval .. "s")
 
-        -- Announce auto ID in chat (only on master shard, only if auto-generated)
-        if config.is_auto_id and config.shard_type == "master" then
-            Log("*** Session-based Server ID: " .. config.server_id .. " ***")
+        -- Build panel URL
+        config.panel_url = config.backend_url .. "/?server=" .. config.server_id
+        Log("============================================")
+        Log("  DSTP Panel: " .. config.panel_url)
+        Log("============================================")
+
+        -- On master shard: whisper URL to admins when they join
+        if config.shard_type == "master" then
+            -- Send to currently connected admins on startup
             inst:DoTaskInTime(5, function()
-                _G.TheNet:Announce("[DSTP] Panel: " .. config.backend_url .. "/?server=" .. config.server_id)
+                SendUrlToAdmins()
+            end)
+
+            -- Send to admins when they join
+            inst:ListenForEvent("ms_playerspawn", function(world, player)
+                inst:DoTaskInTime(3, function()
+                    if player and player:IsValid() then
+                        SendUrlToAdmin(player)
+                    end
+                end)
             end)
         end
 
