@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
-import { useReactFlow } from '@xyflow/react'
+import { useCallback, useState, useMemo } from 'react'
+import { useReactFlow, useNodes, useEdges } from '@xyflow/react'
 import { BaseNode, NodeField } from '../BaseNode'
 import Editor from '@monaco-editor/react'
+import { buildContextTypeDefinition } from '../../nodeOutputSchemas'
 
 const DEFAULT_SCRIPT = `// Acesse dados do flow via 'context'
 // context.trigger = dados do evento
@@ -78,9 +79,25 @@ interface DSTPlayer {
 
 export function ScriptNode({ id, data, selected }: any) {
   const { updateNodeData } = useReactFlow()
+  const allNodes = useNodes()
+  const allEdges = useEdges()
   const [expanded, setExpanded] = useState(false)
 
   const code = data.params?.code || DEFAULT_SCRIPT
+
+  // Find trigger event type for context typing
+  const triggerNode = allNodes.find(n => n.type === 'trigger')
+  const triggerEventType = triggerNode?.data?.event_type as string | undefined
+
+  // Build dynamic type definitions based on upstream nodes
+  const dynamicTypes = useMemo(() => {
+    return buildContextTypeDefinition(
+      allNodes.map(n => ({ id: n.id, type: n.type || 'unknown', data: n.data })),
+      allEdges.map(e => ({ source: e.source, target: e.target })),
+      id,
+      triggerEventType
+    )
+  }, [allNodes, allEdges, id, triggerEventType])
 
   const updateCode = useCallback((value: string | undefined) => {
     updateNodeData(id, {
@@ -124,12 +141,11 @@ export function ScriptNode({ id, data, selected }: any) {
             guides: { indentation: false },
           }}
           beforeMount={(monaco) => {
-            // Add type definitions for autocomplete
+            // Add static + dynamic type definitions
             monaco.languages.typescript.typescriptDefaults.addExtraLib(
-              CONTEXT_TYPES,
+              CONTEXT_TYPES + '\n' + dynamicTypes,
               'dstp-context.d.ts'
             )
-            // Dark theme customization
             monaco.editor.defineTheme('dstp-dark', {
               base: 'vs-dark',
               inherit: true,
