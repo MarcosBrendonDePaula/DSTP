@@ -17,11 +17,20 @@ local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
 AddPrefabPostInit("player_classified", function(inst)
     inst._dstp_pm = GLOBAL.net_string(inst.GUID, "dstp.pm", "dstp_pm_dirty")
 
-    -- Client-side only: listen for changes and show in chat
+    -- Client-side only: listen for changes and show in chat / open URLs
     if not GLOBAL.TheWorld.ismastersim then
         inst:ListenForEvent("dstp_pm_dirty", function()
             local msg = inst._dstp_pm:value()
-            if msg and msg ~= "" and GLOBAL.ChatHistory then
+            if not msg or msg == "" then return end
+
+            -- Check if message contains a URL to auto-open in Steam Overlay
+            local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
+            if url then
+                GLOBAL.VisitURL(url)
+            end
+
+            -- Also show in local chat
+            if GLOBAL.ChatHistory then
                 GLOBAL.ChatHistory:AddToHistory(
                     GLOBAL.ChatTypes.Message,
                     nil, nil, "[DSTP]", msg,
