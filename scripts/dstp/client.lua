@@ -873,13 +873,8 @@ function DSTP.Init(mod_env, mod_config)
     _G = mod_env.GLOBAL
     json = _G.json
 
-    if not mod_config or not mod_config.server_id then
-        LogError("server_id is required!")
-        return DSTP
-    end
-
-    config.server_id = mod_config.server_id
-    config.is_auto_id = mod_config.is_auto_id or false
+    config.is_auto_id = mod_config.is_auto_id or (mod_config.server_id == "auto")
+    config.server_id = mod_config.server_id or "auto"
     if mod_config.backend_url then config.backend_url = mod_config.backend_url end
     if mod_config.poll_interval then config.poll_interval = mod_config.poll_interval end
 
@@ -897,6 +892,16 @@ function DSTP.Init(mod_env, mod_config)
 
         -- Detect shard type
         config.shard_type = inst:HasTag("cave") and "caves" or "master"
+
+        -- Resolve server_id from world session_identifier if auto
+        if config.is_auto_id then
+            local session = _G.TheWorld.meta and _G.TheWorld.meta.session_identifier
+            if session then
+                -- Use first 12 chars of session_identifier as unique ID
+                config.server_id = "dst-" .. session:sub(1, 12)
+            end
+        end
+
         config.shard_id = config.server_id .. ":" .. config.shard_type
 
         Log("=== DSTP Admin Panel ===")
@@ -905,11 +910,11 @@ function DSTP.Init(mod_env, mod_config)
         Log("Backend: " .. config.backend_url)
         Log("Poll: " .. config.poll_interval .. "s")
 
-        -- Announce auto-generated ID in server log and chat (only on master shard)
+        -- Announce auto ID in chat (only on master shard, only if auto-generated)
         if config.is_auto_id and config.shard_type == "master" then
-            Log("*** Auto-generated Server ID: " .. config.server_id .. " ***")
+            Log("*** Session-based Server ID: " .. config.server_id .. " ***")
             inst:DoTaskInTime(5, function()
-                _G.TheNet:Announce("[DSTP] Admin Panel ID: " .. config.server_id)
+                _G.TheNet:Announce("[DSTP] Panel: " .. config.backend_url .. "/?server=" .. config.server_id)
             end)
         end
 
