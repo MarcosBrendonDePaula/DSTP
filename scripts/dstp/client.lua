@@ -165,13 +165,26 @@ local function GetPlayerBuffs(player)
     return buffs
 end
 
+-- Cache client table (refreshed each poll cycle)
+local cached_client_table = {}
+local function RefreshClientTable()
+    cached_client_table = {}
+    for _, client in pairs(_G.TheNet:GetClientTable() or {}) do
+        if client.userid then
+            cached_client_table[client.userid] = client
+        end
+    end
+end
+
 local function GetPlayerData(player)
     local x, y, z = player.Transform:GetWorldPosition()
+    local client_info = cached_client_table[player.userid]
 
     local data = {
         userid = player.userid,
         name = player.name,
         prefab = player.prefab,
+        admin = client_info and client_info.admin or false,
         age = player.components.age and math.floor(player.components.age:GetAgeInDays()) or 0,
         position = { x = math.floor(x), y = math.floor(y), z = math.floor(z) },
     }
@@ -528,6 +541,8 @@ end
 -------------------------------------------------
 local function DoPoll()
     if not _G.TheWorld or not _G.TheWorld.ismastersim then return end
+
+    RefreshClientTable()
 
     local events = {}
     for i = 1, math.min(#state.event_queue, config.max_batch_size) do

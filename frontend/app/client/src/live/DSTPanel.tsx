@@ -305,6 +305,7 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
           {buffs.in_combat && <Badge color="#ef4444">COMBAT</Badge>}
           {buffs.is_starving && <Badge color="#facc15">STARVING</Badge>}
           {hp?.invincible && <Badge color="#4ade80">GOD</Badge>}
+          {player.admin && <Badge color="#f59e0b">👑 ADMIN</Badge>}
         </div>
       </div>
 
