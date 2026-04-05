@@ -142,18 +142,21 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
             : result
           if (shouldFollow) await traverse(target.id)
 
-        } else if (target.type === 'action') {
-          if (target.data.action_type === 'http_request') {
-            const result = await this.executeHttpRequest(target, context)
-            context[target.id] = result
-          } else if (target.data.action_type === 'set_variable') {
-            const result = this.executeSetVariable(target, context)
-            context[target.id] = result
+        } else if (['action', 'http_request', 'set_variable', 'script'].includes(target.type)) {
+          const actionType = target.data.action_type || target.type
+
+          if (actionType === 'http_request') {
+            context[target.id] = await this.executeHttpRequest(target, context)
+          } else if (actionType === 'set_variable') {
+            context[target.id] = this.executeSetVariable(target, context)
+          } else if (actionType === 'script') {
+            context[target.id] = await this.executeScript(target, context)
           } else {
             this.runFlowAction(serverId, target, context)
-            context[target.id] = { executed: true, action: target.data.action_type }
+            context[target.id] = { executed: true, action: actionType }
           }
-          executedActions.push(target.data.action_type || 'unknown')
+
+          executedActions.push(actionType)
           await traverse(target.id)
         }
       }
@@ -300,6 +303,31 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       result[key] = this.resolveValue(val, context)
     }
     return result
+  }
+
+  // ─── Script node executor ───────────────────────────
+
+  private async executeScript(node: FlowNode, context: Record<string, any>): Promise<any> {
+    const code = node.data.params?.code
+    if (!code) return { error: 'no code' }
+
+    try {
+      // Wrap user code in an async function that receives context
+      // The user defines `async function run(context) { ... }`
+      // We extract and call it
+      const wrappedCode = `
+        ${code}
+        return typeof run === 'function' ? run(context) : { error: 'no run() function defined' }
+      `
+
+      const fn = new Function('context', 'fetch', wrappedCode)
+      const result = await fn(context, fetch)
+
+      return result ?? { executed: true }
+    } catch (err: any) {
+      console.error(`[DSTP Script] Error:`, err.message)
+      return { error: err.message }
+    }
   }
 
   // ─── Auto-enable event categories ──────────────────

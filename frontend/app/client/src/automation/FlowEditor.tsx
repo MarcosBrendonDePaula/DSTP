@@ -46,6 +46,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       action: { action_type: '', params: {} },
       http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
       set_variable: { action_type: 'set_variable', params: {} },
+      script: { action_type: 'script', params: { code: '' } },
     }
     const newNode: Node = {
       id: genId(),
@@ -84,6 +85,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         <button onClick={() => addNode('set_variable')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/20 hover:bg-purple-500/25 transition-colors">
           📝 Variable
         </button>
+        <button onClick={() => addNode('script')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors">
+          🧩 Script
+        </button>
         <div className="flex-1" />
         <button onClick={handleSave} className="text-[10px] px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors">
           💾 Salvar
@@ -115,6 +119,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
               if (n.type === 'condition') return '#eab308'
               if (n.type === 'http_request') return '#06b6d4'
               if (n.type === 'set_variable') return '#a855f7'
+              if (n.type === 'script') return '#f97316'
               return '#3b82f6'
             }}
             className="!bg-[#111] !border-white/10 !rounded-lg"
