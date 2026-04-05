@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Live } from '@/core/client'
 import { LiveAutomation } from '@server/live/LiveAutomation'
 import { FlowEditor } from './FlowEditor'
@@ -19,6 +19,13 @@ export function AutomationPage() {
 
   const flows = auto.$state.flows || []
   const logs = auto.$state.logs || []
+
+  // Load flows from DB on mount
+  useEffect(() => {
+    if (urlServer && auto.$connected) {
+      auto.loadFlows({ server_id: urlServer })
+    }
+  }, [urlServer, auto.$connected])
 
   const createNewFlow = () => {
     const id = `flow_${Date.now()}`
@@ -53,11 +60,11 @@ export function AutomationPage() {
   }
 
   const deleteFlow = async (id: string) => {
-    await auto.deleteFlow({ flow_id: id })
+    await auto.deleteFlow({ flow_id: id, server_id: urlServer })
   }
 
   const toggleFlow = async (id: string, enabled: boolean) => {
-    await auto.toggleFlow({ flow_id: id, enabled })
+    await auto.toggleFlow({ flow_id: id, server_id: urlServer, enabled })
   }
 
   // Editor mode
@@ -166,7 +173,7 @@ export function AutomationPage() {
               Logs
             </h3>
             {logs.length > 0 && (
-              <button onClick={() => auto.clearLogs()} className="text-[9px] text-gray-600 hover:text-gray-400">Limpar</button>
+              <button onClick={() => auto.clearLogs({ server_id: urlServer })} className="text-[9px] text-gray-600 hover:text-gray-400">Limpar</button>
             )}
           </div>
           <div className="space-y-0.5">

@@ -1,8 +1,9 @@
-// LiveAutomation - Manages automation flows
-// Stores flows, evaluates triggers against incoming events, queues actions
+// LiveAutomation - Manages automation flows with SQLite persistence
+// Evaluates triggers against incoming events, queues actions
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
+import * as db from '../services/Database'
 
 // ─── Types ───────────────────────────────────────────
 
@@ -40,12 +41,6 @@ interface AutomationState {
 
 // ─── Singleton ───────────────────────────────────────
 
-const FLOWS_KEY = '__dstp_automation_flows__'
-if (!(globalThis as any)[FLOWS_KEY]) {
-  (globalThis as any)[FLOWS_KEY] = [] as Flow[]
-}
-const persistedFlows: Flow[] = (globalThis as any)[FLOWS_KEY]
-
 let _automationInstance: LiveAutomation | null = null
 
 export function processAutomationEvent(server_id: string, event: any) {
@@ -61,7 +56,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'saveFlow',
     'deleteFlow',
     'toggleFlow',
-    'getFlows',
+    'loadFlows',
     'clearLogs',
   ] as const
 
@@ -75,64 +70,44 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
   protected onMount() {
     _automationInstance = this
-    // Load persisted flows
-    this.setState({ flows: persistedFlows })
   }
 
   protected onDestroy() {
     if (_automationInstance === this) _automationInstance = null
   }
 
-  // ─── Flow CRUD ─────────────────────────────────────
+  // ─── Flow CRUD (persisted to SQLite) ───────────────
 
   async saveFlow(payload: { flow: Flow }) {
     const { flow } = payload
-    if (!flow || !flow.id) throw new Error('flow with id required')
+    if (!flow || !flow.id || !flow.server_id) throw new Error('flow with id and server_id required')
 
-    const flows = [...this.state.flows]
-    const idx = flows.findIndex(f => f.id === flow.id)
-
-    if (idx >= 0) {
-      flows[idx] = { ...flow, trigger_count: flows[idx].trigger_count }
-    } else {
-      flows.push({ ...flow, created_at: Date.now(), trigger_count: 0 })
-    }
-
-    // Persist
-    persistedFlows.length = 0
-    persistedFlows.push(...flows)
-
-    this.setState({ flows })
-
-    // Auto-enable required event categories
+    db.saveFlow(flow.server_id, flow)
     this.ensureEventCategories(flow)
 
-    return { success: true }
+    // Reload from DB
+    return this.loadFlows({ server_id: flow.server_id })
   }
 
-  async deleteFlow(payload: { flow_id: string }) {
-    const flows = this.state.flows.filter(f => f.id !== payload.flow_id)
-    persistedFlows.length = 0
-    persistedFlows.push(...flows)
-    this.setState({ flows })
-    return { success: true }
+  async deleteFlow(payload: { flow_id: string; server_id: string }) {
+    db.deleteFlow(payload.server_id, payload.flow_id)
+    return this.loadFlows({ server_id: payload.server_id })
   }
 
-  async toggleFlow(payload: { flow_id: string; enabled: boolean }) {
-    const flows = this.state.flows.map(f =>
-      f.id === payload.flow_id ? { ...f, enabled: payload.enabled } : f
-    )
-    persistedFlows.length = 0
-    persistedFlows.push(...flows)
-    this.setState({ flows })
-    return { success: true }
+  async toggleFlow(payload: { flow_id: string; server_id: string; enabled: boolean }) {
+    db.toggleFlow(payload.server_id, payload.flow_id, payload.enabled)
+    return this.loadFlows({ server_id: payload.server_id })
   }
 
-  async getFlows() {
-    return { flows: this.state.flows }
+  async loadFlows(payload: { server_id: string }) {
+    const flows = db.getFlows(payload.server_id)
+    const logs = db.getAutomationLogs(payload.server_id)
+    this.setState({ flows, logs })
+    return { success: true, flows, logs }
   }
 
-  async clearLogs() {
+  async clearLogs(payload: { server_id: string }) {
+    db.clearAutomationLogs(payload.server_id)
     this.setState({ logs: [] })
     return { success: true }
   }
@@ -140,42 +115,48 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // ─── Event Evaluation ──────────────────────────────
 
   evaluateEvent(server_id: string, event: any) {
-    for (const flow of this.state.flows) {
-      if (!flow.enabled || flow.server_id !== server_id) continue
+    // Load flows from DB (cached in state, but re-read for fresh enabled state)
+    const flows = db.getFlows(server_id)
 
-      // Find trigger nodes
-      const triggers = flow.nodes.filter(n => n.type === 'trigger')
+    for (const flow of flows) {
+      if (!flow.enabled) continue
+
+      const triggers = flow.nodes.filter((n: FlowNode) => n.type === 'trigger')
       for (const trigger of triggers) {
         if (this.matchesTrigger(trigger, event)) {
-          this.executeFlow(flow, trigger, event)
+          this.executeFlow(flow, trigger, event, server_id)
         }
       }
     }
   }
 
   private matchesTrigger(trigger: FlowNode, event: any): boolean {
-    const eventType = trigger.data.event_type
-    if (!eventType) return false
-    return event.type === eventType
+    return trigger.data.event_type === event.type
   }
 
-  private executeFlow(flow: Flow, trigger: FlowNode, event: any) {
-    // Walk the graph from trigger through conditions to actions
+  private executeFlow(flow: Flow, trigger: FlowNode, event: any, server_id: string) {
     const executedActions: string[] = []
 
     const traverse = (nodeId: string, eventData: any) => {
-      const outEdges = flow.edges.filter(e => e.source === nodeId)
+      const outEdges = flow.edges.filter((e: FlowEdge) => e.source === nodeId)
 
       for (const edge of outEdges) {
-        const targetNode = flow.nodes.find(n => n.id === edge.target)
+        const targetNode = flow.nodes.find((n: FlowNode) => n.id === edge.target)
         if (!targetNode) continue
 
         if (targetNode.type === 'condition') {
-          if (this.evaluateCondition(targetNode, eventData)) {
+          const result = this.evaluateCondition(targetNode, eventData)
+          // Only follow the edge matching the condition result
+          if (edge.sourceHandle === 'true' && result) {
             traverse(targetNode.id, eventData)
+          } else if (edge.sourceHandle === 'false' && !result) {
+            traverse(targetNode.id, eventData)
+          } else if (!edge.sourceHandle) {
+            // No handle specified — follow if true
+            if (result) traverse(targetNode.id, eventData)
           }
         } else if (targetNode.type === 'action') {
-          this.runAction(flow.server_id, targetNode, eventData)
+          this.runAction(server_id, targetNode, eventData)
           executedActions.push(targetNode.data.action_type || 'unknown')
         }
       }
@@ -183,23 +164,23 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
     traverse(trigger.id, event.data || {})
 
-    // Update flow stats
-    const flows = this.state.flows.map(f =>
-      f.id === flow.id ? { ...f, last_triggered: Date.now(), trigger_count: f.trigger_count + 1 } : f
-    )
-    persistedFlows.length = 0
-    persistedFlows.push(...flows)
+    if (executedActions.length > 0) {
+      // Update stats in DB
+      db.updateFlowStats(server_id, flow.id, (flow.trigger_count || 0) + 1, Date.now())
 
-    // Log
-    const logs = [...this.state.logs, {
-      flow_id: flow.id,
-      flow_name: flow.name,
-      event_type: event.type,
-      actions: executedActions,
-      timestamp: Date.now(),
-    }].slice(-100)
+      // Log
+      db.addAutomationLog(server_id, {
+        flow_id: flow.id,
+        flow_name: flow.name,
+        event_type: event.type,
+        actions: executedActions,
+      })
 
-    this.setState({ flows, logs })
+      // Update live state
+      const updatedFlows = db.getFlows(server_id)
+      const updatedLogs = db.getAutomationLogs(server_id)
+      this.setState({ flows: updatedFlows, logs: updatedLogs })
+    }
   }
 
   private evaluateCondition(node: FlowNode, eventData: any): boolean {
@@ -234,7 +215,6 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       }
     }
 
-    // Send to all shards of this server
     dstStateStore.pushCommandToServer(server_id, actionType, actionData)
   }
 
@@ -242,8 +222,8 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
   private ensureEventCategories(flow: Flow) {
     const triggerEventTypes = flow.nodes
-      .filter(n => n.type === 'trigger')
-      .map(n => n.data.event_type)
+      .filter((n: FlowNode) => n.type === 'trigger')
+      .map((n: FlowNode) => n.data.event_type)
 
     const categoryMap: Record<string, string> = {
       player_spawn: 'players', player_left: 'players', player_death: 'players',
@@ -264,7 +244,6 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       if (cat) needed.add(cat)
     }
 
-    // Request activation for needed categories
     for (const cat of needed) {
       dstStateStore.requestEventToggleForServer(flow.server_id, cat, true)
     }
