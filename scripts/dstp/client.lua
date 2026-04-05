@@ -559,15 +559,19 @@ local function DoPoll()
 end
 
 -------------------------------------------------
--- Game event listeners
+-- Game event listeners (by category)
 -------------------------------------------------
-local function RegisterGameEvents(inst)
+local evt_config = {}
+
+local function RegisterPlayerEvents(inst)
     inst:ListenForEvent("ms_playerspawn", function(world, player)
         DSTP.PushEvent("player_spawn", {
             userid = player.userid,
             name = player.name,
             prefab = player.prefab,
         })
+        -- Hook per-player events on new players
+        RegisterPerPlayerEvents(player)
     end)
 
     inst:ListenForEvent("ms_playerleft", function(world, player)
@@ -587,6 +591,201 @@ local function RegisterGameEvents(inst)
         end
     end)
 
+    inst:ListenForEvent("ms_becameghost", function(world, player)
+        DSTP.PushEvent("player_ghost", { userid = player.userid, name = player.name })
+    end)
+
+    inst:ListenForEvent("ms_respawnedfromghost", function(world, player)
+        DSTP.PushEvent("player_respawn", { userid = player.userid, name = player.name })
+    end)
+end
+
+local function RegisterWorldEvents(inst)
+    inst:ListenForEvent("ms_cyclecomplete", function(world)
+        DSTP.PushEvent("new_day", { day = world.state.cycles })
+    end)
+
+    inst:ListenForEvent("ms_nextphase", function(world)
+        DSTP.PushEvent("phase_changed", { phase = world.state.phase })
+    end)
+
+    inst:ListenForEvent("ms_setseason", function(world, season)
+        DSTP.PushEvent("season_changed", { season = tostring(season) })
+    end)
+end
+
+local function RegisterWeatherEvents(inst)
+    inst:ListenForEvent("ms_stormchanged", function(world, data)
+        DSTP.PushEvent("storm_changed", {
+            stormtype = data and data.stormtype or "unknown",
+            setting = data and data.setting,
+        })
+    end)
+
+    inst:ListenForEvent("ms_forceprecipitation", function(world, enabled)
+        DSTP.PushEvent("precipitation", { enabled = enabled })
+    end)
+end
+
+local function RegisterBossEvents(inst)
+    local boss_events = {
+        "ms_moonboss_was_defeated",
+        "beargerkilled",
+        "hasslerkilled",
+        "ms_lordfruitflykilled",
+    }
+    for _, evt in ipairs(boss_events) do
+        inst:ListenForEvent(evt, function(world, data)
+            DSTP.PushEvent("boss_event", { event = evt, data = data })
+        end)
+    end
+
+    -- Track any entity death that's not a player (for notable mob kills)
+    inst:ListenForEvent("entity_death", function(world, data)
+        if data and data.inst and not data.inst:HasTag("player") then
+            local prefab = data.inst.prefab
+            -- Only track notable mobs
+            local notable = {
+                deerclops = true, bearger = true, moose = true, dragonfly = true,
+                antlion = true, beequeen = true, klaus = true, toadstool = true,
+                minotaur = true, stalker_atrium = true, alterguardian_phase3 = true,
+                crabking = true, malbatross = true, lordfruitfly = true,
+                shadowchesspieces = true, nightmare_werepig = true,
+            }
+            if notable[prefab] then
+                DSTP.PushEvent("boss_killed", {
+                    prefab = prefab,
+                    cause = data.cause or "unknown",
+                })
+            end
+        end
+    end)
+end
+
+-- Per-player events (combat, crafting, inventory, health)
+local hooked_players = {}
+local function RegisterPerPlayerEvents(player)
+    if not player or hooked_players[player.userid] then return end
+    hooked_players[player.userid] = true
+
+    local uid = player.userid
+    local pname = player.name
+
+    if evt_config.combat then
+        player:ListenForEvent("killed", function(inst, data)
+            DSTP.PushEvent("player_kill", {
+                userid = uid, name = pname,
+                victim = data and data.victim and data.victim.prefab or "unknown",
+            })
+        end)
+
+        player:ListenForEvent("attacked", function(inst, data)
+            DSTP.PushEvent("player_attacked", {
+                userid = uid, name = pname,
+                attacker = data and data.attacker and data.attacker.prefab or "unknown",
+                damage = data and data.damage or 0,
+            })
+        end)
+    end
+
+    if evt_config.crafting then
+        player:ListenForEvent("builditem", function(inst, data)
+            DSTP.PushEvent("player_craft", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+                recipe = data and data.recipe and data.recipe.name or "unknown",
+            })
+        end)
+
+        player:ListenForEvent("buildstructure", function(inst, data)
+            DSTP.PushEvent("player_build", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+            })
+        end)
+    end
+
+    if evt_config.inventory then
+        player:ListenForEvent("equip", function(inst, data)
+            DSTP.PushEvent("player_equip", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+                slot = data and data.eslot or "unknown",
+            })
+        end)
+
+        player:ListenForEvent("onpickupitem", function(inst, data)
+            DSTP.PushEvent("player_pickup", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+            })
+        end)
+
+        player:ListenForEvent("dropitem", function(inst, data)
+            DSTP.PushEvent("player_drop", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+            })
+        end)
+    end
+
+    if evt_config.health then
+        player:ListenForEvent("healthdelta", function(inst, data)
+            DSTP.PushEvent("health_delta", {
+                userid = uid, name = pname,
+                old = data and data.oldpercent or 0,
+                new = data and data.newpercent or 0,
+                amount = data and data.amount or 0,
+            })
+        end)
+
+        player:ListenForEvent("hungerdelta", function(inst, data)
+            DSTP.PushEvent("hunger_delta", {
+                userid = uid, name = pname,
+                old = data and data.oldpercent or 0,
+                new = data and data.newpercent or 0,
+            })
+        end)
+
+        player:ListenForEvent("sanitydelta", function(inst, data)
+            DSTP.PushEvent("sanity_delta", {
+                userid = uid, name = pname,
+                old = data and data.oldpercent or 0,
+                new = data and data.newpercent or 0,
+            })
+        end)
+    end
+end
+
+local function RegisterGameEvents(inst)
+    if evt_config.players then
+        RegisterPlayerEvents(inst)
+    end
+
+    if evt_config.world then
+        RegisterWorldEvents(inst)
+    end
+
+    if evt_config.weather then
+        RegisterWeatherEvents(inst)
+    end
+
+    if evt_config.bosses then
+        RegisterBossEvents(inst)
+    end
+
+    -- Hook per-player events for existing players
+    if evt_config.combat or evt_config.crafting or evt_config.inventory or evt_config.health then
+        for _, player in ipairs(_G.AllPlayers) do
+            RegisterPerPlayerEvents(player)
+        end
+    end
+
+    local enabled = {}
+    for k, v in pairs(evt_config) do
+        if v then table.insert(enabled, k) end
+    end
+    Log("Event categories: " .. table.concat(enabled, ", "))
 end
 
 -- Hook chat via network message handler
@@ -622,6 +821,13 @@ function DSTP.Init(mod_env, mod_config)
     config.is_auto_id = mod_config.is_auto_id or false
     if mod_config.backend_url then config.backend_url = mod_config.backend_url end
     if mod_config.poll_interval then config.poll_interval = mod_config.poll_interval end
+
+    -- Event categories config
+    if mod_config.events then
+        for k, v in pairs(mod_config.events) do
+            evt_config[k] = v
+        end
+    end
 
     RegisterBuiltinCommands()
 

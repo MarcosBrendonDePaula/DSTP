@@ -26,4 +26,15 @@ dstp.Init(env, {
     is_auto_id = is_auto_id,
     backend_url = BACKEND_URL,
     poll_interval = POLL_INTERVAL,
+    events = {
+        players = GetModConfigData("EVT_PLAYERS") ~= false,
+        chat = GetModConfigData("EVT_CHAT") ~= false,
+        world = GetModConfigData("EVT_WORLD") ~= false,
+        combat = GetModConfigData("EVT_COMBAT") == true,
+        crafting = GetModConfigData("EVT_CRAFTING") == true,
+        inventory = GetModConfigData("EVT_INVENTORY") == true,
+        weather = GetModConfigData("EVT_WEATHER") == true,
+        bosses = GetModConfigData("EVT_BOSSES") == true,
+        health = GetModConfigData("EVT_HEALTH") == true,
+    },
 })
