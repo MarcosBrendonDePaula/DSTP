@@ -794,6 +794,9 @@ export function DSTPanel() {
         }`}>{serverInfo.online ? '● Online' : '○ Offline'}</span>
         <span className="text-[10px] text-gray-600 tabular-nums">{serverInfo.player_count || 0} players</span>
         <div className="flex-1" />
+        <a href={`/automation?server=${selectedServer}`} className="text-[10px] px-3 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
+          ⚡ Automações
+        </a>
         <span className={`text-[10px] ${dstp.$connected ? 'text-green-600' : 'text-red-600'}`}>
           {dstp.$connected ? '● WS' : '○ WS'}
         </span>

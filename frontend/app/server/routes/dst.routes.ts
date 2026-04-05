@@ -1,5 +1,6 @@
 import { Elysia } from "elysia"
 import { dstStateStore } from "../services/DSTStateStore"
+import { processAutomationEvent } from "../live/LiveAutomation"
 
 setInterval(() => dstStateStore.checkHealth(), 15000)
 
@@ -24,6 +25,13 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
     // Notify live component
     const { notifyLiveDSTP } = require("../live/LiveDSTP")
     notifyLiveDSTP?.()
+
+    // Process events through automation engine
+    if (events && events.length > 0) {
+      for (const evt of events) {
+        try { processAutomationEvent(server_id, evt) } catch (e) { /* don't break sync */ }
+      }
+    }
 
     return result
   }, {

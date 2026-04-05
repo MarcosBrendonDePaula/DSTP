@@ -10,6 +10,7 @@ import { SharedCounterDemo } from './live/SharedCounterDemo'
 import { AuthDemo } from './live/AuthDemo'
 import { PingPongDemo } from './live/PingPongDemo'
 import { DSTPanel } from './live/DSTPanel'
+import { AutomationPage } from './automation/AutomationPage'
 import { AppLayout } from './components/AppLayout'
 import { DemoPage } from './components/DemoPage'
 import { HomePage } from './pages/HomePage'
@@ -72,6 +73,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={<DSTPanel />} />
+      <Route path="/automation" element={<AutomationPage />} />
       <Route path="*" element={<DSTPanel />} />
     </Routes>
   )
