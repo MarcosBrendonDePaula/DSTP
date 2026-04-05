@@ -293,6 +293,12 @@ local function RegisterBuiltinCommands()
         if data.message then
             local name = data.name or "[DSTP Admin]"
             _G.TheNet:Announce(name .. ": " .. data.message)
+            DSTP.PushEvent("chat_message", {
+                userid = "dstp",
+                name = name,
+                message = data.message,
+                prefab = "system",
+            })
         end
     end)
 
