@@ -33,6 +33,7 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
     'sendPlayerCommand',
     'broadcastCommand',
     'toggleEventCategory',
+    'updateDebounce',
     'refresh',
   ] as const
 
@@ -81,6 +82,7 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
         last_seen: g.last_seen,
         player_count: g.all_players.length,
         active_events: dstStateStore.getActiveEvents(g.server_id),
+        debounce: dstStateStore.getDebounce(g.server_id),
         shards: g.shards.map(s => ({
           shard_id: s.shard_id,
           shard_type: s.shard_type,
@@ -149,6 +151,13 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
   // Broadcast to all shards globally
   async broadcastCommand(payload: { type: string; data?: Record<string, any> }) {
     dstStateStore.broadcastCommand(payload.type, payload.data || {})
+    return { success: true }
+  }
+
+  async updateDebounce(payload: { server_id: string; event_type: string; seconds: number }) {
+    const { server_id, event_type, seconds } = payload
+    if (!server_id || !event_type) throw new Error('server_id and event_type required')
+    dstStateStore.requestDebounceUpdate(server_id, event_type, seconds)
     return { success: true }
   }
 

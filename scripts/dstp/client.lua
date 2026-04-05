@@ -237,14 +237,15 @@ end
 -------------------------------------------------
 
 -- Debounce config: event_type -> minimum seconds between events
+-- Updated remotely via sync response
 local event_debounce = {
-    phase_changed = 5,
-    season_changed = 10,
-    health_delta = 2,
-    hunger_delta = 2,
-    sanity_delta = 2,
-    storm_changed = 10,
-    precipitation = 10,
+    phase_changed = 1,
+    season_changed = 5,
+    health_delta = 1,
+    hunger_delta = 1,
+    sanity_delta = 1,
+    storm_changed = 5,
+    precipitation = 5,
 }
 local last_event_time = {} -- event_type -> last GetTime()
 
@@ -600,6 +601,7 @@ local function DoPoll()
         players = GetAllPlayersData(),
         events = events,
         active_events = evt_config,
+        debounce = event_debounce,
     }
 
     local json_data = SafeEncode(payload)
@@ -620,6 +622,14 @@ local function DoPoll()
                     -- Hot-toggle event categories from backend
                     if data.enable_events then
                         HotToggleEvents(data.enable_events)
+                    end
+                    -- Update debounce times from backend
+                    if data.debounce then
+                        for k, v in pairs(data.debounce) do
+                            if type(v) == "number" then
+                                event_debounce[k] = v
+                            end
+                        end
                     end
                 end
             else

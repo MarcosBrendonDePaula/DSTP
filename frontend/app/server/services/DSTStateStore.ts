@@ -15,7 +15,9 @@ interface ShardEntry {
   last_seen: number
   online: boolean
   active_events: Record<string, boolean>
-  requested_events: Record<string, boolean> | null  // pending event toggles from frontend
+  requested_events: Record<string, boolean> | null
+  debounce: Record<string, number>
+  requested_debounce: Record<string, number> | null
 }
 
 export interface ServerGroup {
@@ -33,7 +35,7 @@ class DSTStateStore {
   version: number = 0
 
   // Called by REST route when a DST shard syncs
-  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>): { commands: any[]; enable_events?: Record<string, boolean> } {
+  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number> } {
     let entry = this.shards.get(shard_id)
     if (!entry) {
       entry = {
@@ -41,6 +43,7 @@ class DSTStateStore {
         server: null, players: [], events: [],
         last_seen: 0, online: true,
         active_events: {}, requested_events: null,
+        debounce: {}, requested_debounce: null,
       }
       this.shards.set(shard_id, entry)
     }
@@ -59,10 +62,9 @@ class DSTStateStore {
       }
     }
 
-    // Store active events from the game
-    if (active_events) {
-      entry.active_events = active_events
-    }
+    // Store active events and debounce from the game
+    if (active_events) entry.active_events = active_events
+    if (debounce) entry.debounce = debounce
 
     this.version++
 
@@ -70,11 +72,15 @@ class DSTStateStore {
     const queue = this.commandQueues.get(shard_id) || []
     this.commandQueues.set(shard_id, [])
 
-    // Check for pending event toggle requests
-    const result: { commands: any[]; enable_events?: Record<string, boolean> } = { commands: queue }
+    // Check for pending requests
+    const result: { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number> } = { commands: queue }
     if (entry.requested_events) {
       result.enable_events = entry.requested_events
       entry.requested_events = null
+    }
+    if (entry.requested_debounce) {
+      result.debounce = entry.requested_debounce
+      entry.requested_debounce = null
     }
 
     return result
@@ -178,6 +184,28 @@ class DSTStateStore {
         this.requestEventToggle(shard.shard_id, category, enabled)
       }
     }
+  }
+
+  // Set debounce for a specific event type on all shards of a server
+  requestDebounceUpdate(server_id: string, event_type: string, seconds: number) {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        if (!shard.requested_debounce) {
+          shard.requested_debounce = { ...shard.debounce }
+        }
+        shard.requested_debounce[event_type] = seconds
+      }
+    }
+  }
+
+  // Get current debounce for a server
+  getDebounce(server_id: string): Record<string, number> {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id && shard.debounce) {
+        return { ...shard.debounce }
+      }
+    }
+    return {}
   }
 
   // Get active events for a server (merged from all shards)

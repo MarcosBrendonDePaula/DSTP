@@ -7,7 +7,7 @@ setInterval(() => dstStateStore.checkHealth(), 15000)
 
 export const dstRoutes = new Elysia({ prefix: "/dst" })
   .post("/sync", ({ body }) => {
-    const { server_id, shard_id, shard_type, server, players, events, active_events } = body as any
+    const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = body as any
 
     if (!server_id || !shard_id) {
       return { error: 'missing server_id or shard_id' }
@@ -20,7 +20,8 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
       server,
       players || [],
       events || [],
-      active_events
+      active_events,
+      debounce
     )
 
     // Notify live component

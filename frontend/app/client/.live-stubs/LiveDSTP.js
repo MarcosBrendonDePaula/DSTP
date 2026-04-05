@@ -9,6 +9,7 @@ export class LiveDSTP {
     'sendPlayerCommand',
     'broadcastCommand',
     'toggleEventCategory',
+    'updateDebounce',
     'refresh',
   ]
 }
