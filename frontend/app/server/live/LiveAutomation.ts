@@ -2,7 +2,7 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
-import { FlowRepository, AutomationLogRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
+import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
 
 // ─── State ──────��────────────────────────────────────
 
@@ -28,6 +28,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'toggleFlow',
     'loadFlows',
     'clearLogs',
+    'getEventSchemas',
   ] as const
 
   static defaultState: AutomationState = {
@@ -94,6 +95,11 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     this.logRepo(payload.server_id).clear()
     this.setState({ logs: [] })
     return { success: true }
+  }
+
+  async getEventSchemas(payload: { server_id: string }) {
+    const repo = new EventSchemaRepository(payload.server_id)
+    return { schemas: repo.findAll() }
   }
 
   // ─── Event Evaluation ──────────────────────────────

@@ -4,6 +4,7 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
+import { EventSchemaRepository } from '../db'
 import type { DSTPanel as _Client } from '@client/src/live/DSTPanel'
 
 // ─── State ───────────────────────────────────────────
@@ -34,6 +35,8 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
     'broadcastCommand',
     'toggleEventCategory',
     'updateDebounce',
+    'getEventSchemas',
+    'saveEventSchema',
     'refresh',
   ] as const
 
@@ -158,6 +161,17 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
     const { server_id, event_type, seconds } = payload
     if (!server_id || !event_type) throw new Error('server_id and event_type required')
     dstStateStore.requestDebounceUpdate(server_id, event_type, seconds)
+    return { success: true }
+  }
+
+  async getEventSchemas(payload: { server_id: string }) {
+    const repo = new EventSchemaRepository(payload.server_id)
+    return { schemas: repo.findAll() }
+  }
+
+  async saveEventSchema(payload: { server_id: string; event_type: string; description: string; fields: any[] }) {
+    const repo = new EventSchemaRepository(payload.server_id)
+    repo.save(payload.event_type, payload.description, payload.fields)
     return { success: true }
   }
 

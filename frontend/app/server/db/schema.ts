@@ -37,6 +37,26 @@ export const eventHistory = sqliteTable('event_history', {
   timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
 })
 
+// ─── Event Schemas (auto-detected + user-defined) ────
+
+export const eventSchemas = sqliteTable('event_schemas', {
+  eventType: text('event_type').primaryKey(),
+  description: text('description').notNull().default(''),
+  fields: text('fields', { mode: 'json' }).notNull().$type<EventSchemaField[]>().default([]),
+  autoDetected: integer('auto_detected', { mode: 'boolean' }).notNull().default(true),
+  sampleData: text('sample_data', { mode: 'json' }).$type<Record<string, any>>(),
+  lastSeen: integer('last_seen', { mode: 'timestamp_ms' }).notNull(),
+  seenCount: integer('seen_count').notNull().default(1),
+})
+
+export interface EventSchemaField {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'object' | 'any'
+  description: string
+}
+
+export type EventSchema = typeof eventSchemas.$inferSelect
+
 // ─── Types ───────────────────────────────────────────
 
 export interface FlowNode {

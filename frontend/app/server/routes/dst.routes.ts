@@ -1,7 +1,7 @@
 import { Elysia } from "elysia"
 import { dstStateStore } from "../services/DSTStateStore"
 import { processAutomationEvent } from "../live/LiveAutomation"
-import { EventHistoryRepository } from "../db"
+import { EventHistoryRepository, EventSchemaRepository } from "../db"
 
 setInterval(() => dstStateStore.checkHealth(), 15000)
 
@@ -28,11 +28,13 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
     const { notifyLiveDSTP } = require("../live/LiveDSTP")
     notifyLiveDSTP?.()
 
-    // Process events: persist to DB + automation engine
+    // Process events: persist to DB + auto-detect schema + automation engine
     if (events && events.length > 0) {
       const eventRepo = new EventHistoryRepository(server_id)
+      const schemaRepo = new EventSchemaRepository(server_id)
       for (const evt of events) {
         try { eventRepo.create({ type: evt.type, shardId: shard_id, shardType: shard_type, data: evt.data || {} }) } catch (e) { /* */ }
+        try { schemaRepo.autoDetect(evt.type, evt.data || {}) } catch (e) { /* */ }
         try { processAutomationEvent(server_id, evt) } catch (e) { /* don't break sync */ }
       }
     }
