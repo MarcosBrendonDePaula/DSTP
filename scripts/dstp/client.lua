@@ -233,9 +233,33 @@ local function GetAllPlayersData()
 end
 
 -------------------------------------------------
--- Event Queue
+-- Event Queue (with debounce)
 -------------------------------------------------
+
+-- Debounce config: event_type -> minimum seconds between events
+local event_debounce = {
+    phase_changed = 5,
+    season_changed = 10,
+    health_delta = 2,
+    hunger_delta = 2,
+    sanity_delta = 2,
+    storm_changed = 10,
+    precipitation = 10,
+}
+local last_event_time = {} -- event_type -> last GetTime()
+
 function DSTP.PushEvent(event_type, data)
+    -- Debounce check
+    local debounce = event_debounce[event_type]
+    if debounce then
+        local now = _G.GetTime()
+        local last = last_event_time[event_type] or 0
+        if now - last < debounce then
+            return -- skip, too soon
+        end
+        last_event_time[event_type] = now
+    end
+
     table.insert(state.event_queue, {
         type = event_type,
         timestamp = _G.GetTime(),
