@@ -12,28 +12,21 @@ local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
 -- Server sets the string, fires the event, client reads and shows in chat
 -------------------------------------------------
 
--- Add net vars to player_classified for private messaging
+-- Private Message System: net_string on player_classified
+-- Server sets the string, client reads and shows in local chat
 AddPrefabPostInit("player_classified", function(inst)
     inst._dstp_pm = GLOBAL.net_string(inst.GUID, "dstp.pm", "dstp_pm_dirty")
-end)
 
--- Client-side: listen for private message event and show in chat
-AddPrefabPostInit("player_classified", function(inst)
+    -- Client-side only: listen for changes and show in chat
     if not GLOBAL.TheWorld.ismastersim then
         inst:ListenForEvent("dstp_pm_dirty", function()
             local msg = inst._dstp_pm:value()
             if msg and msg ~= "" and GLOBAL.ChatHistory then
                 GLOBAL.ChatHistory:AddToHistory(
-                    GLOBAL.ChatTypes.Message,  -- type
-                    nil,                       -- sender_userid
-                    nil,                       -- sender_netid
-                    "[DSTP]",                  -- sender_name
-                    msg,                       -- message
-                    {0.4, 0.7, 1.0, 1.0},     -- colour (blue-ish)
-                    "default",                 -- icondata
-                    false,                     -- whisper
-                    true,                      -- localonly (only this client sees it!)
-                    nil                        -- text_filter_context
+                    GLOBAL.ChatTypes.Message,
+                    nil, nil, "[DSTP]", msg,
+                    {0.4, 0.7, 1.0, 1.0},
+                    "default", false, true, nil
                 )
             end
         end)
