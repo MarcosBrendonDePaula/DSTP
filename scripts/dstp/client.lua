@@ -296,6 +296,15 @@ local function RegisterBuiltinCommands()
         end
     end)
 
+    DSTP.RegisterCommand("private_message", function(data)
+        if data.userid and data.message then
+            local player = FindPlayer(data.userid)
+            if player then
+                SendPrivateMessage(player, data.message)
+            end
+        end
+    end)
+
     DSTP.RegisterCommand("kick", function(data)
         if data.userid then _G.TheNet:Kick(data.userid) end
     end)
@@ -878,14 +887,22 @@ local function RegisterGameEvents(inst)
     Log("Event categories: " .. table.concat(enabled, ", "))
 end
 
+-- Send private message to a specific player via net_string
+local function SendPrivateMessage(player, message)
+    if not player or not player:IsValid() then return end
+    if player.player_classified and player.player_classified._dstp_pm then
+        player.player_classified._dstp_pm:set(message)
+        Log("PM to " .. tostring(player.name) .. ": " .. message)
+    end
+end
+
 -- Send panel URL to a specific player (if admin)
 local function SendUrlToAdmin(player)
     if not player or not player:IsValid() then return end
     local client_table = _G.TheNet:GetClientTable() or {}
     for _, client in pairs(client_table) do
         if client.userid == player.userid and client.admin then
-            -- Use Announce with player name prefix so they know it's for them
-            _G.TheNet:Announce("[DSTP] " .. player.name .. ", painel: " .. config.panel_url)
+            SendPrivateMessage(player, "Panel: " .. config.panel_url)
             return
         end
     end
@@ -893,15 +910,14 @@ end
 
 local function SendUrlToAdmins()
     local client_table = _G.TheNet:GetClientTable() or {}
-    local admin_found = false
     for _, client in pairs(client_table) do
-        if client.admin then
-            admin_found = true
-            break
+        if client.admin and client.userid then
+            for _, player in ipairs(_G.AllPlayers) do
+                if player.userid == client.userid then
+                    SendPrivateMessage(player, "Panel: " .. config.panel_url)
+                end
+            end
         end
-    end
-    if admin_found then
-        _G.TheNet:Announce("[DSTP] Panel: " .. config.panel_url)
     end
 end
 

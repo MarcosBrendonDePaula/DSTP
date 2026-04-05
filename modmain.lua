@@ -6,8 +6,43 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
 -- Generate ID from world session_identifier if auto
 local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
--- Actual ID resolution happens in client.lua Init after world is loaded
--- We pass the flag so client.lua can use TheWorld.meta.session_identifier
+
+-------------------------------------------------
+-- Private Message System via net_string + net_event
+-- Server sets the string, fires the event, client reads and shows in chat
+-------------------------------------------------
+
+-- Add net vars to player_classified for private messaging
+AddPrefabPostInit("player_classified", function(inst)
+    inst._dstp_pm = GLOBAL.net_string(inst.GUID, "dstp.pm", "dstp_pm_dirty")
+end)
+
+-- Client-side: listen for private message event and show in chat
+AddPrefabPostInit("player_classified", function(inst)
+    if not GLOBAL.TheWorld.ismastersim then
+        inst:ListenForEvent("dstp_pm_dirty", function()
+            local msg = inst._dstp_pm:value()
+            if msg and msg ~= "" and GLOBAL.ChatHistory then
+                GLOBAL.ChatHistory:AddToHistory(
+                    GLOBAL.ChatTypes.Message,  -- type
+                    nil,                       -- sender_userid
+                    nil,                       -- sender_netid
+                    "[DSTP]",                  -- sender_name
+                    msg,                       -- message
+                    {0.4, 0.7, 1.0, 1.0},     -- colour (blue-ish)
+                    "default",                 -- icondata
+                    false,                     -- whisper
+                    true,                      -- localonly (only this client sees it!)
+                    nil                        -- text_filter_context
+                )
+            end
+        end)
+    end
+end)
+
+-------------------------------------------------
+-- Init DSTP client
+-------------------------------------------------
 
 local env = {
     GLOBAL = GLOBAL,
