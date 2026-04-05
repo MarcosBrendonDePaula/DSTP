@@ -25,6 +25,10 @@ local config = {
 }
 
 local command_handlers = {}
+local evt_config = {}
+local evt_initialized = {}
+local world_inst = nil
+local hooked_players = {}
 
 -------------------------------------------------
 -- Logging
@@ -610,9 +614,7 @@ end
 -------------------------------------------------
 -- Game event listeners (by category)
 -------------------------------------------------
-local evt_config = {}
-local evt_initialized = {}  -- tracks which categories have been registered
-local world_inst = nil      -- reference to TheWorld for hot-toggle
+-- (evt_config, evt_initialized, world_inst declared at top of module)
 
 -- Hot-toggle: enable/disable event categories at runtime
 local function HotToggleEvents(requested)
@@ -758,7 +760,6 @@ local function RegisterBossEvents(inst)
 end
 
 -- Per-player events (combat, crafting, inventory, health)
-local hooked_players = {}
 local function RegisterPerPlayerEvents(player)
     if not player or hooked_players[player.userid] then return end
     hooked_players[player.userid] = true
