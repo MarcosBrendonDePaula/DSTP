@@ -47,7 +47,7 @@ export function ActionNode({ id, data, selected }: any) {
   const actionDef = ACTION_TYPES.find(a => a.value === data.action_type)
 
   return (
-    <BaseNode type="action" icon="🎯" label="Ação" selected={selected} hasOutput={false}>
+    <BaseNode type="action" icon="🎯" label="Ação" selected={selected}>
       <NodeField label="Executar">
         <NodeSelect
           value={data.action_type || ''}
