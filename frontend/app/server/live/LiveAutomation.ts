@@ -383,6 +383,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory',
       storm_changed: 'weather', precipitation: 'weather',
       boss_event: 'bosses', boss_killed: 'bosses',
+      player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
     }
 

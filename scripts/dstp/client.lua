@@ -843,6 +843,57 @@ local function RegisterPerPlayerEvents(player)
             })
         end)
     end
+
+    if evt_config.gathering then
+        -- Player finished breaking something (chop tree, mine rock, hammer structure)
+        player:ListenForEvent("finishedwork", function(inst, data)
+            local target = data and data.target
+            if not target then return end
+            local action = data.action and tostring(data.action) or "unknown"
+
+            DSTP.PushEvent("player_work", {
+                userid = uid, name = pname,
+                target = target.prefab or "unknown",
+                action = action,
+            })
+
+            -- Hook loot drops from the destroyed entity
+            if target:IsValid() and target.components and target.components.lootdropper then
+                target:ListenForEvent("loot_prefab_spawned", function(ent, lootdata)
+                    if lootdata and lootdata.loot then
+                        local count = 1
+                        if lootdata.loot.components and lootdata.loot.components.stackable then
+                            count = lootdata.loot.components.stackable:StackSize()
+                        end
+                        DSTP.PushEvent("resource_gathered", {
+                            userid = uid, name = pname,
+                            source = target.prefab or "unknown",
+                            action = action,
+                            loot = lootdata.loot.prefab or "unknown",
+                            count = count,
+                        })
+                    end
+                end)
+            end
+        end)
+
+        -- Player harvested something (berry bush, farm plant, etc)
+        player:ListenForEvent("harvestsomething", function(inst, data)
+            local obj = data and data.object
+            DSTP.PushEvent("player_harvest", {
+                userid = uid, name = pname,
+                source = obj and obj.prefab or "unknown",
+            })
+        end)
+
+        -- Player started a fire
+        player:ListenForEvent("onstartedfire", function(inst, data)
+            DSTP.PushEvent("player_startfire", {
+                userid = uid, name = pname,
+                target = data and data.target and data.target.prefab or "unknown",
+            })
+        end)
+    end
 end
 
 local function RegisterGameEvents(inst)
@@ -869,7 +920,7 @@ local function RegisterGameEvents(inst)
     end
 
     -- Hook per-player events for existing players
-    if evt_config.combat or evt_config.crafting or evt_config.inventory or evt_config.health then
+    if evt_config.combat or evt_config.crafting or evt_config.inventory or evt_config.health or evt_config.gathering then
         for _, player in ipairs(_G.AllPlayers) do
             RegisterPerPlayerEvents(player)
         end
@@ -877,6 +928,7 @@ local function RegisterGameEvents(inst)
         evt_initialized.crafting = evt_config.crafting
         evt_initialized.inventory = evt_config.inventory
         evt_initialized.health = evt_config.health
+        evt_initialized.gathering = evt_config.gathering
     end
 
     local enabled = {}
@@ -961,7 +1013,7 @@ local function HotToggleEvents(requested)
                     RegisterBossEvents(world_inst)
                 elseif category == "chat" and config.shard_type == "master" then
                     HookChat()
-                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" then
+                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" or category == "gathering" then
                     -- Re-hook per-player events for all current players
                     hooked_players = {}
                     for _, player in ipairs(_G.AllPlayers) do

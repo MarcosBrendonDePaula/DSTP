@@ -112,6 +112,13 @@ configuration_options = {
         default = false,
     },
     {
+        name = "EVT_GATHERING",
+        label = "Events: Gathering",
+        hover = "Track resource gathering (chop, mine, harvest, loot drops with details).",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
         name = "EVT_HEALTH",
         label = "Events: Health Ticks",
         hover = "Track health/hunger/sanity changes. VERY HEAVY - only enable for debugging.",

@@ -23,10 +23,9 @@ AddPrefabPostInit("player_classified", function(inst)
             local msg = inst._dstp_pm:value()
             if not msg or msg == "" then return end
 
-            -- Check if message contains a safe URL to auto-open in Steam Overlay
-            -- Only auto-open localhost URLs for security
+            -- Auto-open URL in Steam Overlay if it matches the configured backend
             local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
-            if url and (url:find("^http://127%.0%.0%.1") or url:find("^http://localhost")) then
+            if url and url:find(BACKEND_URL, 1, true) == 1 then
                 GLOBAL.VisitURL(url)
             end
 
@@ -67,6 +66,7 @@ dstp.Init(env, {
         inventory = GetModConfigData("EVT_INVENTORY") == true,
         weather = GetModConfigData("EVT_WEATHER") == true,
         bosses = GetModConfigData("EVT_BOSSES") == true,
+        gathering = GetModConfigData("EVT_GATHERING") == true,
         health = GetModConfigData("EVT_HEALTH") == true,
     },
 })

@@ -159,6 +159,42 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'cause', type: 'string', description: 'Kill cause' },
     ],
   },
+  player_work: {
+    description: 'Player finished breaking something',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player user ID' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'target', type: 'string', description: 'Target prefab (evergreen, rock1, etc)' },
+      { name: 'action', type: 'string', description: 'Action type (CHOP, MINE, HAMMER, DIG)' },
+    ],
+  },
+  resource_gathered: {
+    description: 'Resource dropped from destroyed entity',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player who caused it' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'source', type: 'string', description: 'Source entity prefab (evergreen, rock1)' },
+      { name: 'action', type: 'string', description: 'Action (CHOP, MINE, HAMMER)' },
+      { name: 'loot', type: 'string', description: 'Loot item prefab (log, rocks, flint)' },
+      { name: 'count', type: 'number', description: 'Stack size of the drop' },
+    ],
+  },
+  player_harvest: {
+    description: 'Player harvested a plant',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player user ID' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'source', type: 'string', description: 'Harvested plant prefab (berrybush, farm_plant)' },
+    ],
+  },
+  player_startfire: {
+    description: 'Player started a fire',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player user ID' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'target', type: 'string', description: 'Target that caught fire' },
+    ],
+  },
   health_delta: {
     description: 'Player health changed',
     fields: [
