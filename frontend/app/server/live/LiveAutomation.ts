@@ -54,6 +54,14 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   private _captureServerId: string | null = null
   private _captureTrace: Array<{ nodeId: string; status: string; input: Record<string, any>; output: any; error?: string; timestamp: number }> = []
 
+  // Shared storage between flows — Script nodes can read/write via context.store
+  private static _flowStorage: Record<string, Record<string, any>> = {}
+
+  static getStore(serverId: string): Record<string, any> {
+    if (!this._flowStorage[serverId]) this._flowStorage[serverId] = {}
+    return this._flowStorage[serverId]
+  }
+
   static defaultState: AutomationState = {
     flows: [],
     logs: [],
@@ -361,7 +369,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
           } else if (actionType === 'set_variable') {
             setContext(node.id, this.executeSetVariable(node, context))
           } else if (actionType === 'script') {
-            setContext(node.id, await this.executeScript(node, context))
+            setContext(node.id, await this.executeScript(node, context, serverId))
           } else {
             this.runFlowAction(serverId, node, context)
             setContext(node.id, { executed: true, action: actionType })
@@ -569,14 +577,20 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // Do NOT expose this to untrusted users. Future improvement: use vm2 or
   // isolated-vm for sandboxed execution.
 
-  private async executeScript(node: FlowNode, context: Record<string, any>): Promise<any> {
+  private async executeScript(node: FlowNode, context: Record<string, any>, serverId?: string): Promise<any> {
     const code = node.data.params?.code
     if (!code) return { error: 'no code' }
 
     try {
-      // Wrap user code in an async function that receives context
-      // The user defines `async function run(context) { ... }`
-      // We extract and call it
+      // context.store is a shared key-value storage between flows
+      // Scripts can read/write: context.store.myKey = value
+      const store = LiveAutomation.getStore(serverId || '')
+      context.store = store
+      // context.sendCommand(type, data) sends a command to the DST server
+      context.sendCommand = (type: string, data: any = {}) => {
+        dstStateStore.pushCommandToServer(serverId || '', type, data)
+      }
+
       const wrappedCode = `
         ${code}
         return typeof run === 'function' ? run(context) : { error: 'no run() function defined' }

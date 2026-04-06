@@ -144,6 +144,15 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
     detail: { tags: ['DST'], summary: 'Toggle dump mode on a DST server' }
   })
 
+  .post("/command", ({ body }) => {
+    const { server_id, type, data } = body as any
+    if (!server_id || !type) return { error: 'missing server_id or type' }
+    dstStateStore.pushCommandToServer(server_id, type, data || {})
+    return { ok: true, command: type }
+  }, {
+    detail: { tags: ['DST'], summary: 'Send command to DST server' }
+  })
+
   .get("/debug/queues", () => {
     // Debug endpoint to check command queues
     return { store_version: dstStateStore.version }

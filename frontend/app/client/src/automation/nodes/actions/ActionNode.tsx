@@ -26,6 +26,12 @@ export const ACTION_TYPES = [
   { value: 'set_speed', label: '⏩ Set Speed', params: [{ key: 'speed', label: 'Velocidade', placeholder: '1' }] },
   { value: 'rollback', label: '↩ Rollback', params: [{ key: 'days', label: 'Dias', placeholder: '0' }] },
   { value: 'execute', label: '🔧 Execute Lua', params: [{ key: 'lua', label: 'Código Lua', placeholder: 'print("hello")' }] },
+  // Spawn/Remove
+  { value: 'spawn_at_player', label: '🏗 Spawn at Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'count', label: 'Qtd', placeholder: '1' }, { key: 'offset_x', label: 'Offset X', placeholder: '0' }, { key: 'offset_z', label: 'Offset Z', placeholder: '0' }] },
+  { value: 'spawn_prefab', label: '🏗 Spawn (coords)', params: [{ key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'count', label: 'Qtd', placeholder: '1' }] },
+  { value: 'remove_near_player', label: '🗑 Remove Near Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
+  { value: 'remove_near', label: '🗑 Remove Near (coords)', params: [{ key: 'prefab', label: 'Prefab' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
+  { value: 'destroy_structure', label: '🔨 Destroy Structure', params: [{ key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'prefab', label: 'Prefab (opcional)' }, { key: 'radius', label: 'Raio', placeholder: '3' }] },
 ]
 
 export function ActionNode({ id, data, selected }: any) {

@@ -175,7 +175,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       find_player: { params: { name: '' } },
       http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
       set_variable: { action_type: 'set_variable', params: {} },
-      script: { action_type: 'script', params: { code: '' } },
+      script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
     }
     const newNode: Node = {
       id: genId(),
@@ -188,19 +188,25 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
 
   const handleSave = () => onSave(nodes, edges, true)
 
-  // Auto-save: salva imediatamente ao mudar algo
+  // Auto-save: debounce 500ms to let editors (Monaco) commit their changes
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saved'>('idle')
   const initializedRef = useRef(false)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    // Skip first render (initial load)
     if (!initializedRef.current) { initializedRef.current = true; return }
 
-    onSave(nodes, edges)
-    setAutoSaveStatus('saved')
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => {
+      onSave(nodes, edges)
+      setAutoSaveStatus('saved')
+    }, 500)
+
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-    saveTimeoutRef.current = setTimeout(() => setAutoSaveStatus('idle'), 1500)
+    saveTimeoutRef.current = setTimeout(() => setAutoSaveStatus('idle'), 2000)
+
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current) }
   }, [nodes, edges, flowName])
 
   return (

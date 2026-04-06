@@ -664,6 +664,59 @@ local function RegisterBuiltinCommands()
         end
     end)
 
+    -- Spawn prefab at player's position (or with offset)
+    DSTP.RegisterCommand("spawn_at_player", function(data)
+        local player = FindPlayer(data.userid)
+        if player and data.prefab then
+            local x, _, z = player.Transform:GetWorldPosition()
+            local ox, oz = tonumber(data.offset_x) or 0, tonumber(data.offset_z) or 0
+            local ent = _G.SpawnPrefab(data.prefab)
+            if ent then
+                ent.Transform:SetPosition(x + ox, 0, z + oz)
+                local count = tonumber(data.count) or 1
+                if count > 1 and ent.components.stackable then
+                    ent.components.stackable:SetStackSize(count)
+                end
+                Log("Spawned " .. data.prefab .. " at " .. player.name)
+            end
+        end
+    end)
+
+    -- Remove entities near a player
+    DSTP.RegisterCommand("remove_near_player", function(data)
+        local player = FindPlayer(data.userid)
+        if player and data.prefab then
+            local x, _, z = player.Transform:GetWorldPosition()
+            local radius = tonumber(data.radius) or 10
+            local ents = _G.TheSim:FindEntities(x, 0, z, radius, nil, nil, nil)
+            local removed = 0
+            local limit = tonumber(data.limit) or 999
+            for _, ent in ipairs(ents) do
+                if ent.prefab == data.prefab and ent ~= player then
+                    ent:Remove()
+                    removed = removed + 1
+                    if removed >= limit then break end
+                end
+            end
+            Log("Removed " .. removed .. "x " .. data.prefab .. " near " .. player.name)
+        end
+    end)
+
+    -- Destroy/hammer a structure at coordinates
+    DSTP.RegisterCommand("destroy_structure", function(data)
+        if data.x and data.z then
+            local radius = tonumber(data.radius) or 3
+            local ents = _G.TheSim:FindEntities(data.x, 0, data.z, radius, nil, nil, nil)
+            for _, ent in ipairs(ents) do
+                if (not data.prefab or ent.prefab == data.prefab) and ent.components and ent.components.workable then
+                    ent.components.workable:Destroy(ent)
+                    Log("Destroyed " .. ent.prefab)
+                    if not data.all then break end
+                end
+            end
+        end
+    end)
+
     DSTP.RegisterCommand("set_dump_mode", function(data)
         config.dump_mode = data.enabled ~= false
         Log("Dump mode: " .. tostring(config.dump_mode))
