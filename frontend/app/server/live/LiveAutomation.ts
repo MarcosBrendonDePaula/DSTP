@@ -762,6 +762,34 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       actionData[key] = this.resolveValue(val, context)
     }
 
+    // UI widget actions: convert to ui_command for per-player delivery
+    if (actionType.startsWith('ui_')) {
+      const userid = actionData.userid
+      delete actionData.userid
+
+      let cmd: any
+      if (actionType === 'ui_notification') {
+        cmd = { action: 'create', id: `notif_${Date.now()}`, type: 'notification', text: actionData.text, duration: Number(actionData.duration) || 5 }
+      } else if (actionType === 'ui_label') {
+        cmd = { action: 'create', id: actionData.id || `label_${Date.now()}`, type: 'label', text: actionData.text, x: Number(actionData.x) || 0, y: Number(actionData.y) || 0, anchor: actionData.anchor || 'top' }
+      } else if (actionType === 'ui_panel') {
+        cmd = { action: 'create', id: actionData.id || `panel_${Date.now()}`, type: 'panel', title: actionData.title, body: actionData.body, width: Number(actionData.width) || 400, height: Number(actionData.height) || 300 }
+      } else if (actionType === 'ui_progress_bar') {
+        const val = Number(actionData.value) || 0
+        const max = Number(actionData.max) || 1
+        cmd = { action: 'create', id: actionData.id || `bar_${Date.now()}`, type: 'progress_bar', value: val / max, label: actionData.label, width: Number(actionData.width) || 200 }
+      } else if (actionType === 'ui_destroy') {
+        cmd = { action: 'destroy', id: actionData.id }
+      } else if (actionType === 'ui_clear') {
+        cmd = { action: 'clear' }
+      }
+
+      if (cmd && userid) {
+        dstStateStore.pushCommandToServer(serverId, 'ui_command', { userid, cmd })
+      }
+      return
+    }
+
     dstStateStore.pushCommandToServer(serverId, actionType, actionData)
   }
 

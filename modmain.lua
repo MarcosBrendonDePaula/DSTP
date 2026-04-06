@@ -4,12 +4,28 @@ local SERVER_ID = GetModConfigData("SERVER_ID") or ""
 local BACKEND_URL = GetModConfigData("BACKEND_URL") or "http://127.0.0.1:3000"
 local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
+-- Client-side UI widget manager (loaded on client only)
+local UIWidgets = nil
+
 -- Generate ID from world session_identifier if auto
 local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
 
 -------------------------------------------------
 -- Mod RPC: client → server panel URL request
 -------------------------------------------------
+
+-- UI Widget button callback: client → server → backend event queue
+AddModRPCHandler(modname, "UICallback", function(player, callback_name, widget_id)
+    if player and callback_name then
+        local dstp_mod = require("dstp/client")
+        dstp_mod.PushEvent("ui_callback", {
+            userid = player.userid,
+            name = player.name or "unknown",
+            callback = callback_name,
+            widget_id = widget_id or "",
+        })
+    end
+end)
 
 AddModRPCHandler(modname, "RequestPanel", function(player)
     print("[DSTP] RPC RequestPanel received from:", player and player.name or "unknown")
@@ -38,6 +54,9 @@ AddPrefabPostInit("player_classified", function(inst)
     -- PM system (server → client)
     inst._dstp_pm = GLOBAL.net_string(inst.GUID, "dstp.pm", "dstp_pm_dirty")
 
+    -- UI Widget system (server → client per-player)
+    inst._dstp_ui = GLOBAL.net_string(inst.GUID, "dstp.ui", "dstp_ui_dirty")
+
     -- Client: show PM in chat / auto-open URLs
     if not GLOBAL.TheWorld.ismastersim then
         inst:ListenForEvent("dstp_pm_dirty", function()
@@ -56,6 +75,30 @@ AddPrefabPostInit("player_classified", function(inst)
                     {0.4, 0.7, 1.0, 1.0},
                     "default", false, true, nil
                 )
+            end
+        end)
+
+        -- Client: process UI widget commands from backend
+        inst:ListenForEvent("dstp_ui_dirty", function()
+            local cmd_str = inst._dstp_ui:value()
+            if not cmd_str or cmd_str == "" then return end
+
+            -- Lazy-init widget manager on first use
+            if not UIWidgets then
+                UIWidgets = GLOBAL.require("dstp/ui_widgets")
+                UIWidgets.Init({ GLOBAL = GLOBAL })
+
+                -- Wire button callbacks: send RPC to server which queues an event
+                UIWidgets.SetCallbackHandler(function(callback_name, widget_id)
+                    if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["UICallback"] then
+                        SendModRPCToServer(MOD_RPC[modname]["UICallback"], callback_name, widget_id)
+                    end
+                end)
+            end
+
+            local ok, cmd = pcall(GLOBAL.json.decode, cmd_str)
+            if ok and cmd then
+                UIWidgets.ProcessCommand(cmd)
             end
         end)
     end

@@ -32,6 +32,43 @@ export const ACTION_TYPES = [
   { value: 'remove_near_player', label: '🗑 Remove Near Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
   { value: 'remove_near', label: '🗑 Remove Near (coords)', params: [{ key: 'prefab', label: 'Prefab' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
   { value: 'destroy_structure', label: '🔨 Destroy Structure', params: [{ key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'prefab', label: 'Prefab (opcional)' }, { key: 'radius', label: 'Raio', placeholder: '3' }] },
+  // UI Widgets
+  { value: 'ui_notification', label: '🔔 Notificação', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'text', label: 'Texto', placeholder: 'Mensagem...' },
+    { key: 'duration', label: 'Duração (s)', placeholder: '5' },
+  ] },
+  { value: 'ui_label', label: '🏷 Label HUD', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'ID', placeholder: 'meu_label' },
+    { key: 'text', label: 'Texto', placeholder: 'Info...' },
+    { key: 'x', label: 'X', placeholder: '0' },
+    { key: 'y', label: 'Y', placeholder: '300' },
+    { key: 'anchor', label: 'Ancora', placeholder: 'top' },
+  ] },
+  { value: 'ui_panel', label: '📋 Painel', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'ID', placeholder: 'meu_painel' },
+    { key: 'title', label: 'Titulo', placeholder: 'Info' },
+    { key: 'body', label: 'Conteudo', placeholder: 'Texto do painel...' },
+    { key: 'width', label: 'Largura', placeholder: '400' },
+    { key: 'height', label: 'Altura', placeholder: '300' },
+  ] },
+  { value: 'ui_progress_bar', label: '📊 Barra', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'ID', placeholder: 'minha_barra' },
+    { key: 'value', label: 'Valor (0-1)', placeholder: '{{jogador.health.current}}' },
+    { key: 'max', label: 'Max', placeholder: '{{jogador.health.max}}' },
+    { key: 'label', label: 'Label', placeholder: 'HP' },
+    { key: 'width', label: 'Largura', placeholder: '200' },
+  ] },
+  { value: 'ui_destroy', label: '❌ Remover Widget', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'Widget ID', placeholder: 'meu_label' },
+  ] },
+  { value: 'ui_clear', label: '🧹 Limpar Widgets', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+  ] },
 ]
 
 export function ActionNode({ id, data, selected }: any) {

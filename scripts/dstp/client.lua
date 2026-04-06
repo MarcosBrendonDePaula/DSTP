@@ -721,6 +721,52 @@ local function RegisterBuiltinCommands()
         config.dump_mode = data.enabled ~= false
         Log("Dump mode: " .. tostring(config.dump_mode))
     end)
+
+    -- UI Widget commands: send JSON command to a specific player's client
+    -- data = { userid = "KU_xxx", cmd = { action="create", id="...", type="...", ... } }
+    -- or data = { userid = "KU_xxx", cmd = { action="batch", commands = [{...}, ...] } }
+    DSTP.RegisterCommand("ui_command", function(data)
+        if not data.userid or not data.cmd then
+            LogError("ui_command: missing userid or cmd")
+            return
+        end
+        local player = FindPlayer(data.userid)
+        if not player then
+            LogError("ui_command: player not found: " .. tostring(data.userid))
+            return
+        end
+        if not player.player_classified or not player.player_classified._dstp_ui then
+            LogError("ui_command: player has no _dstp_ui net_string")
+            return
+        end
+        local json_str = SafeEncode(data.cmd)
+        if not json_str then
+            LogError("ui_command: failed to encode cmd")
+            return
+        end
+        player.player_classified._dstp_ui:set(json_str)
+        Log("ui_command sent to " .. tostring(data.userid) .. ": " .. tostring(data.cmd.action))
+    end)
+
+    -- Broadcast UI command to all connected players
+    -- data = { cmd = { action="create", ... } }
+    DSTP.RegisterCommand("ui_broadcast", function(data)
+        if not data.cmd then
+            LogError("ui_broadcast: missing cmd")
+            return
+        end
+        local json_str = SafeEncode(data.cmd)
+        if not json_str then
+            LogError("ui_broadcast: failed to encode cmd")
+            return
+        end
+        for _, player in ipairs(_G.AllPlayers) do
+            if player.player_classified and player.player_classified._dstp_ui then
+                player.player_classified._dstp_ui:set(json_str)
+            end
+        end
+        Log("ui_broadcast: " .. tostring(data.cmd.action) .. " to " .. #_G.AllPlayers .. " players")
+    end)
 end
 
 -------------------------------------------------
