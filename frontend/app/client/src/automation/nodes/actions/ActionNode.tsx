@@ -13,7 +13,8 @@ export const ACTION_TYPES = [
   { value: 'kill', label: '💀 Kill', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
   { value: 'respawn', label: '✨ Respawn', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
   { value: 'godmode', label: '🛡 Godmode', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'enabled', label: 'Ativar', placeholder: 'true' }] },
-  { value: 'teleport', label: '📍 Teleport', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }] },
+  { value: 'teleport', label: '📍 Teleport (coords)', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }] },
+  { value: 'teleport_to_player', label: '📍 Teleport to Player', params: [{ key: 'userid', label: 'Quem TP', placeholder: '{{trigger.userid}}' }, { key: 'target_userid', label: 'Destino', placeholder: '{{resolver.target_userid}}' }] },
   { value: 'set_season', label: '🍂 Set Season', params: [{ key: 'season', label: 'Estação', placeholder: 'autumn' }] },
   { value: 'set_phase', label: '🌙 Set Phase', params: [{ key: 'phase', label: 'Fase', placeholder: 'day' }] },
   { value: 'skip_day', label: '⏭ Skip Days', params: [{ key: 'days', label: 'Dias', placeholder: '1' }] },
@@ -47,7 +48,7 @@ export function ActionNode({ id, data, selected }: any) {
   const actionDef = ACTION_TYPES.find(a => a.value === data.action_type)
 
   return (
-    <BaseNode type="action" icon="🎯" label="Ação" selected={selected}>
+    <BaseNode type="action" icon="🎯" label="Ação" selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       <NodeField label="Executar">
         <NodeSelect
           value={data.action_type || ''}
@@ -65,7 +66,7 @@ export function ActionNode({ id, data, selected }: any) {
         </NodeField>
       ))}
       {actionDef && (
-        <div className="text-[8px] text-gray-600 mt-1">
+        <div className="text-[8px] text-gray-500 mt-1">
           💡 Use {'{{campo}}'} para dados do evento
         </div>
       )}

@@ -17,7 +17,7 @@ export function HttpRequestNode({ id, data, selected }: any) {
   }, [id, data, updateNodeData])
 
   return (
-    <BaseNode type="action" icon="🌐" label="HTTP Request" selected={selected}>
+    <BaseNode type="action" icon="🌐" label="HTTP Request" selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       <NodeField label="URL">
         <NodeInput
           value={data.params?.url || ''}
@@ -48,7 +48,7 @@ export function HttpRequestNode({ id, data, selected }: any) {
           />
         </NodeField>
       )}
-      <div className="text-[8px] text-gray-600 mt-1 space-y-0.5">
+      <div className="text-[8px] text-gray-500 mt-1 space-y-0.5">
         <div>Output: <code className="text-blue-400">{'{{'}node_id.body{'}}'},  {'{{'}node_id.status{'}}'}</code></div>
         <div>Use <code className="text-purple-400">{'{{'}trigger.campo{'}}'}</code> nos campos</div>
       </div>

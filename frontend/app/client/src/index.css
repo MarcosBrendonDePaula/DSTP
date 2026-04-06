@@ -15,6 +15,7 @@ body {
 
 html {
   scroll-behavior: smooth;
+  color-scheme: dark;
 }
 
 /* Custom scrollbar */
@@ -23,7 +24,7 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #111111;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -33,4 +34,135 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
+}
+
+/* React Flow dark theme overrides */
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__selection {
+  background: rgba(59, 130, 246, 0.08) !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+}
+
+.react-flow__nodesselection-rect {
+  background: rgba(59, 130, 246, 0.08) !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: #60a5fa !important;
+  stroke-width: 3 !important;
+}
+
+.react-flow__edge-path {
+  stroke: #555 !important;
+}
+
+.react-flow__connection-line {
+  stroke: #60a5fa !important;
+  stroke-width: 2 !important;
+}
+
+.react-flow__handle:hover {
+  background: #444 !important;
+}
+
+.react-flow__minimap {
+  background: #111 !important;
+}
+
+.react-flow__controls button {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  fill: #999 !important;
+  color: #999 !important;
+}
+
+.react-flow__controls button:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  fill: #ccc !important;
+}
+
+.react-flow__controls button svg {
+  fill: inherit !important;
+}
+
+/* Ensure select dropdowns are readable on dark backgrounds */
+select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+/* ─── Automation execution debug mode ─── */
+
+/* Running node: pulsing blue glow */
+.dstp-node-running {
+  animation: dstp-pulse-running 1.2s ease-in-out infinite;
+}
+
+@keyframes dstp-pulse-running {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.6), 0 0 50px rgba(59, 130, 246, 0.3);
+  }
+}
+
+/* Completed node: brief green flash then settle */
+.dstp-node-completed {
+  animation: dstp-flash-complete 0.6s ease-out;
+}
+
+@keyframes dstp-flash-complete {
+  0% {
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.7), 0 0 60px rgba(34, 197, 94, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+  }
+}
+
+/* Error node: red glow */
+.dstp-node-error {
+  animation: dstp-flash-error 0.6s ease-out;
+}
+
+@keyframes dstp-flash-error {
+  0% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.7), 0 0 60px rgba(239, 68, 68, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* Spinning indicator for running badge */
+.dstp-spin {
+  animation: dstp-spin 0.8s linear infinite;
+}
+
+@keyframes dstp-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Pop-in animation for completion/error badges */
+.dstp-badge-pop {
+  animation: dstp-badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes dstp-badge-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }

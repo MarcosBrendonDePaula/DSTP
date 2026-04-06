@@ -1,0 +1,1 @@
+ALTER TABLE `automation_logs` ADD `context` text;

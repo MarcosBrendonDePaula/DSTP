@@ -10,5 +10,10 @@ export class LiveAutomation {
     'toggleFlow',
     'loadFlows',
     'clearLogs',
+    'getEventSchemas',
+    'exportFlow',
+    'importFlow',
+    'startCapture',
+    'stopCapture',
   ]
 }

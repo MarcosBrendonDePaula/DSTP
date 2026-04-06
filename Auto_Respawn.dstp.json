@@ -1,0 +1,42 @@
+{
+  "name": "Auto Respawn",
+  "version": "1.0",
+  "exportedAt": "2026-04-05T23:20:00.000Z",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "data": { "event_type": "player_death" },
+      "position": { "x": 300, "y": 50 }
+    },
+    {
+      "id": "delay_1",
+      "type": "delay",
+      "data": { "delay_ms": "3000" },
+      "position": { "x": 300, "y": 190 }
+    },
+    {
+      "id": "action_1",
+      "type": "action",
+      "data": {
+        "action_type": "respawn",
+        "params": {
+          "userid": "{{trigger.userid}}"
+        }
+      },
+      "position": { "x": 300, "y": 340 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1",
+      "source": "trigger_1",
+      "target": "delay_1"
+    },
+    {
+      "id": "edge_2",
+      "source": "delay_1",
+      "target": "action_1"
+    }
+  ]
+}

@@ -23,7 +23,7 @@ function App() {
 
   return (
     <LiveComponentsProvider
-      url={wsUrl}
+      //url={wsUrl}
       autoConnect={true}
       reconnectInterval={1000}
       maxReconnectAttempts={5}

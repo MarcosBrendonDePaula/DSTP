@@ -1,0 +1,84 @@
+{
+  "name": "Chat /tp",
+  "version": "1.0",
+  "exportedAt": "2026-04-06T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "data": { "event_type": "chat_message", "alias": "chat" },
+      "position": { "x": 300, "y": 50 }
+    },
+    {
+      "id": "condition_1",
+      "type": "condition",
+      "data": {
+        "field": "trigger.message",
+        "operator": "contains",
+        "value": "/tp ",
+        "alias": "check"
+      },
+      "position": { "x": 300, "y": 190 }
+    },
+    {
+      "id": "script_1",
+      "type": "script",
+      "data": {
+        "action_type": "script",
+        "alias": "resolver",
+        "params": {
+          "code": "async function run(context) {\n  const msg = context.trigger.message;\n  const targetName = msg.replace('/tp ', '').trim();\n  \n  // Fetch online players from DSTP backend\n  const resp = await fetch('http://127.0.0.1:3000/api/dst/players');\n  if (!resp.ok) return { error: 'failed to fetch players' };\n  const players = await resp.json();\n  \n  // Find player by name (case-insensitive partial match)\n  const target = players.find(p => p.name && p.name.toLowerCase().includes(targetName.toLowerCase()));\n  if (!target) return { error: 'player not found: ' + targetName, targetName };\n  \n  return {\n    targetName: target.name,\n    target_userid: target.userid,\n    source_userid: context.trigger.userid,\n    source_name: context.trigger.name\n  };\n}"
+        }
+      },
+      "position": { "x": 300, "y": 380 }
+    },
+    {
+      "id": "action_1",
+      "type": "action",
+      "data": {
+        "action_type": "teleport_to_player",
+        "alias": "tp",
+        "params": {
+          "userid": "{{resolver.source_userid}}",
+          "target_userid": "{{resolver.target_userid}}"
+        }
+      },
+      "position": { "x": 300, "y": 560 }
+    },
+    {
+      "id": "action_2",
+      "type": "action",
+      "data": {
+        "action_type": "announce",
+        "alias": "feedback",
+        "params": {
+          "message": "{{resolver.source_name}} teleportou para {{resolver.targetName}}"
+        }
+      },
+      "position": { "x": 300, "y": 700 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1",
+      "source": "trigger_1",
+      "target": "condition_1"
+    },
+    {
+      "id": "edge_2",
+      "source": "condition_1",
+      "target": "script_1",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "edge_3",
+      "source": "script_1",
+      "target": "action_1"
+    },
+    {
+      "id": "edge_4",
+      "source": "action_1",
+      "target": "action_2"
+    }
+  ]
+}

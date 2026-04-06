@@ -10,6 +10,8 @@ export class LiveDSTP {
     'broadcastCommand',
     'toggleEventCategory',
     'updateDebounce',
+    'getEventSchemas',
+    'saveEventSchema',
     'refresh',
   ]
 }

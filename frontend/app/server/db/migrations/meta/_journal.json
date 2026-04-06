@@ -15,6 +15,13 @@
       "when": 1775401894905,
       "tag": "0001_sleepy_emma_frost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775423605215,
+      "tag": "0002_material_black_knight",
+      "breakpoints": true
     }
   ]
 }

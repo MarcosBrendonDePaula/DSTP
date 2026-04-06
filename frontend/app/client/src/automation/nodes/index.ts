@@ -4,11 +4,13 @@ import { ActionNode } from './actions/ActionNode'
 import { HttpRequestNode } from './actions/HttpRequestNode'
 import { SetVariableNode } from './actions/SetVariableNode'
 import { ScriptNode } from './actions/ScriptNode'
+import { DelayNode } from './actions/DelayNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
   condition: ConditionNode,
   action: ActionNode,
+  delay: DelayNode,
   http_request: HttpRequestNode,
   set_variable: SetVariableNode,
   script: ScriptNode,

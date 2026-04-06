@@ -15,213 +15,293 @@ export interface NodeOutputSchema {
 
 // ─── Trigger outputs (by event type) ─────────────────
 
+// Helper for common player fields
+const playerFields: OutputField[] = [
+  { name: 'userid', type: 'string', description: 'Klei user ID (KU_xxx)' },
+  { name: 'name', type: 'string', description: 'Player display name' },
+]
+
 export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
+  // ── Players ──────────────────────────────────────────
   player_spawn: {
     description: 'Player joined the server',
     fields: [
-      { name: 'userid', type: 'string', description: 'Steam/Klei user ID (KU_xxx)' },
-      { name: 'name', type: 'string', description: 'Player display name' },
-      { name: 'prefab', type: 'string', description: 'Character prefab (wilson, willow...)' },
+      ...playerFields,
+      { name: 'prefab', type: 'string', description: 'Character prefab (wilson, willow, etc)' },
     ],
   },
   player_left: {
-    description: 'Player left the server',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Steam/Klei user ID' },
-      { name: 'name', type: 'string', description: 'Player display name' },
-    ],
+    description: 'Player disconnected from the server',
+    fields: [...playerFields],
   },
   player_death: {
     description: 'Player died',
     fields: [
-      { name: 'userid', type: 'string', description: 'Steam/Klei user ID' },
-      { name: 'name', type: 'string', description: 'Player display name' },
-      { name: 'cause', type: 'string', description: 'Death cause (darkness, charlie, mob prefab...)' },
+      ...playerFields,
+      { name: 'cause', type: 'string', description: 'Killer prefab or "unknown"' },
     ],
   },
   player_ghost: {
-    description: 'Player became a ghost',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Steam/Klei user ID' },
-      { name: 'name', type: 'string', description: 'Player display name' },
-    ],
+    description: 'Player became a ghost after death',
+    fields: [...playerFields],
   },
   player_respawn: {
-    description: 'Player respawned from ghost',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Steam/Klei user ID' },
-      { name: 'name', type: 'string', description: 'Player display name' },
-    ],
+    description: 'Player respawned from ghost form',
+    fields: [...playerFields],
   },
+
+  // ── Chat ─────────────────────────────────────────────
   chat_message: {
-    description: 'Chat message sent',
+    description: 'Chat message sent by a player',
     fields: [
-      { name: 'userid', type: 'string', description: 'Sender user ID' },
-      { name: 'name', type: 'string', description: 'Sender name' },
-      { name: 'message', type: 'string', description: 'Message text' },
+      ...playerFields,
+      { name: 'message', type: 'string', description: 'Chat text content' },
       { name: 'prefab', type: 'string', description: 'Sender character prefab' },
     ],
   },
-  new_day: {
-    description: 'New day started',
-    fields: [
-      { name: 'day', type: 'number', description: 'Current day number' },
-    ],
-  },
-  phase_changed: {
-    description: 'Day phase changed',
-    fields: [
-      { name: 'phase', type: 'string', description: 'New phase (day, dusk, night)' },
-    ],
-  },
-  season_changed: {
-    description: 'Season changed',
-    fields: [
-      { name: 'season', type: 'string', description: 'New season (autumn, winter, spring, summer)' },
-    ],
-  },
+
+  // ── Combat ───────────────────────────────────────────
   player_kill: {
     description: 'Player killed an entity',
     fields: [
-      { name: 'userid', type: 'string', description: 'Killer user ID' },
-      { name: 'name', type: 'string', description: 'Killer name' },
-      { name: 'victim', type: 'string', description: 'Victim prefab' },
+      ...playerFields,
+      { name: 'victim', type: 'string', description: 'Killed entity prefab' },
     ],
   },
   player_attacked: {
-    description: 'Player was attacked',
+    description: 'Player took damage from an attacker',
     fields: [
-      { name: 'userid', type: 'string', description: 'Victim user ID' },
-      { name: 'name', type: 'string', description: 'Victim name' },
-      { name: 'attacker', type: 'string', description: 'Attacker prefab' },
-      { name: 'damage', type: 'number', description: 'Damage dealt' },
+      ...playerFields,
+      { name: 'attacker', type: 'string', description: 'Attacker entity prefab' },
+      { name: 'damage', type: 'number', description: 'Raw damage amount' },
     ],
   },
+
+  // ── Crafting ─────────────────────────────────────────
   player_craft: {
     description: 'Player crafted an item',
     fields: [
-      { name: 'userid', type: 'string', description: 'Crafter user ID' },
-      { name: 'name', type: 'string', description: 'Crafter name' },
+      ...playerFields,
       { name: 'item', type: 'string', description: 'Crafted item prefab' },
       { name: 'recipe', type: 'string', description: 'Recipe name' },
     ],
   },
   player_build: {
-    description: 'Player built a structure',
+    description: 'Player placed a structure',
     fields: [
-      { name: 'userid', type: 'string', description: 'Builder user ID' },
-      { name: 'name', type: 'string', description: 'Builder name' },
-      { name: 'item', type: 'string', description: 'Built structure prefab' },
+      ...playerFields,
+      { name: 'item', type: 'string', description: 'Structure prefab' },
     ],
   },
+
+  // ── Inventory ────────────────────────────────────────
   player_equip: {
     description: 'Player equipped an item',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
+      ...playerFields,
       { name: 'item', type: 'string', description: 'Equipped item prefab' },
-      { name: 'slot', type: 'string', description: 'Equipment slot' },
+      { name: 'slot', type: 'string', description: 'Equipment slot (hands/head/body)' },
     ],
   },
   player_pickup: {
     description: 'Player picked up an item',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'item', type: 'string', description: 'Item prefab' },
+      ...playerFields,
+      { name: 'item', type: 'string', description: 'Picked up item prefab' },
     ],
   },
   player_drop: {
     description: 'Player dropped an item',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'item', type: 'string', description: 'Item prefab' },
+      ...playerFields,
+      { name: 'item', type: 'string', description: 'Dropped item prefab' },
     ],
   },
-  storm_changed: {
-    description: 'Storm state changed',
+  player_unequip: {
+    description: 'Player unequipped an item',
     fields: [
-      { name: 'stormtype', type: 'string', description: 'Storm type' },
-      { name: 'setting', type: 'any', description: 'Storm setting value' },
+      ...playerFields,
+      { name: 'item', type: 'string', description: 'Unequipped item prefab' },
+      { name: 'slot', type: 'string', description: 'Equipment slot (hands/head/body)' },
     ],
   },
-  precipitation: {
-    description: 'Precipitation state changed',
-    fields: [
-      { name: 'enabled', type: 'boolean', description: 'Is it raining' },
-    ],
-  },
-  boss_killed: {
-    description: 'Boss entity was killed',
-    fields: [
-      { name: 'prefab', type: 'string', description: 'Boss prefab name' },
-      { name: 'cause', type: 'string', description: 'Kill cause' },
-    ],
-  },
-  player_work: {
-    description: 'Player finished breaking something',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'target', type: 'string', description: 'Target prefab (evergreen, rock1, etc)' },
-      { name: 'action', type: 'string', description: 'Action type (CHOP, MINE, HAMMER, DIG)' },
-    ],
-  },
-  resource_gathered: {
-    description: 'Resource dropped from destroyed entity',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Player who caused it' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'source', type: 'string', description: 'Source entity prefab (evergreen, rock1)' },
-      { name: 'action', type: 'string', description: 'Action (CHOP, MINE, HAMMER)' },
-      { name: 'loot', type: 'string', description: 'Loot item prefab (log, rocks, flint)' },
-      { name: 'count', type: 'number', description: 'Stack size of the drop' },
-    ],
-  },
-  player_harvest: {
-    description: 'Player harvested a plant',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'source', type: 'string', description: 'Harvested plant prefab (berrybush, farm_plant)' },
-    ],
-  },
-  player_startfire: {
-    description: 'Player started a fire',
-    fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'target', type: 'string', description: 'Target that caught fire' },
-    ],
-  },
+
+  // ── Health ───────────────────────────────────────────
   health_delta: {
     description: 'Player health changed',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'old', type: 'number', description: 'Old health percent (0-1)' },
+      ...playerFields,
+      { name: 'old', type: 'number', description: 'Previous health percent (0-1)' },
       { name: 'new', type: 'number', description: 'New health percent (0-1)' },
-      { name: 'amount', type: 'number', description: 'Change amount' },
+      { name: 'amount', type: 'number', description: 'Signed change amount' },
     ],
   },
   hunger_delta: {
     description: 'Player hunger changed',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'old', type: 'number', description: 'Old hunger percent (0-1)' },
+      ...playerFields,
+      { name: 'old', type: 'number', description: 'Previous hunger percent (0-1)' },
       { name: 'new', type: 'number', description: 'New hunger percent (0-1)' },
     ],
   },
   sanity_delta: {
     description: 'Player sanity changed',
     fields: [
-      { name: 'userid', type: 'string', description: 'Player user ID' },
-      { name: 'name', type: 'string', description: 'Player name' },
-      { name: 'old', type: 'number', description: 'Old sanity percent (0-1)' },
+      ...playerFields,
+      { name: 'old', type: 'number', description: 'Previous sanity percent (0-1)' },
       { name: 'new', type: 'number', description: 'New sanity percent (0-1)' },
     ],
+  },
+
+  // ── Gathering ────────────────────────────────────────
+  player_work: {
+    description: 'Player performed a work action on an entity',
+    fields: [
+      ...playerFields,
+      { name: 'target', type: 'string', description: 'Target entity prefab (evergreen, rock1, etc)' },
+      { name: 'action', type: 'string', description: 'Work action (CHOP/MINE/HAMMER/DIG)' },
+    ],
+  },
+  resource_gathered: {
+    description: 'Loot dropped from a destroyed entity',
+    fields: [
+      ...playerFields,
+      { name: 'source', type: 'string', description: 'Source entity prefab (evergreen, rock1)' },
+      { name: 'action', type: 'string', description: 'Work action (CHOP/MINE/HAMMER)' },
+      { name: 'loot', type: 'string', description: 'Loot item prefab (log, rocks, flint)' },
+      { name: 'count', type: 'number', description: 'Stack size of the loot drop' },
+    ],
+  },
+  player_harvest: {
+    description: 'Player harvested a plant',
+    fields: [
+      ...playerFields,
+      { name: 'source', type: 'string', description: 'Plant prefab (berrybush, farm_plant)' },
+    ],
+  },
+  player_startfire: {
+    description: 'Player started a fire on an entity',
+    fields: [
+      ...playerFields,
+      { name: 'target', type: 'string', description: 'Entity that caught fire' },
+    ],
+  },
+
+  // ── World ────────────────────────────────────────────
+  new_day: {
+    description: 'New day started in the world',
+    fields: [
+      { name: 'day', type: 'number', description: 'Current day count' },
+    ],
+  },
+  phase_changed: {
+    description: 'Day phase transitioned',
+    fields: [
+      { name: 'phase', type: 'string', description: 'New phase (day/dusk/night)' },
+    ],
+  },
+  season_changed: {
+    description: 'Season changed in the world',
+    fields: [
+      { name: 'season', type: 'string', description: 'New season (autumn/winter/spring/summer)' },
+    ],
+  },
+
+  // ── Weather ──────────────────────────────────────────
+  storm_changed: {
+    description: 'Storm started or ended',
+    fields: [
+      { name: 'stormtype', type: 'string', description: 'Storm type (sand/moonstorm/etc)' },
+      { name: 'setting', type: 'boolean', description: 'true=started, false=ended' },
+    ],
+  },
+  precipitation: {
+    description: 'Rain/snow started or stopped',
+    fields: [
+      { name: 'enabled', type: 'boolean', description: 'true=raining/snowing, false=stopped' },
+    ],
+  },
+  lightning_strike: {
+    description: 'Lightning struck a location',
+    fields: [
+      { name: 'x', type: 'number', description: 'X world coordinate' },
+      { name: 'z', type: 'number', description: 'Z world coordinate' },
+    ],
+  },
+
+  // ── Bosses ───────────────────────────────────────────
+  boss_event: {
+    description: 'Boss-related event occurred',
+    fields: [
+      { name: 'event', type: 'string', description: 'Event name' },
+      { name: 'data', type: 'object', description: 'Event-specific data' },
+    ],
+  },
+  boss_killed: {
+    description: 'A boss entity was killed',
+    fields: [
+      { name: 'prefab', type: 'string', description: 'Boss prefab name' },
+      { name: 'cause', type: 'string', description: 'Kill cause' },
+    ],
+  },
+  fire_started: {
+    description: 'An entity caught fire',
+    fields: [
+      { name: 'prefab', type: 'string', description: 'Burning entity prefab' },
+      { name: 'x', type: 'number', description: 'X world coordinate' },
+    ],
+  },
+
+  // ── Survival ─────────────────────────────────────────
+  player_eat: {
+    description: 'Player ate food',
+    fields: [
+      ...playerFields,
+      { name: 'food', type: 'string', description: 'Food item prefab' },
+      { name: 'health', type: 'number', description: 'Health restored' },
+      { name: 'hunger', type: 'number', description: 'Hunger restored' },
+      { name: 'sanity', type: 'number', description: 'Sanity restored' },
+    ],
+  },
+  player_insane: {
+    description: 'Player went insane (sanity below threshold)',
+    fields: [...playerFields],
+  },
+  player_sane: {
+    description: 'Player regained sanity (above threshold)',
+    fields: [...playerFields],
+  },
+  player_starving: {
+    description: 'Player started starving (hunger at 0)',
+    fields: [...playerFields],
+  },
+  player_fed: {
+    description: 'Player no longer starving',
+    fields: [...playerFields],
+  },
+  player_freezing: {
+    description: 'Player started freezing',
+    fields: [...playerFields],
+  },
+  player_warm: {
+    description: 'Player warmed up from freezing',
+    fields: [...playerFields],
+  },
+  player_overheating: {
+    description: 'Player started overheating',
+    fields: [...playerFields],
+  },
+  player_cooled: {
+    description: 'Player cooled down from overheating',
+    fields: [...playerFields],
+  },
+  player_mounted: {
+    description: 'Player mounted a beefalo',
+    fields: [...playerFields],
+  },
+  player_dismounted: {
+    description: 'Player dismounted a beefalo',
+    fields: [...playerFields],
   },
 }
 
@@ -229,36 +309,43 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
 
 export const nodeOutputSchemas: Record<string, NodeOutputSchema> = {
   condition: {
-    description: 'Condition result',
+    description: 'Condition evaluation result',
     fields: [
-      { name: 'result', type: 'boolean', description: 'Condition passed (true/false)' },
+      { name: 'result', type: 'boolean', description: 'Whether the condition passed' },
       { name: 'field', type: 'string', description: 'Evaluated field name' },
-      { name: 'value', type: 'any', description: 'Compared value' },
+      { name: 'value', type: 'string', description: 'Compared value' },
+    ],
+  },
+  delay: {
+    description: 'Delay timer result',
+    fields: [
+      { name: 'delayed', type: 'boolean', description: 'Whether the delay was applied' },
+      { name: 'ms', type: 'number', description: 'Delay duration in milliseconds' },
+    ],
+  },
+  action: {
+    description: 'Game action execution result',
+    fields: [
+      { name: 'executed', type: 'boolean', description: 'Whether the action was sent' },
+      { name: 'action', type: 'string', description: 'Action type name' },
     ],
   },
   http_request: {
-    description: 'HTTP response',
+    description: 'HTTP request response',
     fields: [
-      { name: 'status', type: 'number', description: 'HTTP status code (200, 404...)' },
-      { name: 'ok', type: 'boolean', description: 'Was response successful (2xx)' },
-      { name: 'body', type: 'object', description: 'Response body (parsed JSON or text)' },
+      { name: 'status', type: 'number', description: 'HTTP status code (200, 404, etc)' },
+      { name: 'ok', type: 'boolean', description: 'Response was successful (2xx)' },
+      { name: 'body', type: 'any', description: 'Response body (parsed JSON or text)' },
       { name: 'error', type: 'string', description: 'Error message if request failed' },
     ],
   },
   set_variable: {
-    description: 'Custom variables',
-    fields: [], // dynamic — defined by user
+    description: 'User-defined variables',
+    fields: [], // dynamic — defined by user key/value pairs
   },
   script: {
     description: 'Script return value',
-    fields: [], // dynamic — defined by user code
-  },
-  action: {
-    description: 'Game action result',
-    fields: [
-      { name: 'executed', type: 'boolean', description: 'Action was executed' },
-      { name: 'action', type: 'string', description: 'Action type name' },
-    ],
+    fields: [], // dynamic — whatever run() returns
   },
 }
 

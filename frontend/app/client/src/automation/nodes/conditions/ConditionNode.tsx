@@ -40,6 +40,12 @@ export function ConditionNode({ id, data, selected }: any) {
       icon="❓"
       label="Condição"
       selected={selected}
+      executionStatus={data._executionStatus}
+      executionOutput={data._executionOutput}
+      executionError={data._executionError}
+      hasCaptureData={data._hasCaptureData}
+      alias={data.alias}
+      onAliasChange={v => updateNodeData(id, { ...data, alias: v })}
       outputLabels={[
         { id: 'true', label: '✅ True' },
         { id: 'false', label: '❌ False' },

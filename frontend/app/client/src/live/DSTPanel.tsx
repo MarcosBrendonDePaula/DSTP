@@ -1,5 +1,6 @@
 // DSTPanel - DST Admin Panel usando Live Components
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveDSTP } from '@server/live/LiveDSTP'
 
@@ -754,7 +755,7 @@ export function DSTPanel() {
           {serverIds.length > 0 && (
             <div className="text-xs text-gray-600">
               {serverIds.map(id => (
-                <a key={id} href={`?server=${id}`} className="inline-block mx-1 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">{id}</a>
+                <Link key={id} to={`?server=${id}`} className="inline-block mx-1 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">{id}</Link>
               ))}
             </div>
           )}
@@ -806,9 +807,9 @@ export function DSTPanel() {
         }`}>{serverInfo.online ? '● Online' : '○ Offline'}</span>
         <span className="text-[10px] text-gray-600 tabular-nums">{serverInfo.player_count || 0} players</span>
         <div className="flex-1" />
-        <a href={`/automation?server=${selectedServer}`} className="text-[10px] px-3 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
+        <Link to={`/automation?server=${selectedServer}`} className="text-[10px] px-3 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
           ⚡ Automações
-        </a>
+        </Link>
         <span className={`text-[10px] ${dstp.$connected ? 'text-green-600' : 'text-red-600'}`}>
           {dstp.$connected ? '● WS' : '○ WS'}
         </span>

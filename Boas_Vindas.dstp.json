@@ -1,0 +1,43 @@
+{
+  "name": "Boas Vindas",
+  "version": "1.0",
+  "exportedAt": "2026-04-05T23:50:00.000Z",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "data": { "event_type": "player_spawn", "alias": "entrada" },
+      "position": { "x": 300, "y": 50 }
+    },
+    {
+      "id": "delay_1",
+      "type": "delay",
+      "data": { "delay_ms": "2000" },
+      "position": { "x": 300, "y": 190 }
+    },
+    {
+      "id": "action_1",
+      "type": "action",
+      "data": {
+        "action_type": "announce",
+        "alias": "msg",
+        "params": {
+          "message": "Bem-vindo ao servidor, {{trigger.name}}! Divirta-se!"
+        }
+      },
+      "position": { "x": 300, "y": 340 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1",
+      "source": "trigger_1",
+      "target": "delay_1"
+    },
+    {
+      "id": "edge_2",
+      "source": "delay_1",
+      "target": "action_1"
+    }
+  ]
+}

@@ -52,13 +52,15 @@ export function ContextHint({ currentNodeId, onInsert }: ContextHintProps) {
       const schema = nodeOutputSchemas[nodeType]
       if (!schema) continue
 
-      const label = (node.data as any)?.action_type || nodeType
+      const alias = (node.data as any)?.alias
+      const contextKey = alias || node.id
+      const label = alias || (node.data as any)?.action_type || nodeType
       for (const f of schema.fields) {
         vars.push({
-          path: `${node.id}.${f.name}`,
+          path: `${contextKey}.${f.name}`,
           type: f.type,
           description: f.description,
-          source: `${label}`,
+          source: alias ? `${label} (alias)` : label,
         })
       }
     }
@@ -86,8 +88,8 @@ export function ContextHint({ currentNodeId, onInsert }: ContextHintProps) {
               title={v.description}
             >
               <code className="text-purple-400 font-mono">{`{{${v.path}}}`}</code>
-              <span className="text-gray-600">{v.type}</span>
-              <span className="text-gray-700 ml-auto">{v.source}</span>
+              <span className="text-gray-500">{v.type}</span>
+              <span className="text-gray-500 ml-auto">{v.source}</span>
             </div>
           ))}
         </div>

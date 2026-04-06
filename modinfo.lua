@@ -119,6 +119,13 @@ configuration_options = {
         default = false,
     },
     {
+        name = "EVT_SURVIVAL",
+        label = "Events: Survival",
+        hover = "Track eating, sanity, starving, freezing, overheating, mounting.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
         name = "EVT_HEALTH",
         label = "Events: Health Ticks",
         hover = "Track health/hunger/sanity changes. VERY HEAVY - only enable for debugging.",

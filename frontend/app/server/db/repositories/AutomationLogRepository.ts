@@ -8,19 +8,27 @@ export class AutomationLogRepository {
   private get db() { return getDb(this.serverId) }
 
   findRecent(limit = 100): AutomationLog[] {
-    return this.db.select().from(automationLogs)
+    const rows = this.db.select().from(automationLogs)
       .orderBy(desc(automationLogs.id))
       .limit(limit)
       .all()
+
+    // Parse JSON fields that come back as strings
+    return rows.map(row => ({
+      ...row,
+      actions: typeof row.actions === 'string' ? JSON.parse(row.actions) : row.actions,
+      context: typeof row.context === 'string' ? JSON.parse(row.context) : row.context,
+    }))
   }
 
-  create(log: { flowId: string; flowName: string; eventType: string; actions: string[] }) {
+  create(log: { flowId: string; flowName: string; eventType: string; actions: string[]; context?: Record<string, any> }) {
     this.db.insert(automationLogs)
       .values({
         flowId: log.flowId,
         flowName: log.flowName,
         eventType: log.eventType,
         actions: log.actions,
+        context: log.context ? JSON.stringify(log.context) : null,
         timestamp: new Date(),
       })
       .run()

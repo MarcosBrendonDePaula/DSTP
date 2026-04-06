@@ -13,8 +13,23 @@ interface AutomationState {
 
 let _automationInstance: LiveAutomation | null = null
 
+// Ensure a usable instance always exists for event processing
+function _getOrCreateInstance(): LiveAutomation {
+  if (!_automationInstance) {
+    // Create a headless instance that works without Live Component clients
+    _automationInstance = Object.create(LiveAutomation.prototype) as LiveAutomation
+    ;(_automationInstance as any).state = LiveAutomation.defaultState
+    ;(_automationInstance as any).setState = function(delta: any) {
+      Object.assign(this.state, delta)
+    }
+    ;(_automationInstance as any)._captureServerId = null
+    ;(_automationInstance as any)._captureTrace = []
+  }
+  return _automationInstance
+}
+
 export function processAutomationEvent(server_id: string, event: any) {
-  _automationInstance?.evaluateEvent(server_id, event)
+  _getOrCreateInstance().evaluateEvent(server_id, event)
 }
 
 // ─── Component ───────────────────────────────────────
@@ -29,7 +44,15 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
+    'exportFlow',
+    'importFlow',
+    'startCapture',
+    'stopCapture',
   ] as const
+
+  // Capture mode — when active, execution traces are collected and emitted at the end
+  private _captureServerId: string | null = null
+  private _captureTrace: Array<{ nodeId: string; status: string; input: Record<string, any>; output: any; error?: string; timestamp: number }> = []
 
   static defaultState: AutomationState = {
     flows: [],
@@ -52,6 +75,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
+    console.log(`[DSTP Automation] syncState(${serverId}): ${flows.length} flows, ${logs.length} logs`)
     this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs } as any)
   }
 
@@ -93,13 +117,71 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
   async clearLogs(payload: { server_id: string }) {
     this.logRepo(payload.server_id).clear()
-    this.setState({ logs: [] })
+    this.setState({ [`logs:${payload.server_id}`]: [] } as any)
     return { success: true }
   }
 
   async getEventSchemas(payload: { server_id: string }) {
     const repo = new EventSchemaRepository(payload.server_id)
     return { schemas: repo.findAll() }
+  }
+
+  async exportFlow(payload: { flow_id: string; server_id: string }) {
+    const flow = this.flowRepo(payload.server_id).findById(payload.flow_id)
+    if (!flow) throw new Error('Flow not found')
+
+    return {
+      name: flow.name,
+      nodes: flow.nodes,
+      edges: flow.edges,
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+    }
+  }
+
+  async importFlow(payload: { flow_json: any; server_id: string }) {
+    const { flow_json, server_id } = payload
+
+    if (!flow_json?.name || !Array.isArray(flow_json.nodes) || !Array.isArray(flow_json.edges)) {
+      throw new Error('Invalid flow: must have name, nodes, and edges')
+    }
+
+    const newFlowId = `flow_${Date.now()}`
+
+    // Build a map from old node IDs to new node IDs
+    const idMap = new Map<string, string>()
+    for (const node of flow_json.nodes as FlowNode[]) {
+      idMap.set(node.id, `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`)
+    }
+
+    const newNodes: FlowNode[] = (flow_json.nodes as FlowNode[]).map(node => ({
+      ...node,
+      id: idMap.get(node.id)!,
+    }))
+
+    const newEdges: FlowEdge[] = (flow_json.edges as FlowEdge[]).map(edge => ({
+      ...edge,
+      id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      source: idMap.get(edge.source) ?? edge.source,
+      target: idMap.get(edge.target) ?? edge.target,
+    }))
+
+    this.flowRepo(server_id).save({
+      id: newFlowId,
+      name: flow_json.name,
+      enabled: false,
+      nodes: newNodes,
+      edges: newEdges,
+    })
+
+    this.syncState(server_id)
+
+    return {
+      flow_id: newFlowId,
+      name: flow_json.name,
+      nodes: newNodes,
+      edges: newEdges,
+    }
   }
 
   // ─── Event Evaluation ──────────────────────────────
@@ -117,6 +199,32 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     }
   }
 
+  // ─── Capture Mode ──────────────────────────────────
+
+  async startCapture(payload: { server_id: string }) {
+    this._captureServerId = payload.server_id
+    this._captureTrace = []
+    this.setState({ [`capture:${payload.server_id}`]: { active: true } } as any)
+  }
+
+  async stopCapture(payload: { server_id: string }) {
+    this._captureServerId = null
+    this._captureTrace = []
+    this.setState({ [`capture:${payload.server_id}`]: null } as any)
+  }
+
+  private pushTrace(serverId: string, nodeId: string, status: string, input: Record<string, any>, output: any, error?: string) {
+    if (this._captureServerId !== serverId) return
+    this._captureTrace.push({
+      nodeId,
+      status,
+      input: { ...input },
+      output,
+      error,
+      timestamp: Date.now(),
+    })
+  }
+
   // ─── Flow Execution with Context ────────────────────
   // Each node registers its output in context[node_id]
   // Downstream nodes can reference via {{node_id.field}}
@@ -128,49 +236,91 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     const executedActions: string[] = []
 
     // Execution context — each node registers output here
+    // Also register aliases so {{myAlias.field}} works alongside {{node_id.field}}
     const context: Record<string, any> = {
       trigger: { ...event.data, _event_type: event.type, _timestamp: Date.now() },
     }
 
-    const processNode = async (node: FlowNode) => {
-      if (node.type === 'condition') {
-        const result = this.evaluateCondition(node, context)
-        context[node.id] = { result, field: node.data.field, value: node.data.value }
+    // Build alias map: alias -> node_id (from node.data.alias)
+    const aliasMap = new Map<string, string>()
+    for (const n of nodes) {
+      if (n.data.alias && typeof n.data.alias === 'string') {
+        aliasMap.set(n.data.alias, n.id)
+      }
+    }
 
-        // Traverse the condition's OWN outgoing edges, checking their sourceHandle
-        const conditionOutEdges = edges.filter(e => e.source === node.id)
-        for (const condEdge of conditionOutEdges) {
-          const shouldFollow = condEdge.sourceHandle === 'true' ? result
-            : condEdge.sourceHandle === 'false' ? !result
-            : result
-          if (shouldFollow) {
-            const nextNode = nodes.find(n => n.id === condEdge.target)
+    // Helper: register node output in context by both id and alias
+    const setContext = (nodeId: string, value: any) => {
+      context[nodeId] = value
+      const node = nodes.find(n => n.id === nodeId)
+      if (node?.data.alias) {
+        context[node.data.alias] = value
+      }
+    }
+
+    // Record trigger in trace (if capturing)
+    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger)
+
+    const processNode = async (node: FlowNode) => {
+      const inputSnapshot = { ...context }
+
+      try {
+        if (node.type === 'condition') {
+          const result = this.evaluateCondition(node, context)
+          setContext(node.id, { result, field: node.data.field, value: node.data.value })
+          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+          // Traverse the condition's OWN outgoing edges, checking their sourceHandle
+          const conditionOutEdges = edges.filter(e => e.source === node.id)
+          for (const condEdge of conditionOutEdges) {
+            const shouldFollow = condEdge.sourceHandle === 'true' ? result
+              : condEdge.sourceHandle === 'false' ? !result
+              : result
+            if (shouldFollow) {
+              const nextNode = nodes.find(n => n.id === condEdge.target)
+              if (nextNode) await processNode(nextNode)
+            }
+          }
+
+        } else if (node.type === 'delay') {
+          const ms = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
+          setContext(node.id, { delayed: true, ms })
+          await new Promise(resolve => setTimeout(resolve, ms))
+          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+          const outEdges = edges.filter(e => e.source === node.id)
+          for (const edge of outEdges) {
+            const nextNode = nodes.find(n => n.id === edge.target)
+            if (nextNode) await processNode(nextNode)
+          }
+
+        } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
+          const actionType = node.data.action_type || node.type
+
+          if (actionType === 'http_request') {
+            setContext(node.id, await this.executeHttpRequest(node, context))
+          } else if (actionType === 'set_variable') {
+            setContext(node.id, this.executeSetVariable(node, context))
+          } else if (actionType === 'script') {
+            setContext(node.id, await this.executeScript(node, context))
+          } else {
+            this.runFlowAction(serverId, node, context)
+            setContext(node.id, { executed: true, action: actionType })
+          }
+
+          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+          executedActions.push(actionType)
+
+          // Continue traversing this node's outgoing edges
+          const outEdges = edges.filter(e => e.source === node.id)
+          for (const edge of outEdges) {
+            const nextNode = nodes.find(n => n.id === edge.target)
             if (nextNode) await processNode(nextNode)
           }
         }
-
-      } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
-        const actionType = node.data.action_type || node.type
-
-        if (actionType === 'http_request') {
-          context[node.id] = await this.executeHttpRequest(node, context)
-        } else if (actionType === 'set_variable') {
-          context[node.id] = this.executeSetVariable(node, context)
-        } else if (actionType === 'script') {
-          context[node.id] = await this.executeScript(node, context)
-        } else {
-          this.runFlowAction(serverId, node, context)
-          context[node.id] = { executed: true, action: actionType }
-        }
-
-        executedActions.push(actionType)
-
-        // Continue traversing this node's outgoing edges
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) await processNode(nextNode)
-        }
+      } catch (nodeErr: any) {
+        this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message)
+        throw nodeErr
       }
     }
 
@@ -190,6 +340,18 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       console.error(`[DSTP Automation] Flow "${flow.name}" error:`, err)
     }
 
+    // If capturing, emit the complete trace and stop capture
+    if (this._captureServerId === serverId) {
+      this.setState({ [`capture:${serverId}`]: {
+        active: false,
+        flowId: flow.id,
+        trace: this._captureTrace,
+        context,
+      }} as any)
+      this._captureServerId = null
+      this._captureTrace = []
+    }
+
     // Always log and update stats
     this.flowRepo(serverId).updateStats(flow.id, (flow.triggerCount || 0) + 1)
 
@@ -198,6 +360,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       flowName: flow.name,
       eventType: event.type,
       actions: executedActions,
+      context,
     })
 
     this.syncState(serverId)
@@ -380,9 +543,14 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       new_day: 'world', phase_changed: 'world', season_changed: 'world',
       player_kill: 'combat', player_attacked: 'combat',
       player_craft: 'crafting', player_build: 'crafting',
-      player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory',
-      storm_changed: 'weather', precipitation: 'weather',
-      boss_event: 'bosses', boss_killed: 'bosses',
+      player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory', player_unequip: 'inventory',
+      storm_changed: 'weather', precipitation: 'weather', lightning_strike: 'weather',
+      boss_event: 'bosses', boss_killed: 'bosses', fire_started: 'bosses',
+      player_eat: 'survival', player_insane: 'survival', player_sane: 'survival',
+      player_starving: 'survival', player_fed: 'survival',
+      player_freezing: 'survival', player_cooled: 'survival',
+      player_overheating: 'survival', player_warm: 'survival',
+      player_mounted: 'survival', player_dismounted: 'survival',
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
     }

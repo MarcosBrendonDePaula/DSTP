@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveAutomation } from '@server/live/LiveAutomation'
+import { LiveDSTP } from '@server/live/LiveDSTP'
 import { FlowEditor } from './FlowEditor'
 import type { Node, Edge } from '@xyflow/react'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
+  const dstp = Live.use(LiveDSTP)
 
   const urlServer = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
@@ -18,15 +21,41 @@ export function AutomationPage() {
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
   const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
 
-  const flows = auto.$state.flows || []
-  const logs = auto.$state.logs || []
+  const flows = (auto.$state as any)[`flows:${urlServer}`] || []
+  const logs = (auto.$state as any)[`logs:${urlServer}`] || []
+  const captureData = (auto.$state as any)[`capture:${urlServer}`] || null
 
-  // Load flows from DB on mount
-  useEffect(() => {
-    if (urlServer && auto.$connected) {
-      auto.loadFlows({ server_id: urlServer })
+  // Extract the latest log context for the currently editing flow
+  const latestExecutionContext = useMemo(() => {
+    // If capture just completed for this flow, use its context
+    if (captureData && !captureData.active && captureData.flowId === editingFlow && captureData.context) {
+      return captureData.context
     }
-  }, [urlServer, auto.$connected])
+    if (!editingFlow || logs.length === 0) return null
+    const flowLogs = logs.filter((l: any) => l.flow_id === editingFlow || l.flowId === editingFlow)
+    if (flowLogs.length === 0) return null
+    const latest = flowLogs[flowLogs.length - 1]
+    return latest?.context || null
+  }, [editingFlow, logs, captureData])
+
+  // Load flows from DB on mount — retry until connected
+  useEffect(() => {
+    if (!urlServer) return
+    const tryLoad = () => {
+      if (auto.$connected) {
+        auto.loadFlows({ server_id: urlServer })
+        return true
+      }
+      return false
+    }
+    if (tryLoad()) return
+    // Retry every 500ms until connected (max 10s)
+    let attempts = 0
+    const interval = setInterval(() => {
+      if (tryLoad() || ++attempts > 20) clearInterval(interval)
+    }, 500)
+    return () => clearInterval(interval)
+  }, [urlServer])
 
   const createNewFlow = () => {
     const id = `flow_${Date.now()}`
@@ -45,7 +74,7 @@ export function AutomationPage() {
     setOriginalCreatedAt(flow.created_at || null)
   }
 
-  const saveFlow = async (nodes: Node[], edges: Edge[]) => {
+  const saveFlow = async (nodes: Node[], edges: Edge[], closeAfter = false) => {
     if (!editingFlow || !urlServer) return
     await auto.saveFlow({
       flow: {
@@ -59,7 +88,7 @@ export function AutomationPage() {
         trigger_count: 0,
       }
     })
-    setEditingFlow(null)
+    if (closeAfter) setEditingFlow(null)
   }
 
   const deleteFlow = async (id: string) => {
@@ -68,6 +97,58 @@ export function AutomationPage() {
 
   const toggleFlow = async (id: string, enabled: boolean) => {
     await auto.toggleFlow({ flow_id: id, server_id: urlServer, enabled })
+  }
+
+  const exportFlow = (flow: any) => {
+    const exportData = {
+      name: flow.name,
+      nodes: flow.nodes || [],
+      edges: flow.edges || [],
+      exported_at: Date.now(),
+      version: 1,
+    }
+    const json = JSON.stringify(exportData, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(flow.name || 'flow').replace(/[^a-zA-Z0-9_-]/g, '_')}.dstp.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const importFlow = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const parsed = JSON.parse(e.target?.result as string)
+        if (!parsed.nodes || !parsed.edges) {
+          alert('Arquivo inválido: faltam nodes ou edges.')
+          return
+        }
+        const id = `flow_${Date.now()}`
+        await auto.saveFlow({
+          flow: {
+            id,
+            name: parsed.name || 'Fluxo Importado',
+            enabled: false,
+            server_id: urlServer,
+            nodes: parsed.nodes,
+            edges: parsed.edges,
+            created_at: Date.now(),
+            trigger_count: 0,
+          }
+        })
+        await auto.loadFlows({ server_id: urlServer })
+      } catch (err: any) {
+        alert(`Erro ao importar: ${err.message}`)
+      }
+    }
+    reader.readAsText(file)
   }
 
   // Editor mode
@@ -89,6 +170,10 @@ export function AutomationPage() {
             onSave={saveFlow}
             flowName={flowName}
             onNameChange={setFlowName}
+            executionContext={latestExecutionContext}
+            captureData={editingFlow ? (captureData?.flowId === editingFlow ? captureData : captureData?.active ? captureData : null) : null}
+            onStartCapture={() => auto.startCapture({ server_id: urlServer })}
+            onStopCapture={() => auto.stopCapture({ server_id: urlServer })}
           />
         </div>
       </div>
@@ -100,7 +185,7 @@ export function AutomationPage() {
     <div className="min-h-screen bg-[#0a0a0a] p-4">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/5">
-        <a href={`/?server=${urlServer}`} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">← Painel</a>
+        <Link to={`/?server=${urlServer}`} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">← Painel</Link>
         <div className="h-4 w-px bg-white/10" />
         <h1 className="text-lg font-bold text-white">⚡ Automações</h1>
         <span className="text-[10px] text-gray-600">{urlServer}</span>
@@ -108,6 +193,26 @@ export function AutomationPage() {
           {auto.$connected ? '● Connected' : '○ Offline'}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => auto.loadFlows({ server_id: urlServer })}
+          className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition-colors"
+          title="Recarregar"
+        >↻</button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
+        >↑ Importar</button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.dstp.json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) importFlow(file)
+            e.target.value = ''
+          }}
+        />
         <button
           onClick={createNewFlow}
           className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
@@ -158,6 +263,10 @@ export function AutomationPage() {
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
                     >✏️ Editar</button>
                     <button
+                      onClick={() => exportFlow(flow)}
+                      className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
+                    >↗ Exportar</button>
+                    <button
                       onClick={() => deleteFlow(flow.id)}
                       className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors"
                     >🗑</button>
@@ -182,14 +291,43 @@ export function AutomationPage() {
           <div className="space-y-0.5">
             {[...logs].reverse().map((log: any, i: number) => (
               <div key={i} className="py-1.5 px-2 rounded-md hover:bg-white/[0.02] text-[10px]">
-                <span className="text-gray-700 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                <span className="text-gray-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
                 <span className="text-blue-400 font-semibold ml-1.5">{log.flow_name}</span>
                 <div className="text-gray-500 mt-0.5">
                   ⚡ {log.event_type} → {log.actions.join(', ') || 'nenhuma ação'}
                 </div>
               </div>
             ))}
-            {logs.length === 0 && <p className="text-gray-700 text-xs text-center py-4">Sem logs</p>}
+            {logs.length === 0 && <p className="text-gray-500 text-xs text-center py-4">Sem logs</p>}
+          </div>
+
+          {/* Recent Events */}
+          <div className="mt-3 pt-3 border-t border-white/5">
+            <h3 className="text-xs font-semibold text-white flex items-center gap-2 mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              Eventos Recentes
+            </h3>
+            <div className="space-y-0.5">
+              {(() => {
+                const events = (dstp.$state as any)?.events || []
+                const recent = [...events].reverse().slice(0, 30)
+                if (recent.length === 0) return <p className="text-gray-500 text-xs text-center py-2">Sem eventos</p>
+                return recent.map((evt: any, i: number) => (
+                  <div key={i} className="py-1 px-2 rounded-md hover:bg-white/[0.02] text-[10px] group cursor-pointer" onClick={() => {
+                    const el = document.getElementById(`evt-detail-${i}`)
+                    if (el) el.classList.toggle('hidden')
+                  }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-500 font-mono">{new Date(evt.received_at || evt.timestamp).toLocaleTimeString()}</span>
+                      <span className="text-amber-400 font-semibold">{evt.type}</span>
+                    </div>
+                    <div id={`evt-detail-${i}`} className="hidden mt-1 p-1.5 rounded bg-black/30 text-[9px] font-mono text-gray-400 whitespace-pre-wrap break-all">
+                      {JSON.stringify(evt.data || evt, null, 2)}
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
           </div>
         </div>
       </div>

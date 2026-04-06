@@ -26,7 +26,7 @@ export function SetVariableNode({ id, data, selected }: any) {
   }
 
   return (
-    <BaseNode type="action" icon="📝" label="Set Variable" selected={selected}>
+    <BaseNode type="action" icon="📝" label="Set Variable" selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       {Object.entries(params).map(([key, val]) => (
         <div key={key} className="flex gap-1 items-center">
           <span className="text-[9px] text-purple-400 min-w-[40px]">{key}</span>
@@ -52,7 +52,7 @@ export function SetVariableNode({ id, data, selected }: any) {
           className="text-[9px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 shrink-0"
         >+ Add</button>
       </div>
-      <div className="text-[8px] text-gray-600 mt-1">
+      <div className="text-[8px] text-gray-500 mt-1">
         Output: <code className="text-purple-400">{'{{'}node_id.nome_var{'}}'}</code>
       </div>
     </BaseNode>

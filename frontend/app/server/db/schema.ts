@@ -23,6 +23,7 @@ export const automationLogs = sqliteTable('automation_logs', {
   flowName: text('flow_name').notNull(),
   eventType: text('event_type').notNull(),
   actions: text('actions', { mode: 'json' }).notNull().$type<string[]>().default([]),
+  context: text('context'),
   timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull(),
 })
 
@@ -61,7 +62,7 @@ export type EventSchema = typeof eventSchemas.$inferSelect
 
 export interface FlowNode {
   id: string
-  type: 'trigger' | 'condition' | 'action' | 'http_request' | 'set_variable' | 'script'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'http_request' | 'set_variable' | 'script'
   data: Record<string, any>
   position: { x: number; y: number }
 }

@@ -126,7 +126,7 @@ export function ScriptNode({ id, data, selected }: any) {
   const editorHeight = expanded ? 400 : 150
 
   return (
-    <BaseNode type="action" icon="🧩" label="Script" selected={selected}>
+    <BaseNode type="action" icon="🧩" label="Script" selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-[9px] text-gray-500">TypeScript</span>
         <button
@@ -178,7 +178,7 @@ export function ScriptNode({ id, data, selected }: any) {
           }}
         />
       </div>
-      <div className="text-[8px] text-gray-600 mt-1 space-y-0.5">
+      <div className="text-[8px] text-gray-500 mt-1 space-y-0.5">
         <div>Return value = node output: <code className="text-purple-400">{'{{'}node_id.campo{'}}'}</code></div>
         <div>Async/await suportado. Acessa <code className="text-blue-400">fetch()</code> normalmente.</div>
       </div>

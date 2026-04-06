@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import {
   ReactFlow,
   Background,
@@ -11,30 +11,156 @@ import {
   type Node,
   type Edge,
   BackgroundVariant,
+  type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { nodeTypes } from './nodes'
+import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
+
+export interface CaptureData {
+  active: boolean
+  flowId?: string
+  trace?: CaptureTraceEntry[]
+  context?: Record<string, any>
+}
 
 interface FlowEditorProps {
   initialNodes?: Node[]
   initialEdges?: Edge[]
-  onSave: (nodes: Node[], edges: Edge[]) => void
+  onSave: (nodes: Node[], edges: Edge[], closeAfter?: boolean) => void
   flowName: string
   onNameChange: (name: string) => void
+  executionContext?: Record<string, any> | null
+  captureData?: CaptureData | null
+  onStartCapture?: () => void
+  onStopCapture?: () => void
 }
 
 let nodeIdCounter = 0
 const genId = () => `node_${Date.now()}_${nodeIdCounter++}`
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
+
+  // Undo/Redo history
+  const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([{ nodes: initialNodes, edges: initialEdges }])
+  const historyIndexRef = useRef(0)
+  const isUndoRedoRef = useRef(false)
+
+  // Snapshot current state to history (debounced to avoid noise from drag operations)
+  const snapshotTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (isUndoRedoRef.current) { isUndoRedoRef.current = false; return }
+    if (snapshotTimer.current) clearTimeout(snapshotTimer.current)
+    snapshotTimer.current = setTimeout(() => {
+      const h = historyRef.current
+      const idx = historyIndexRef.current
+      // Trim future states if we made changes after undo
+      historyRef.current = h.slice(0, idx + 1)
+      historyRef.current.push({ nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) })
+      if (historyRef.current.length > 50) historyRef.current.shift()
+      historyIndexRef.current = historyRef.current.length - 1
+    }, 500)
+  }, [nodes, edges])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        const idx = historyIndexRef.current
+        if (idx > 0) {
+          historyIndexRef.current = idx - 1
+          const state = historyRef.current[idx - 1]
+          isUndoRedoRef.current = true
+          setNodes(state.nodes)
+          setEdges(state.edges)
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        const idx = historyIndexRef.current
+        if (idx < historyRef.current.length - 1) {
+          historyIndexRef.current = idx + 1
+          const state = historyRef.current[idx + 1]
+          isUndoRedoRef.current = true
+          setNodes(state.nodes)
+          setEdges(state.edges)
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [setNodes, setEdges])
+
+  // Build node statuses from capture trace
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, { status: string; output?: any; error?: string }>>({})
+
+  useEffect(() => {
+    if (!captureData) {
+      setNodeStatuses({})
+      return
+    }
+    if (captureData.active) {
+      setNodeStatuses({})
+      return
+    }
+    if (captureData.trace) {
+      const statuses: Record<string, { status: string; output?: any; error?: string }> = {}
+      for (const entry of captureData.trace) {
+        statuses[entry.nodeId] = {
+          status: entry.status,
+          output: entry.output,
+          error: entry.error,
+        }
+      }
+      setNodeStatuses(statuses)
+    }
+  }, [captureData])
+
+  const detailNode = useMemo(() => {
+    if (!detailNodeId) return null
+    return nodes.find(n => n.id === detailNodeId) || null
+  }, [nodes, detailNodeId])
+
+  // Inject execution status + capture indicator into node data
+  const nodesWithExecution = useMemo(() => {
+    const traceNodeIds = new Set((captureData?.trace || []).map(t => t.nodeId))
+    const hasStatuses = Object.keys(nodeStatuses).length > 0
+    const hasTrace = traceNodeIds.size > 0
+
+    if (!hasStatuses && !hasTrace) return nodes
+
+    return nodes.map(node => {
+      const execStatus = nodeStatuses[node.id]
+      const hasCaptureData = traceNodeIds.has(node.id)
+      if (!execStatus && !hasCaptureData) return node
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          ...(execStatus ? { _executionStatus: execStatus.status, _executionOutput: execStatus.output, _executionError: execStatus.error } : {}),
+          ...(hasCaptureData ? { _hasCaptureData: true } : {}),
+        },
+      }
+    })
+  }, [nodes, nodeStatuses, captureData?.trace])
+
+  // Double-click opens the detail modal
+  const onNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
+    setDetailNodeId(node.id)
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    // Pane click deselects nodes (default React Flow behavior) but does not close modal
+  }, [])
 
   const onConnect = useCallback((params: Connection) => {
     setEdges(eds => addEdge({
       ...params,
       id: `edge_${Date.now()}`,
-      style: { stroke: '#444', strokeWidth: 2 },
+      style: { stroke: '#555', strokeWidth: 2 },
       animated: true,
     }, eds))
   }, [setEdges])
@@ -44,6 +170,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       trigger: {},
       condition: {},
       action: { action_type: '', params: {} },
+      delay: { delay_ms: '3000' },
       http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
       set_variable: { action_type: 'set_variable', params: {} },
       script: { action_type: 'script', params: { code: '' } },
@@ -57,7 +184,22 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     setNodes(nds => [...nds, newNode])
   }, [nodes.length, setNodes])
 
-  const handleSave = () => onSave(nodes, edges)
+  const handleSave = () => onSave(nodes, edges, true)
+
+  // Auto-save: salva imediatamente ao mudar algo
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saved'>('idle')
+  const initializedRef = useRef(false)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    // Skip first render (initial load)
+    if (!initializedRef.current) { initializedRef.current = true; return }
+
+    onSave(nodes, edges)
+    setAutoSaveStatus('saved')
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = setTimeout(() => setAutoSaveStatus('idle'), 1500)
+  }, [nodes, edges, flowName])
 
   return (
     <div className="flex flex-col h-full">
@@ -85,30 +227,48 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         <button onClick={() => addNode('set_variable')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/20 hover:bg-purple-500/25 transition-colors">
           📝 Variable
         </button>
+        <button onClick={() => addNode('delay')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/15 text-gray-400 border border-gray-500/20 hover:bg-gray-500/25 transition-colors">
+          ⏱ Delay
+        </button>
         <button onClick={() => addNode('script')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors">
           🧩 Script
         </button>
         <div className="flex-1" />
+        {captureData?.active ? (
+          <button onClick={onStopCapture} className="text-[10px] px-4 py-1.5 rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 font-medium transition-colors flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+            Parar Captura
+          </button>
+        ) : (
+          <button onClick={onStartCapture} className="text-[10px] px-4 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 font-medium transition-colors">
+            Iniciar Captura
+          </button>
+        )}
         <button onClick={handleSave} className="text-[10px] px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors">
-          💾 Salvar
+          Salvar
         </button>
+        <span className={`text-[9px] text-green-400 transition-opacity ${autoSaveStatus === 'saved' ? 'opacity-100' : 'opacity-0'}`}>
+          ✓ Salvo
+        </span>
       </div>
 
-      {/* Flow Canvas */}
+      {/* Flow Canvas (full width, no side panel) */}
       <div className="flex-1">
         <ReactFlow
-          nodes={nodes}
+          nodes={nodesWithExecution}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
-          defaultEdgeOptions={{ style: { stroke: '#333', strokeWidth: 2 }, animated: true }}
+          defaultEdgeOptions={{ style: { stroke: '#555', strokeWidth: 2 }, animated: true }}
           style={{ background: '#0a0a0a' }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1a1a1a" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#252525" />
           <Controls
             showInteractive={false}
             className="!bg-[#111] !border-white/10 !rounded-lg !shadow-none [&>button]:!bg-transparent [&>button]:!border-white/5 [&>button]:!text-gray-400 [&>button:hover]:!bg-white/5"
@@ -127,6 +287,18 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           />
         </ReactFlow>
       </div>
+
+      {/* Node Detail Modal (overlay) */}
+      {detailNode && (
+        <NodeDetailPanel
+          node={detailNode}
+          onClose={() => setDetailNodeId(null)}
+          captureTrace={captureData?.trace || null}
+          captureContext={captureData?.context || executionContext || null}
+          allNodes={nodes}
+          allEdges={edges.map(e => ({ source: e.source, target: e.target }))}
+        />
+      )}
     </div>
   )
 }
