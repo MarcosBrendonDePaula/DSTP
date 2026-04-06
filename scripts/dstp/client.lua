@@ -280,15 +280,15 @@ local function SafeDump(obj, depth, seen)
     local result = {}
     local count = 0
     for k, v in pairs(obj) do
-        if count >= 20 then result["..."] = "truncated"; break end
         local key = type(k) == "string" and k or tostring(k)
         -- Skip internal/heavy fields
         if key ~= "entity" and key ~= "Transform" and key ~= "AnimState" and key ~= "Physics"
            and key ~= "SoundEmitter" and key ~= "Network" and key ~= "Light" and key ~= "DynamicShadow"
            and not key:match("^_") then
+            if count >= 20 then result["..."] = "truncated"; break end
             result[key] = SafeDump(v, (depth or 0) + 1, seen)
+            count = count + 1
         end
-        count = count + 1
     end
 
     -- Add useful entity info if available
@@ -776,6 +776,9 @@ RegisterPerPlayerEvents = function(player)
                 userid = uid, name = pname,
                 attacker = data and data.attacker and data.attacker.prefab or "unknown",
                 damage = data and data.damage or 0,
+                damage_resolved = data and data.damageresolved or 0,
+                weapon = data and data.weapon and data.weapon.prefab or nil,
+                stimuli = data and data.stimuli or nil,
             }, data)
         end)
     end
@@ -793,6 +796,7 @@ RegisterPerPlayerEvents = function(player)
             DSTP.PushEvent("player_build", {
                 userid = uid, name = pname,
                 item = data and data.item and data.item.prefab or "unknown",
+                recipe = data and data.recipe and data.recipe.name or "unknown",
             }, data)
         end)
     end
@@ -819,6 +823,14 @@ RegisterPerPlayerEvents = function(player)
                 item = data and data.item and data.item.prefab or "unknown",
             }, data)
         end)
+
+        player:ListenForEvent("unequip", function(inst, data)
+            DSTP.PushEvent("player_unequip", {
+                userid = uid, name = pname,
+                item = data and data.item and data.item.prefab or "unknown",
+                slot = data and data.eslot or "unknown",
+            }, data)
+        end)
     end
 
     if evt_config.health then
@@ -828,6 +840,8 @@ RegisterPerPlayerEvents = function(player)
                 old = data and data.oldpercent or 0,
                 new = data and data.newpercent or 0,
                 amount = data and data.amount or 0,
+                cause = data and (type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab)) or nil,
+                afflicter = data and data.afflicter and data.afflicter.prefab or nil,
             }, data)
         end)
 
@@ -836,6 +850,7 @@ RegisterPerPlayerEvents = function(player)
                 userid = uid, name = pname,
                 old = data and data.oldpercent or 0,
                 new = data and data.newpercent or 0,
+                amount = data and data.amount or 0,
             }, data)
         end)
 
@@ -844,6 +859,7 @@ RegisterPerPlayerEvents = function(player)
                 userid = uid, name = pname,
                 old = data and data.oldpercent or 0,
                 new = data and data.newpercent or 0,
+                amount = data and data.amount or 0,
             }, data)
         end)
     end
@@ -899,14 +915,6 @@ RegisterPerPlayerEvents = function(player)
 
         player:ListenForEvent("dismounted", function(inst)
             DSTP.PushEvent("player_dismounted", { userid = uid, name = pname }, inst)
-        end)
-
-        player:ListenForEvent("unequip", function(inst, data)
-            DSTP.PushEvent("player_unequip", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-                slot = data and data.eslot or "unknown",
-            }, data)
         end)
     end
 
@@ -989,7 +997,7 @@ RegisterPlayerEvents = function(inst)
             DSTP.PushEvent("player_death", {
                 userid = data.inst.userid,
                 name = data.inst.name,
-                cause = data.cause or "unknown",
+                cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
             }, data)
         end
     end)
@@ -1036,8 +1044,6 @@ end
 RegisterBossEvents = function(inst)
     local boss_events = {
         "ms_moonboss_was_defeated",
-        "beargerkilled",
-        "hasslerkilled",
         "ms_lordfruitflykilled",
     }
     for _, evt in ipairs(boss_events) do
@@ -1061,7 +1067,7 @@ RegisterBossEvents = function(inst)
             if notable[prefab] then
                 DSTP.PushEvent("boss_killed", {
                     prefab = prefab,
-                    cause = data.cause or "unknown",
+                    cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
                 }, data)
             end
         end
@@ -1069,11 +1075,18 @@ RegisterBossEvents = function(inst)
 
     -- Fire detection (griefing)
     inst:ListenForEvent("ms_registerfire", function(world, data)
-        local fire = data and data.fire
-        DSTP.PushEvent("fire_started", {
-            prefab = fire and fire.prefab or "unknown",
-            x = fire and fire.Transform and math.floor(fire.Transform:GetWorldPosition()) or 0,
-        }, data)
+        local fire = data
+        if fire then
+            local x, _, z = 0, 0, 0
+            if fire.Transform then
+                x, _, z = fire.Transform:GetWorldPosition()
+            end
+            DSTP.PushEvent("fire_started", {
+                prefab = fire.prefab or "unknown",
+                x = math.floor(x),
+                z = math.floor(z),
+            }, fire)
+        end
     end)
 end
 
@@ -1196,10 +1209,11 @@ HotToggleEvents = function(requested)
                 elseif category == "chat" and config.shard_type == "master" then
                     HookChat()
                 elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" or category == "gathering" or category == "survival" then
-                    -- Re-hook per-player events for all current players
-                    hooked_players = {}
+                    -- Hook per-player events for players not yet hooked (avoid duplicate listeners)
                     for _, player in ipairs(_G.AllPlayers) do
-                        RegisterPerPlayerEvents(player)
+                        if not hooked_players[player.userid] and player.userid and player.userid ~= "" then
+                            RegisterPerPlayerEvents(player)
+                        end
                     end
                 end
             end

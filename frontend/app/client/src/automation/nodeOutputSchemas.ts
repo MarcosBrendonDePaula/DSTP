@@ -74,6 +74,9 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       ...playerFields,
       { name: 'attacker', type: 'string', description: 'Attacker entity prefab' },
       { name: 'damage', type: 'number', description: 'Raw damage amount' },
+      { name: 'damage_resolved', type: 'number', description: 'Damage after armor' },
+      { name: 'weapon', type: 'string', description: 'Weapon prefab used' },
+      { name: 'stimuli', type: 'string', description: 'Damage type: electric/fire/etc' },
     ],
   },
 
@@ -91,6 +94,7 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
     fields: [
       ...playerFields,
       { name: 'item', type: 'string', description: 'Structure prefab' },
+      { name: 'recipe', type: 'string', description: 'Recipe name' },
     ],
   },
 
@@ -134,6 +138,8 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'old', type: 'number', description: 'Previous health percent (0-1)' },
       { name: 'new', type: 'number', description: 'New health percent (0-1)' },
       { name: 'amount', type: 'number', description: 'Signed change amount' },
+      { name: 'cause', type: 'string', description: 'Cause of damage' },
+      { name: 'afflicter', type: 'string', description: 'Entity that caused it' },
     ],
   },
   hunger_delta: {
@@ -142,6 +148,7 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       ...playerFields,
       { name: 'old', type: 'number', description: 'Previous hunger percent (0-1)' },
       { name: 'new', type: 'number', description: 'New hunger percent (0-1)' },
+      { name: 'amount', type: 'number', description: 'Signed change amount' },
     ],
   },
   sanity_delta: {
@@ -150,6 +157,7 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       ...playerFields,
       { name: 'old', type: 'number', description: 'Previous sanity percent (0-1)' },
       { name: 'new', type: 'number', description: 'New sanity percent (0-1)' },
+      { name: 'amount', type: 'number', description: 'Signed change amount' },
     ],
   },
 
@@ -249,6 +257,7 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
     fields: [
       { name: 'prefab', type: 'string', description: 'Burning entity prefab' },
       { name: 'x', type: 'number', description: 'X world coordinate' },
+      { name: 'z', type: 'number', description: 'Z coordinate' },
     ],
   },
 
