@@ -237,8 +237,13 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
     // Execution context — each node registers output here
     // Also register aliases so {{myAlias.field}} works alongside {{node_id.field}}
+    const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
     const context: Record<string, any> = {
-      trigger: { ...event.data, _event_type: event.type, _timestamp: Date.now() },
+      trigger: triggerData,
+    }
+    // Register trigger alias if set (e.g., {{entrada.userid}} works like {{trigger.userid}})
+    if (trigger.data.alias) {
+      context[trigger.data.alias] = triggerData
     }
 
     // Build alias map: alias -> node_id (from node.data.alias)
@@ -286,6 +291,60 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
           const ms = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
           setContext(node.id, { delayed: true, ms })
           await new Promise(resolve => setTimeout(resolve, ms))
+          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+          const outEdges = edges.filter(e => e.source === node.id)
+          for (const edge of outEdges) {
+            const nextNode = nodes.find(n => n.id === edge.target)
+            if (nextNode) await processNode(nextNode)
+          }
+
+        } else if (node.type === 'get_player') {
+          const userid = this.resolveValue(node.data.params?.userid || node.data.userid, context)
+          if (userid) {
+            // Find player data from DSTStateStore
+            const groups = dstStateStore.getServerGroups()
+            let playerData: any = null
+            for (const g of groups) {
+              if (g.server_id === serverId) {
+                playerData = g.all_players.find((p: any) => p.userid === userid)
+                if (playerData) break
+              }
+            }
+            setContext(node.id, playerData || { error: 'player not found', userid })
+          } else {
+            setContext(node.id, { error: 'no userid provided' })
+          }
+
+          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+          const outEdges = edges.filter(e => e.source === node.id)
+          for (const edge of outEdges) {
+            const nextNode = nodes.find(n => n.id === edge.target)
+            if (nextNode) await processNode(nextNode)
+          }
+
+        } else if (node.type === 'find_player') {
+          let searchName = String(this.resolveValue(node.data.params?.name || node.data.name, context) || '')
+          // Strip common chat command prefixes so "/tp Marco" or "#tp Marco" finds "Marco"
+          searchName = searchName.replace(/^[\/\\#!\.]\w+\s+/, '').trim()
+          if (searchName) {
+            const groups = dstStateStore.getServerGroups()
+            let playerData: any = null
+            for (const g of groups) {
+              if (g.server_id === serverId) {
+                // Case-insensitive partial match
+                playerData = g.all_players.find((p: any) =>
+                  p.name && p.name.toLowerCase().includes(searchName.toLowerCase())
+                )
+                if (playerData) break
+              }
+            }
+            setContext(node.id, playerData || { error: 'player not found', search: searchName })
+          } else {
+            setContext(node.id, { error: 'no name provided' })
+          }
+
           this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
 
           const outEdges = edges.filter(e => e.source === node.id)

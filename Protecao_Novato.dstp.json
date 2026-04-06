@@ -1,0 +1,88 @@
+{
+  "name": "Proteção de Novatos",
+  "version": "1.0",
+  "exportedAt": "2026-04-06T10:00:00.000Z",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "data": { "event_type": "player_attacked", "alias": "ataque" },
+      "position": { "x": 400, "y": 50 }
+    },
+    {
+      "id": "get_player_1",
+      "type": "get_player",
+      "data": { "alias": "jogador", "params": { "userid": "{{ataque.userid}}" } },
+      "position": { "x": 400, "y": 200 }
+    },
+    {
+      "id": "condition_1",
+      "type": "condition",
+      "data": {
+        "field": "jogador.health.current",
+        "operator": "less_than",
+        "value": "30",
+        "alias": "vida_baixa"
+      },
+      "position": { "x": 400, "y": 370 }
+    },
+    {
+      "id": "action_heal",
+      "type": "action",
+      "data": {
+        "action_type": "heal",
+        "alias": "cura",
+        "params": {
+          "userid": "{{ataque.userid}}",
+          "amount": "{{jogador.health.max}}"
+        }
+      },
+      "position": { "x": 200, "y": 540 }
+    },
+    {
+      "id": "action_feed",
+      "type": "action",
+      "data": {
+        "action_type": "feed",
+        "alias": "comida",
+        "params": {
+          "userid": "{{ataque.userid}}",
+          "amount": "{{jogador.hunger.max}}"
+        }
+      },
+      "position": { "x": 200, "y": 680 }
+    },
+    {
+      "id": "action_announce",
+      "type": "action",
+      "data": {
+        "action_type": "announce",
+        "alias": "aviso",
+        "params": {
+          "message": "🛡 {{jogador.name}} ({{jogador.prefab}}) estava com vida baixa ({{jogador.health.current}}/{{jogador.health.max}}) e foi curado e alimentado!"
+        }
+      },
+      "position": { "x": 200, "y": 820 }
+    },
+    {
+      "id": "action_log",
+      "type": "action",
+      "data": {
+        "action_type": "announce",
+        "alias": "ok",
+        "params": {
+          "message": "✅ {{jogador.name}} atacado por {{ataque.attacker}} — HP: {{jogador.health.current}}/{{jogador.health.max}} — OK"
+        }
+      },
+      "position": { "x": 600, "y": 540 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger_1", "target": "get_player_1" },
+    { "id": "e2", "source": "get_player_1", "target": "condition_1" },
+    { "id": "e3", "source": "condition_1", "target": "action_heal", "sourceHandle": "true" },
+    { "id": "e4", "source": "action_heal", "target": "action_feed" },
+    { "id": "e5", "source": "action_feed", "target": "action_announce" },
+    { "id": "e6", "source": "condition_1", "target": "action_log", "sourceHandle": "false" }
+  ]
+}

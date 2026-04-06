@@ -313,11 +313,11 @@ function DSTP.PushEvent(event_type, data, raw_data)
     end
 
     -- Merge raw DST data into event data so flows have access to everything
+    -- Only merge plain data tables, NOT entity objects (which have GUID/entity/Transform)
     local merged = data or {}
-    if raw_data then
+    if raw_data and type(raw_data) == "table" and not raw_data.GUID and not raw_data.entity then
         local ok, dumped = pcall(SafeDump, raw_data)
         if ok and type(dumped) == "table" then
-            -- Add raw fields that aren't already in our curated data
             for k, v in pairs(dumped) do
                 if merged[k] == nil then
                     merged[k] = v
@@ -445,9 +445,18 @@ local function RegisterBuiltinCommands()
     end)
 
     DSTP.RegisterCommand("respawn", function(data)
+        Log("Respawn command: userid=" .. tostring(data.userid))
         local player = FindPlayer(data.userid)
-        if player and player:HasTag("playerghost") then
-            player:PushEvent("respawnfromghost")
+        if player then
+            Log("  Found player: " .. tostring(player.name) .. " ghost=" .. tostring(player:HasTag("playerghost")))
+            if player:HasTag("playerghost") then
+                player:PushEvent("respawnfromghost")
+                Log("  Respawned!")
+            else
+                Log("  Player is NOT a ghost, skipping")
+            end
+        else
+            Log("  Player NOT found for userid: " .. tostring(data.userid))
         end
     end)
 
@@ -737,13 +746,21 @@ RegisterPerPlayerEvents = function(player)
     local uid = player.userid or ""
     -- Skip if no userid yet or already hooked
     if uid == "" then
-        -- Retry next frame when userid might be available
-        if _G.TheWorld then
-            _G.TheWorld:DoTaskInTime(0, function()
+        -- Retry up to 5 times (0.5s intervals) until userid is populated
+        if _G.TheWorld and not player._dstp_hook_retries then
+            player._dstp_hook_retries = 0
+        end
+        if _G.TheWorld and (player._dstp_hook_retries or 0) < 5 then
+            player._dstp_hook_retries = (player._dstp_hook_retries or 0) + 1
+            _G.TheWorld:DoTaskInTime(0.5, function()
                 if player:IsValid() and player.userid and player.userid ~= "" then
                     RegisterPerPlayerEvents(player)
+                else
+                    RegisterPerPlayerEvents(player) -- will retry again
                 end
             end)
+        else
+            Log("WARNING: Could not hook player events - userid still empty after retries")
         end
         return
     end
@@ -752,247 +769,269 @@ RegisterPerPlayerEvents = function(player)
 
     local pname = player.name or "unknown"
 
-    -- Ghost/respawn events (always active, part of players category)
-    if evt_config.players then
-        player:ListenForEvent("ms_becameghost", function(inst)
-            DSTP.PushEvent("player_ghost", { userid = uid, name = inst.name or pname }, inst)
-        end)
+    -- players
+    player:ListenForEvent("ms_becameghost", function(inst)
+        if not evt_config.players then return end
+        DSTP.PushEvent("player_ghost", { userid = inst.userid or uid, name = inst.name or pname, prefab = inst.prefab or "" })
+    end)
 
-        player:ListenForEvent("ms_respawnedfromghost", function(inst)
-            DSTP.PushEvent("player_respawn", { userid = uid, name = inst.name or pname }, inst)
-        end)
-    end
+    player:ListenForEvent("ms_respawnedfromghost", function(inst)
+        if not evt_config.players then return end
+        DSTP.PushEvent("player_respawn", { userid = inst.userid or uid, name = inst.name or pname, prefab = inst.prefab or "" })
+    end)
 
-    if evt_config.combat then
-        player:ListenForEvent("killed", function(inst, data)
-            DSTP.PushEvent("player_kill", {
-                userid = uid, name = pname,
-                victim = data and data.victim and data.victim.prefab or "unknown",
-            }, data)
-        end)
+    -- combat
+    player:ListenForEvent("killed", function(inst, data)
+        if not evt_config.combat then return end
+        DSTP.PushEvent("player_kill", {
+            userid = uid, name = pname,
+            victim = data and data.victim and data.victim.prefab or "unknown",
+        }, data)
+    end)
 
-        player:ListenForEvent("attacked", function(inst, data)
-            DSTP.PushEvent("player_attacked", {
-                userid = uid, name = pname,
-                attacker = data and data.attacker and data.attacker.prefab or "unknown",
-                damage = data and data.damage or 0,
-                damage_resolved = data and data.damageresolved or 0,
-                weapon = data and data.weapon and data.weapon.prefab or nil,
-                stimuli = data and data.stimuli or nil,
-            }, data)
-        end)
-    end
+    player:ListenForEvent("attacked", function(inst, data)
+        if not evt_config.combat then return end
+        DSTP.PushEvent("player_attacked", {
+            userid = uid, name = pname,
+            attacker = data and data.attacker and data.attacker.prefab or "unknown",
+            damage = data and data.damage or 0,
+            damage_resolved = data and data.damageresolved or 0,
+            weapon = data and data.weapon and data.weapon.prefab or nil,
+            stimuli = data and data.stimuli or nil,
+        }, data)
+    end)
 
-    if evt_config.crafting then
-        player:ListenForEvent("builditem", function(inst, data)
-            DSTP.PushEvent("player_craft", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-                recipe = data and data.recipe and data.recipe.name or "unknown",
-            }, data)
-        end)
+    -- crafting
+    player:ListenForEvent("builditem", function(inst, data)
+        if not evt_config.crafting then return end
+        DSTP.PushEvent("player_craft", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+            recipe = data and data.recipe and data.recipe.name or "unknown",
+        }, data)
+    end)
 
-        player:ListenForEvent("buildstructure", function(inst, data)
-            DSTP.PushEvent("player_build", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-                recipe = data and data.recipe and data.recipe.name or "unknown",
-            }, data)
-        end)
-    end
+    player:ListenForEvent("buildstructure", function(inst, data)
+        if not evt_config.crafting then return end
+        DSTP.PushEvent("player_build", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+            recipe = data and data.recipe and data.recipe.name or "unknown",
+        }, data)
+    end)
 
-    if evt_config.inventory then
-        player:ListenForEvent("equip", function(inst, data)
-            DSTP.PushEvent("player_equip", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-                slot = data and data.eslot or "unknown",
-            }, data)
-        end)
+    -- inventory
+    player:ListenForEvent("equip", function(inst, data)
+        if not evt_config.inventory then return end
+        DSTP.PushEvent("player_equip", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+            slot = data and data.eslot or "unknown",
+        }, data)
+    end)
 
-        player:ListenForEvent("onpickupitem", function(inst, data)
-            DSTP.PushEvent("player_pickup", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-            }, data)
-        end)
+    player:ListenForEvent("onpickupitem", function(inst, data)
+        if not evt_config.inventory then return end
+        DSTP.PushEvent("player_pickup", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+        }, data)
+    end)
 
-        player:ListenForEvent("dropitem", function(inst, data)
-            DSTP.PushEvent("player_drop", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-            }, data)
-        end)
+    player:ListenForEvent("dropitem", function(inst, data)
+        if not evt_config.inventory then return end
+        DSTP.PushEvent("player_drop", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+        }, data)
+    end)
 
-        player:ListenForEvent("unequip", function(inst, data)
-            DSTP.PushEvent("player_unequip", {
-                userid = uid, name = pname,
-                item = data and data.item and data.item.prefab or "unknown",
-                slot = data and data.eslot or "unknown",
-            }, data)
-        end)
-    end
+    player:ListenForEvent("unequip", function(inst, data)
+        if not evt_config.inventory then return end
+        DSTP.PushEvent("player_unequip", {
+            userid = uid, name = pname,
+            item = data and data.item and data.item.prefab or "unknown",
+            slot = data and data.eslot or "unknown",
+        }, data)
+    end)
 
-    if evt_config.health then
-        player:ListenForEvent("healthdelta", function(inst, data)
-            DSTP.PushEvent("health_delta", {
-                userid = uid, name = pname,
-                old = data and data.oldpercent or 0,
-                new = data and data.newpercent or 0,
-                amount = data and data.amount or 0,
-                cause = data and (type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab)) or nil,
-                afflicter = data and data.afflicter and data.afflicter.prefab or nil,
-            }, data)
-        end)
+    -- health
+    player:ListenForEvent("healthdelta", function(inst, data)
+        if not evt_config.health then return end
+        DSTP.PushEvent("health_delta", {
+            userid = uid, name = pname,
+            old = data and data.oldpercent or 0,
+            new = data and data.newpercent or 0,
+            amount = data and data.amount or 0,
+            cause = data and (type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab)) or nil,
+            afflicter = data and data.afflicter and data.afflicter.prefab or nil,
+        }, data)
+    end)
 
-        player:ListenForEvent("hungerdelta", function(inst, data)
-            DSTP.PushEvent("hunger_delta", {
-                userid = uid, name = pname,
-                old = data and data.oldpercent or 0,
-                new = data and data.newpercent or 0,
-                amount = data and data.amount or 0,
-            }, data)
-        end)
+    player:ListenForEvent("hungerdelta", function(inst, data)
+        if not evt_config.health then return end
+        DSTP.PushEvent("hunger_delta", {
+            userid = uid, name = pname,
+            old = data and data.oldpercent or 0,
+            new = data and data.newpercent or 0,
+            amount = data and data.amount or 0,
+        }, data)
+    end)
 
-        player:ListenForEvent("sanitydelta", function(inst, data)
-            DSTP.PushEvent("sanity_delta", {
-                userid = uid, name = pname,
-                old = data and data.oldpercent or 0,
-                new = data and data.newpercent or 0,
-                amount = data and data.amount or 0,
-            }, data)
-        end)
-    end
+    player:ListenForEvent("sanitydelta", function(inst, data)
+        if not evt_config.health then return end
+        DSTP.PushEvent("sanity_delta", {
+            userid = uid, name = pname,
+            old = data and data.oldpercent or 0,
+            new = data and data.newpercent or 0,
+            amount = data and data.amount or 0,
+        }, data)
+    end)
 
-    if evt_config.survival then
-        player:ListenForEvent("oneat", function(inst, data)
-            local food = data and data.food
-            local edible = food and food.components and food.components.edible
-            DSTP.PushEvent("player_eat", {
-                userid = uid, name = pname,
-                food = food and food.prefab or "unknown",
-                health = edible and edible.healthvalue or 0,
-                hunger = edible and edible.hungervalue or 0,
-                sanity = edible and edible.sanityvalue or 0,
-            }, data)
-        end)
+    -- survival
+    player:ListenForEvent("oneat", function(inst, data)
+        if not evt_config.survival then return end
+        local food = data and data.food
+        local edible = food and food.components and food.components.edible
+        DSTP.PushEvent("player_eat", {
+            userid = uid, name = pname,
+            food = food and food.prefab or "unknown",
+            health = edible and edible.healthvalue or 0,
+            hunger = edible and edible.hungervalue or 0,
+            sanity = edible and edible.sanityvalue or 0,
+        }, data)
+    end)
 
-        player:ListenForEvent("goinsane", function(inst)
-            DSTP.PushEvent("player_insane", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("goinsane", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_insane", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("gosane", function(inst)
-            DSTP.PushEvent("player_sane", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("gosane", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_sane", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("startstarving", function(inst)
-            DSTP.PushEvent("player_starving", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("startstarving", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_starving", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("stopstarving", function(inst)
-            DSTP.PushEvent("player_fed", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("stopstarving", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_fed", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("startfreezing", function(inst)
-            DSTP.PushEvent("player_freezing", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("startfreezing", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_freezing", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("stopfreezing", function(inst)
-            DSTP.PushEvent("player_warm", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("stopfreezing", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_warm", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("startoverheating", function(inst)
-            DSTP.PushEvent("player_overheating", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("startoverheating", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_overheating", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("stopoverheating", function(inst)
-            DSTP.PushEvent("player_cooled", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("stopoverheating", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_cooled", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("mounted", function(inst)
-            DSTP.PushEvent("player_mounted", { userid = uid, name = pname }, inst)
-        end)
+    player:ListenForEvent("mounted", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_mounted", { userid = uid, name = pname }, inst)
+    end)
 
-        player:ListenForEvent("dismounted", function(inst)
-            DSTP.PushEvent("player_dismounted", { userid = uid, name = pname }, inst)
-        end)
-    end
+    player:ListenForEvent("dismounted", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_dismounted", { userid = uid, name = pname }, inst)
+    end)
 
-    if evt_config.gathering then
-        -- Player finished breaking something (chop tree, mine rock, hammer structure)
-        player:ListenForEvent("finishedwork", function(inst, data)
-            local target = data and data.target
-            if not target then return end
-            local action = data.action and tostring(data.action) or "unknown"
+    -- gathering
+    -- Player finished breaking something (chop tree, mine rock, hammer structure)
+    player:ListenForEvent("finishedwork", function(inst, data)
+        if not evt_config.gathering then return end
+        local target = data and data.target
+        if not target then return end
+        local action = data.action and tostring(data.action) or "unknown"
 
-            DSTP.PushEvent("player_work", {
-                userid = uid, name = pname,
-                target = target.prefab or "unknown",
-                action = action,
-            }, data)
+        DSTP.PushEvent("player_work", {
+            userid = uid, name = pname,
+            target = target.prefab or "unknown",
+            action = action,
+        }, data)
 
-            -- Hook loot drops from the destroyed entity
-            if target:IsValid() and target.components and target.components.lootdropper then
-                target:ListenForEvent("loot_prefab_spawned", function(ent, lootdata)
-                    if lootdata and lootdata.loot then
-                        local count = 1
-                        if lootdata.loot.components and lootdata.loot.components.stackable then
-                            count = lootdata.loot.components.stackable:StackSize()
-                        end
-                        DSTP.PushEvent("resource_gathered", {
-                            userid = uid, name = pname,
-                            source = target.prefab or "unknown",
-                            action = action,
-                            loot = lootdata.loot.prefab or "unknown",
-                            count = count,
-                        }, lootdata)
+        -- Hook loot drops from the destroyed entity
+        if target:IsValid() and target.components and target.components.lootdropper then
+            target:ListenForEvent("loot_prefab_spawned", function(ent, lootdata)
+                if lootdata and lootdata.loot then
+                    local count = 1
+                    if lootdata.loot.components and lootdata.loot.components.stackable then
+                        count = lootdata.loot.components.stackable:StackSize()
                     end
-                end)
-            end
-        end)
+                    DSTP.PushEvent("resource_gathered", {
+                        userid = uid, name = pname,
+                        source = target.prefab or "unknown",
+                        action = action,
+                        loot = lootdata.loot.prefab or "unknown",
+                        count = count,
+                    }, lootdata)
+                end
+            end)
+        end
+    end)
 
-        -- Player harvested something (berry bush, farm plant, etc)
-        player:ListenForEvent("harvestsomething", function(inst, data)
-            local obj = data and data.object
-            DSTP.PushEvent("player_harvest", {
-                userid = uid, name = pname,
-                source = obj and obj.prefab or "unknown",
-            }, data)
-        end)
+    -- Player harvested something (berry bush, farm plant, etc)
+    player:ListenForEvent("harvestsomething", function(inst, data)
+        if not evt_config.gathering then return end
+        local obj = data and data.object
+        DSTP.PushEvent("player_harvest", {
+            userid = uid, name = pname,
+            source = obj and obj.prefab or "unknown",
+        }, data)
+    end)
 
-        -- Player started a fire
-        player:ListenForEvent("onstartedfire", function(inst, data)
-            DSTP.PushEvent("player_startfire", {
-                userid = uid, name = pname,
-                target = data and data.target and data.target.prefab or "unknown",
-            }, data)
-        end)
-    end
+    -- Player started a fire
+    player:ListenForEvent("onstartedfire", function(inst, data)
+        if not evt_config.gathering then return end
+        DSTP.PushEvent("player_startfire", {
+            userid = uid, name = pname,
+            target = data and data.target and data.target.prefab or "unknown",
+        }, data)
+    end)
 end
 
 RegisterPlayerEvents = function(inst)
     inst:ListenForEvent("ms_playerspawn", function(world, player)
-        -- Defer 1 frame so player.userid and player.name are populated
+        -- Always hook per-player events, even if players category is disabled
         inst:DoTaskInTime(0, function()
             if not player:IsValid() then return end
+            RegisterPerPlayerEvents(player)
+            if not evt_config.players then return end
             DSTP.PushEvent("player_spawn", {
                 userid = player.userid,
                 name = player.name,
                 prefab = player.prefab,
             }, player)
-            RegisterPerPlayerEvents(player)
         end)
     end)
 
     inst:ListenForEvent("ms_playerleft", function(world, player)
+        hooked_players[player.userid] = nil
+        if not evt_config.players then return end
         DSTP.PushEvent("player_left", {
             userid = player.userid,
             name = player.name,
         }, player)
-        hooked_players[player.userid] = nil
     end)
 
     inst:ListenForEvent("entity_death", function(world, data)
+        if not evt_config.players then return end
         if data and data.inst and data.inst:HasTag("player") then
             DSTP.PushEvent("player_death", {
                 userid = data.inst.userid,
@@ -1001,26 +1040,26 @@ RegisterPlayerEvents = function(inst)
             }, data)
         end
     end)
-
-    -- ms_becameghost and ms_respawnedfromghost are player events, not world events
-    -- They are handled in RegisterPerPlayerEvents instead
 end
 
 RegisterWorldEvents = function(inst)
     inst:ListenForEvent("ms_cyclecomplete", function(world)
+        if not evt_config.world then return end
         DSTP.PushEvent("new_day", { day = world.state.cycles }, world)
     end)
 
     inst:ListenForEvent("ms_nextphase", function(world)
+        if not evt_config.world then return end
         DSTP.PushEvent("phase_changed", { phase = world.state.phase }, world)
     end)
 
     inst:ListenForEvent("ms_setseason", function(world, season)
+        if not evt_config.world then return end
         DSTP.PushEvent("season_changed", { season = tostring(season) }, season)
     end)
 
-    -- Lightning strikes
     inst:ListenForEvent("ms_sendlightningstrike", function(world, pt)
+        if not evt_config.weather then return end
         DSTP.PushEvent("lightning_strike", {
             x = pt and pt.x and math.floor(pt.x) or 0,
             z = pt and pt.z and math.floor(pt.z) or 0,
@@ -1030,6 +1069,7 @@ end
 
 RegisterWeatherEvents = function(inst)
     inst:ListenForEvent("ms_stormchanged", function(world, data)
+        if not evt_config.weather then return end
         DSTP.PushEvent("storm_changed", {
             stormtype = data and data.stormtype or "unknown",
             setting = data and data.setting,
@@ -1037,6 +1077,7 @@ RegisterWeatherEvents = function(inst)
     end)
 
     inst:ListenForEvent("ms_forceprecipitation", function(world, enabled)
+        if not evt_config.weather then return end
         DSTP.PushEvent("precipitation", { enabled = enabled }, enabled)
     end)
 end
@@ -1048,12 +1089,13 @@ RegisterBossEvents = function(inst)
     }
     for _, evt in ipairs(boss_events) do
         inst:ListenForEvent(evt, function(world, data)
+            if not evt_config.bosses then return end
             DSTP.PushEvent("boss_event", { event = evt, data = data }, data)
         end)
     end
 
-    -- Track any entity death that's not a player (for notable mob kills)
     inst:ListenForEvent("entity_death", function(world, data)
+        if not evt_config.bosses then return end
         if data and data.inst and not data.inst:HasTag("player") then
             local prefab = data.inst.prefab
             -- Only track notable mobs
@@ -1075,6 +1117,7 @@ RegisterBossEvents = function(inst)
 
     -- Fire detection (griefing)
     inst:ListenForEvent("ms_registerfire", function(world, data)
+        if not evt_config.bosses then return end
         local fire = data
         if fire then
             local x, _, z = 0, 0, 0
@@ -1093,37 +1136,16 @@ end
 RegisterGameEvents = function(inst)
     world_inst = inst
 
-    if evt_config.players then
-        RegisterPlayerEvents(inst)
-        evt_initialized.players = true
-    end
-
-    if evt_config.world then
-        RegisterWorldEvents(inst)
-        evt_initialized.world = true
-    end
-
-    if evt_config.weather then
-        RegisterWeatherEvents(inst)
-        evt_initialized.weather = true
-    end
-
-    if evt_config.bosses then
-        RegisterBossEvents(inst)
-        evt_initialized.bosses = true
-    end
+    -- Register ALL listeners unconditionally
+    -- Each callback checks evt_config at runtime, so categories can be toggled without re-registering
+    RegisterPlayerEvents(inst)
+    RegisterWorldEvents(inst)
+    RegisterWeatherEvents(inst)
+    RegisterBossEvents(inst)
 
     -- Hook per-player events for existing players
-    if evt_config.combat or evt_config.crafting or evt_config.inventory or evt_config.health or evt_config.gathering or evt_config.survival then
-        for _, player in ipairs(_G.AllPlayers) do
-            RegisterPerPlayerEvents(player)
-        end
-        evt_initialized.combat = evt_config.combat
-        evt_initialized.crafting = evt_config.crafting
-        evt_initialized.inventory = evt_config.inventory
-        evt_initialized.health = evt_config.health
-        evt_initialized.gathering = evt_config.gathering
-        evt_initialized.survival = evt_config.survival
+    for _, player in ipairs(_G.AllPlayers) do
+        RegisterPerPlayerEvents(player)
     end
 
     local enabled = {}
@@ -1183,10 +1205,10 @@ HookChat = function()
     end
 end
 
--- Hot-toggle: enable/disable event categories at runtime
--- NOTE: Must be defined after all Register* and HookChat functions
+-- Hot-toggle: just flip evt_config flags
+-- All listeners are already registered and check evt_config at runtime
 HotToggleEvents = function(requested)
-    if not requested or not world_inst then return end
+    if not requested then return end
     local changed = false
 
     for category, enabled in pairs(requested) do
@@ -1194,29 +1216,6 @@ HotToggleEvents = function(requested)
             evt_config[category] = enabled
             changed = true
             Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely")
-
-            -- Register new listeners if enabling a category not yet initialized
-            if enabled and not evt_initialized[category] then
-                evt_initialized[category] = true
-                if category == "players" then
-                    RegisterPlayerEvents(world_inst)
-                elseif category == "world" then
-                    RegisterWorldEvents(world_inst)
-                elseif category == "weather" then
-                    RegisterWeatherEvents(world_inst)
-                elseif category == "bosses" then
-                    RegisterBossEvents(world_inst)
-                elseif category == "chat" and config.shard_type == "master" then
-                    HookChat()
-                elseif category == "combat" or category == "crafting" or category == "inventory" or category == "health" or category == "gathering" or category == "survival" then
-                    -- Hook per-player events for players not yet hooked (avoid duplicate listeners)
-                    for _, player in ipairs(_G.AllPlayers) do
-                        if not hooked_players[player.userid] and player.userid and player.userid ~= "" then
-                            RegisterPerPlayerEvents(player)
-                        end
-                    end
-                end
-            end
         end
     end
 

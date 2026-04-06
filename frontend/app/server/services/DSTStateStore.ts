@@ -141,10 +141,17 @@ class DSTStateStore {
 
   // Send command to all shards of a server
   pushCommandToServer(server_id: string, type: string, data: any = {}) {
+    let sent = 0
     for (const shard of this.shards.values()) {
       if (shard.server_id === server_id) {
         this.pushCommand(shard.shard_id, type, data)
+        sent++
       }
+    }
+    if (sent === 0) {
+      console.warn(`[DSTP] pushCommandToServer: NO shards found for server "${server_id}" — command "${type}" LOST. Active shards:`, [...this.shards.keys()])
+    } else {
+      console.log(`[DSTP] pushCommandToServer: "${type}" queued to ${sent} shard(s) of "${server_id}"`)
     }
   }
 

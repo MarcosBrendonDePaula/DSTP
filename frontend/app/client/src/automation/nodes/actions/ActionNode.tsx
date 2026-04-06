@@ -4,16 +4,17 @@ import { BaseNode, NodeField, NodeSelect, NodeInput } from '../BaseNode'
 
 export const ACTION_TYPES = [
   { value: 'announce', label: '📢 Announce', params: [{ key: 'message', label: 'Mensagem', placeholder: 'Texto do anúncio' }] },
+  { value: 'private_message', label: '💬 Sussurro', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'message', label: 'Mensagem', placeholder: 'Mensagem privada' }] },
   { value: 'chat_send', label: '💬 Chat Send', params: [{ key: 'message', label: 'Mensagem' }, { key: 'name', label: 'Nome', placeholder: '[DSTP]' }] },
-  { value: 'heal', label: '❤ Heal', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'amount', label: 'Quantidade', placeholder: 'max' }] },
-  { value: 'feed', label: '🍖 Feed', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'amount', label: 'Quantidade', placeholder: 'max' }] },
-  { value: 'restore_sanity', label: '🧠 Restore Sanity', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
-  { value: 'give_item', label: '🎁 Give Item', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'log' }, { key: 'count', label: 'Qtd', placeholder: '1' }] },
-  { value: 'kick', label: '🚫 Kick', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
-  { value: 'kill', label: '💀 Kill', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
-  { value: 'respawn', label: '✨ Respawn', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }] },
-  { value: 'godmode', label: '🛡 Godmode', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'enabled', label: 'Ativar', placeholder: 'true' }] },
-  { value: 'teleport', label: '📍 Teleport (coords)', params: [{ key: 'userid', label: 'User ID', placeholder: '{{userid}}' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }] },
+  { value: 'heal', label: '❤ Heal', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'amount', label: 'Quantidade', placeholder: 'max' }] },
+  { value: 'feed', label: '🍖 Feed', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'amount', label: 'Quantidade', placeholder: 'max' }] },
+  { value: 'restore_sanity', label: '🧠 Restore Sanity', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'give_item', label: '🎁 Give Item', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'log' }, { key: 'count', label: 'Qtd', placeholder: '1' }] },
+  { value: 'kick', label: '🚫 Kick', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'kill', label: '💀 Kill', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'respawn', label: '✨ Respawn', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'godmode', label: '🛡 Godmode', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'enabled', label: 'Ativar', placeholder: 'true' }] },
+  { value: 'teleport', label: '📍 Teleport (coords)', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }] },
   { value: 'teleport_to_player', label: '📍 Teleport to Player', params: [{ key: 'userid', label: 'Quem TP', placeholder: '{{trigger.userid}}' }, { key: 'target_userid', label: 'Destino', placeholder: '{{resolver.target_userid}}' }] },
   { value: 'set_season', label: '🍂 Set Season', params: [{ key: 'season', label: 'Estação', placeholder: 'autumn' }] },
   { value: 'set_phase', label: '🌙 Set Phase', params: [{ key: 'phase', label: 'Fase', placeholder: 'day' }] },
@@ -67,7 +68,7 @@ export function ActionNode({ id, data, selected }: any) {
       ))}
       {actionDef && (
         <div className="text-[8px] text-gray-500 mt-1">
-          💡 Use {'{{campo}}'} para dados do evento
+          💡 Use {'{{alias.campo}}'} ex: {'{{trigger.userid}}'}
         </div>
       )}
     </BaseNode>

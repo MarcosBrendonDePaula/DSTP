@@ -52,7 +52,10 @@ export function ConditionNode({ id, data, selected }: any) {
       ]}
     >
       <NodeField label="Campo">
-        <NodeSelect value={data.field || ''} onChange={v => update('field', v)} options={COMMON_FIELDS} />
+        <div className="flex gap-1">
+          <NodeSelect value={COMMON_FIELDS.find(f => f.value === data.field) ? data.field : ''} onChange={v => update('field', v)} options={COMMON_FIELDS} />
+          <NodeInput value={data.field || ''} onChange={v => update('field', v)} placeholder="ou {{alias.campo}}" />
+        </div>
       </NodeField>
       <NodeField label="Operador">
         <NodeSelect value={data.operator || ''} onChange={v => update('operator', v)} options={OPERATORS} />

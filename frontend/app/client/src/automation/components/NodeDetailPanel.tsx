@@ -201,7 +201,7 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
   if (type === 'trigger') {
     const eventType = data?.event_type as string
     schema = eventType ? triggerOutputSchemas[eventType] || null : null
-    contextKey = 'trigger'
+    contextKey = alias || 'trigger'
   } else {
     schema = nodeOutputSchemas[type] || null
   }

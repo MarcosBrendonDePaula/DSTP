@@ -1,7 +1,7 @@
 {
   "name": "Chat /tp",
-  "version": "1.0",
-  "exportedAt": "2026-04-06T00:00:00.000Z",
+  "version": "2.0",
+  "exportedAt": "2026-04-06T10:30:00.000Z",
   "nodes": [
     {
       "id": "trigger_1",
@@ -13,72 +13,74 @@
       "id": "condition_1",
       "type": "condition",
       "data": {
-        "field": "trigger.message",
+        "field": "message",
         "operator": "contains",
-        "value": "/tp ",
+        "value": "#tp ",
         "alias": "check"
       },
-      "position": { "x": 300, "y": 190 }
+      "position": { "x": 300, "y": 200 }
     },
     {
-      "id": "script_1",
-      "type": "script",
+      "id": "find_1",
+      "type": "find_player",
+      "data": { "alias": "destino", "params": { "name": "{{chat.message}}" } },
+      "position": { "x": 300, "y": 370 }
+    },
+    {
+      "id": "condition_2",
+      "type": "condition",
       "data": {
-        "action_type": "script",
-        "alias": "resolver",
-        "params": {
-          "code": "async function run(context) {\n  const msg = context.trigger.message;\n  const targetName = msg.replace('/tp ', '').trim();\n  \n  // Fetch online players from DSTP backend\n  const resp = await fetch('http://127.0.0.1:3000/api/dst/players');\n  if (!resp.ok) return { error: 'failed to fetch players' };\n  const players = await resp.json();\n  \n  // Find player by name (case-insensitive partial match)\n  const target = players.find(p => p.name && p.name.toLowerCase().includes(targetName.toLowerCase()));\n  if (!target) return { error: 'player not found: ' + targetName, targetName };\n  \n  return {\n    targetName: target.name,\n    target_userid: target.userid,\n    source_userid: context.trigger.userid,\n    source_name: context.trigger.name\n  };\n}"
-        }
+        "field": "destino.userid",
+        "operator": "exists",
+        "value": "",
+        "alias": "encontrou"
       },
-      "position": { "x": 300, "y": 380 }
+      "position": { "x": 300, "y": 530 }
     },
     {
-      "id": "action_1",
+      "id": "action_tp",
       "type": "action",
       "data": {
         "action_type": "teleport_to_player",
         "alias": "tp",
         "params": {
-          "userid": "{{resolver.source_userid}}",
-          "target_userid": "{{resolver.target_userid}}"
+          "userid": "{{chat.userid}}",
+          "target_userid": "{{destino.userid}}"
         }
       },
-      "position": { "x": 300, "y": 560 }
+      "position": { "x": 150, "y": 700 }
     },
     {
-      "id": "action_2",
+      "id": "action_msg",
       "type": "action",
       "data": {
         "action_type": "announce",
-        "alias": "feedback",
+        "alias": "aviso",
         "params": {
-          "message": "{{resolver.source_name}} teleportou para {{resolver.targetName}}"
+          "message": "📍 {{chat.name}} teleportou para {{destino.name}}"
         }
       },
-      "position": { "x": 300, "y": 700 }
+      "position": { "x": 150, "y": 850 }
+    },
+    {
+      "id": "action_err",
+      "type": "action",
+      "data": {
+        "action_type": "announce",
+        "alias": "erro",
+        "params": {
+          "message": "❌ Player '{{chat.message}}' não encontrado"
+        }
+      },
+      "position": { "x": 450, "y": 700 }
     }
   ],
   "edges": [
-    {
-      "id": "edge_1",
-      "source": "trigger_1",
-      "target": "condition_1"
-    },
-    {
-      "id": "edge_2",
-      "source": "condition_1",
-      "target": "script_1",
-      "sourceHandle": "true"
-    },
-    {
-      "id": "edge_3",
-      "source": "script_1",
-      "target": "action_1"
-    },
-    {
-      "id": "edge_4",
-      "source": "action_1",
-      "target": "action_2"
-    }
+    { "id": "e1", "source": "trigger_1", "target": "condition_1" },
+    { "id": "e2", "source": "condition_1", "target": "find_1", "sourceHandle": "true" },
+    { "id": "e3", "source": "find_1", "target": "condition_2" },
+    { "id": "e4", "source": "condition_2", "target": "action_tp", "sourceHandle": "true" },
+    { "id": "e5", "source": "action_tp", "target": "action_msg" },
+    { "id": "e6", "source": "condition_2", "target": "action_err", "sourceHandle": "false" }
   ]
 }

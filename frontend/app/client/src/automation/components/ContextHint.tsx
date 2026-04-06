@@ -28,18 +28,20 @@ export function ContextHint({ currentNodeId, onInsert }: ContextHintProps) {
     }
     findUpstream(currentNodeId)
 
-    // Trigger variables
+    // Trigger variables — use alias if set, fallback to "trigger"
     const triggerNode = allNodes.find(n => n.type === 'trigger')
     if (triggerNode) {
       const eventType = triggerNode.data?.event_type as string
+      const triggerAlias = (triggerNode.data as any)?.alias
+      const triggerKey = triggerAlias || 'trigger'
       const schema = triggerOutputSchemas[eventType]
       if (schema) {
         for (const f of schema.fields) {
           vars.push({
-            path: `trigger.${f.name}`,
+            path: `${triggerKey}.${f.name}`,
             type: f.type,
             description: f.description,
-            source: `⚡ ${eventType}`,
+            source: triggerAlias ? `⚡ ${triggerAlias}` : `⚡ ${eventType}`,
           })
         }
       }

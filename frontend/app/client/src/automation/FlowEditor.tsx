@@ -171,6 +171,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       condition: {},
       action: { action_type: '', params: {} },
       delay: { delay_ms: '3000' },
+      get_player: { params: { userid: '' } },
+      find_player: { params: { name: '' } },
       http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
       set_variable: { action_type: 'set_variable', params: {} },
       script: { action_type: 'script', params: { code: '' } },
@@ -226,6 +228,12 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </button>
         <button onClick={() => addNode('set_variable')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/20 hover:bg-purple-500/25 transition-colors">
           📝 Variable
+        </button>
+        <button onClick={() => addNode('get_player')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20 hover:bg-teal-500/25 transition-colors">
+          👤 Player
+        </button>
+        <button onClick={() => addNode('find_player')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20 hover:bg-teal-500/25 transition-colors">
+          🔍 Find
         </button>
         <button onClick={() => addNode('delay')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/15 text-gray-400 border border-gray-500/20 hover:bg-gray-500/25 transition-colors">
           ⏱ Delay
