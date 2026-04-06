@@ -13,6 +13,7 @@ export interface FlowAnalysis {
 }
 
 const analysisCache = new Map<string, FlowAnalysis>()
+const MAX_CACHE_SIZE = 200
 
 export function analyzeFlow(flow: { nodes: FlowNode[]; edges: FlowEdge[] }): FlowAnalysis {
   const waitNodes = flow.nodes.filter(n => n.type === 'wait')
@@ -56,6 +57,11 @@ export function invalidateAnalysis(flowId: string) {
 
 export function getAnalysis(flowId: string, flow: { nodes: FlowNode[]; edges: FlowEdge[] }): FlowAnalysis {
   if (!analysisCache.has(flowId)) {
+    // Evict oldest entry if cache is full
+    if (analysisCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = analysisCache.keys().next().value
+      if (firstKey) analysisCache.delete(firstKey)
+    }
     analysisCache.set(flowId, analyzeFlow(flow))
   }
   return analysisCache.get(flowId)!

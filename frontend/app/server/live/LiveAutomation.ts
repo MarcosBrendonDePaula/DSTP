@@ -55,13 +55,27 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // Capture mode — when active, execution traces are collected and emitted at the end
   private _captureServerId: string | null = null
   private _captureTrace: Array<{ nodeId: string; status: string; input: Record<string, any>; output: any; error?: string; timestamp: number }> = []
+  private _captureTimeout: ReturnType<typeof setTimeout> | null = null
+  private static readonly MAX_CAPTURE_TRACE = 200
 
   // Shared storage between flows — Script nodes can read/write via context.store
   private static _flowStorage: Record<string, Record<string, any>> = {}
+  private static readonly MAX_STORE_KEYS = 500
 
   static getStore(serverId: string): Record<string, any> {
     if (!this._flowStorage[serverId]) this._flowStorage[serverId] = {}
-    return this._flowStorage[serverId]
+    const store = this._flowStorage[serverId]
+    // Evict oldest keys if over limit
+    const keys = Object.keys(store)
+    if (keys.length > this.MAX_STORE_KEYS) {
+      const toRemove = keys.slice(0, keys.length - this.MAX_STORE_KEYS)
+      for (const k of toRemove) delete store[k]
+    }
+    return store
+  }
+
+  static clearStore(serverId: string) {
+    delete this._flowStorage[serverId]
   }
 
   static defaultState: AutomationState = {
@@ -225,10 +239,17 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   async startCapture(payload: { server_id: string }) {
     this._captureServerId = payload.server_id
     this._captureTrace = []
+    // Auto-stop after 5 minutes to prevent unbounded memory growth
+    if (this._captureTimeout) clearTimeout(this._captureTimeout)
+    this._captureTimeout = setTimeout(() => this.stopCapture({ server_id: payload.server_id }), 5 * 60 * 1000)
     this.setState({ [`capture:${payload.server_id}`]: { active: true } } as any)
   }
 
   async stopCapture(payload: { server_id: string }) {
+    if (this._captureTimeout) {
+      clearTimeout(this._captureTimeout)
+      this._captureTimeout = null
+    }
     this._captureServerId = null
     this._captureTrace = []
     this.setState({ [`capture:${payload.server_id}`]: null } as any)
@@ -236,6 +257,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
   private pushTrace(serverId: string, nodeId: string, status: string, input: Record<string, any>, output: any, error?: string) {
     if (this._captureServerId !== serverId) return
+    if (this._captureTrace.length >= LiveAutomation.MAX_CAPTURE_TRACE) return
     this._captureTrace.push({
       nodeId,
       status,

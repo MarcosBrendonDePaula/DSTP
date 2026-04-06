@@ -24,6 +24,8 @@ export interface WorkflowInstance {
 }
 
 const STORE_KEY = '__dstp_workflow_instances'
+const MAX_INSTANCE_AGE = 60 * 60 * 1000 // 1 hour absolute max TTL
+const DEFAULT_TIMEOUT_MS = 300_000 // 5 minutes default timeout
 
 export class WorkflowInstanceStore {
   private instances: Map<string, WorkflowInstance>
@@ -57,6 +59,9 @@ export class WorkflowInstanceStore {
     onTimeout?: (partialContext: Record<string, any>) => void,
   ): WorkflowInstance {
     const id = `wf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+    // Ensure timeout is always set (default 5min if 0 or missing)
+    if (!timeoutMs || timeoutMs <= 0) timeoutMs = DEFAULT_TIMEOUT_MS
 
     const branches = new Map<string, { status: 'pending' | 'arrived'; context: Record<string, any> | null; arrivedAt: number | null }>()
     for (const branchId of requiredBranches) {
@@ -283,6 +288,13 @@ export class WorkflowInstanceStore {
     const now = Date.now()
     for (const [id, instance] of this.instances) {
       if (instance.completed) {
+        this.instances.delete(id)
+        continue
+      }
+      // Hard maximum TTL: 1 hour regardless of configured timeout
+      if (now - instance.createdAt > MAX_INSTANCE_AGE) {
+        if (instance.timeoutHandle) clearTimeout(instance.timeoutHandle)
+        instance.completed = true
         this.instances.delete(id)
         continue
       }

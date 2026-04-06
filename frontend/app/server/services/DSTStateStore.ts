@@ -230,14 +230,24 @@ class DSTStateStore {
 
   checkHealth() {
     const now = Date.now()
+    const STALE_THRESHOLD = 60 * 60 * 1000 // 1 hour
     let changed = false
-    for (const entry of this.shards.values()) {
+
+    for (const [shardId, entry] of this.shards) {
       const online = now - entry.last_seen < 30000
       if (entry.online !== online) {
         entry.online = online
         changed = true
       }
+
+      // Remove shards that have been offline for over 1 hour
+      if (!online && now - entry.last_seen > STALE_THRESHOLD) {
+        this.shards.delete(shardId)
+        this.commandQueues.delete(shardId)
+        changed = true
+      }
     }
+
     if (changed) this.version++
   }
 }
