@@ -393,6 +393,14 @@ export const nodeOutputSchemas: Record<string, NodeOutputSchema> = {
     description: 'Script return value',
     fields: [], // dynamic — whatever run() returns
   },
+  wait: {
+    description: 'Merged context from all branches',
+    fields: [
+      { name: 'merged', type: 'boolean', description: 'Whether merge completed' },
+      { name: 'branches', type: 'object', description: 'Branch contexts keyed by trigger node ID' },
+      { name: '_timedOut', type: 'boolean', description: 'True if wait timed out' },
+    ],
+  },
 }
 
 // ─── Build context type string for Monaco ────────────

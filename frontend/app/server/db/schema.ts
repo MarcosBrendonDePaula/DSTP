@@ -62,7 +62,7 @@ export type EventSchema = typeof eventSchemas.$inferSelect
 
 export interface FlowNode {
   id: string
-  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'http_request' | 'set_variable' | 'script'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'http_request' | 'set_variable' | 'script' | 'wait'
   data: Record<string, any>
   position: { x: number; y: number }
 }

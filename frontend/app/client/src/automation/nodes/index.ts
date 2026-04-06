@@ -7,6 +7,7 @@ import { ScriptNode } from './actions/ScriptNode'
 import { DelayNode } from './actions/DelayNode'
 import { GetPlayerNode } from './actions/GetPlayerNode'
 import { FindPlayerNode } from './actions/FindPlayerNode'
+import { WaitNode } from './actions/WaitNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -18,6 +19,7 @@ export const nodeTypes = {
   http_request: HttpRequestNode,
   set_variable: SetVariableNode,
   script: ScriptNode,
+  wait: WaitNode,
 }
 
 export { TriggerNode, TRIGGER_EVENTS } from './triggers/TriggerNode'

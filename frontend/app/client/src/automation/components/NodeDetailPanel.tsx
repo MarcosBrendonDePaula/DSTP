@@ -72,6 +72,7 @@ const nodeTypeMeta: Record<string, { icon: string; label: string; color: string 
   http_request: { icon: '🌐', label: 'HTTP',      color: '#06b6d4' },
   set_variable: { icon: '📝', label: 'Variável',  color: '#a855f7' },
   script:       { icon: '🧩', label: 'Script',    color: '#f97316' },
+  wait:         { icon: '🔀', label: 'Wait/Merge', color: '#ec4899' },
 }
 
 function getNodeCategory(type: string): string {

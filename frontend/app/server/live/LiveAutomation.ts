@@ -3,6 +3,8 @@
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
 import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
+import { getAnalysis, invalidateAnalysis, type FlowAnalysis } from './FlowAnalyzer'
+import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 
 // ─── State ──────��────────────────────────────────────
 
@@ -101,18 +103,24 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       edges: flow.edges || [],
     })
 
+    invalidateAnalysis(flow.id)
     this.ensureEventCategories(flow)
     this.syncState(flow.server_id)
     return { success: true }
   }
 
   async deleteFlow(payload: { flow_id: string; server_id: string }) {
+    invalidateAnalysis(payload.flow_id)
+    WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
     this.flowRepo(payload.server_id).delete(payload.flow_id)
     this.syncState(payload.server_id)
     return { success: true }
   }
 
   async toggleFlow(payload: { flow_id: string; server_id: string; enabled: boolean }) {
+    if (!payload.enabled) {
+      WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
+    }
     this.flowRepo(payload.server_id).toggle(payload.flow_id, payload.enabled)
     this.syncState(payload.server_id)
     return { success: true }
@@ -201,7 +209,12 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       const triggers = (flow.nodes as FlowNode[]).filter(n => n.type === 'trigger')
       for (const trigger of triggers) {
         if (trigger.data.event_type === event.type) {
-          this.executeFlow(flow, trigger, event, server_id)
+          const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
+          if (analysis.isSimple) {
+            this.executeFlow(flow, trigger, event, server_id)
+          } else {
+            this.executeStatefulBranch(flow, trigger, event, server_id, analysis)
+          }
         }
       }
     }
@@ -238,31 +251,179 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // Downstream nodes can reference via {{node_id.field}}
   // Context is linear: A->B->C means C sees A and B, but A doesn't see B
 
+  // ─── Shared Node Processor ──────────────────────────
+  // Used by both simple executeFlow and stateful branch execution.
+  // Returns 'wait' if a wait node was encountered (stateful only uses stopAtWait=true).
+
+  private async processNode(
+    node: FlowNode,
+    nodes: FlowNode[],
+    edges: FlowEdge[],
+    context: Record<string, any>,
+    serverId: string,
+    executedActions: string[],
+    setContext: (nodeId: string, value: any) => void,
+    stopAtWait: boolean = false,
+  ): Promise<FlowNode | null> {
+    // If this is a wait node and we should stop, return it
+    if (node.type === 'wait' && stopAtWait) return node
+
+    const inputSnapshot = { ...context }
+
+    try {
+      if (node.type === 'wait') {
+        // In simple flow mode (stopAtWait=false), wait nodes just pass through
+        setContext(node.id, { waited: true, passthrough: true })
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+      } else if (node.type === 'condition') {
+        const result = this.evaluateCondition(node, context)
+        setContext(node.id, { result, field: node.data.field, value: node.data.value })
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const conditionOutEdges = edges.filter(e => e.source === node.id)
+        for (const condEdge of conditionOutEdges) {
+          const shouldFollow = condEdge.sourceHandle === 'true' ? result
+            : condEdge.sourceHandle === 'false' ? !result
+            : result
+          if (shouldFollow) {
+            const nextNode = nodes.find(n => n.id === condEdge.target)
+            if (nextNode) {
+              const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+              if (waitResult) return waitResult
+            }
+          }
+        }
+
+      } else if (node.type === 'delay') {
+        const ms = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
+        setContext(node.id, { delayed: true, ms })
+        await new Promise(resolve => setTimeout(resolve, ms))
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+
+      } else if (node.type === 'get_player') {
+        const userid = this.resolveValue(node.data.params?.userid || node.data.userid, context)
+        if (userid) {
+          const groups = dstStateStore.getServerGroups()
+          let playerData: any = null
+          for (const g of groups) {
+            if (g.server_id === serverId) {
+              playerData = g.all_players.find((p: any) => p.userid === userid)
+              if (playerData) break
+            }
+          }
+          setContext(node.id, playerData || { error: 'player not found', userid })
+        } else {
+          setContext(node.id, { error: 'no userid provided' })
+        }
+
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+
+      } else if (node.type === 'find_player') {
+        let searchName = String(this.resolveValue(node.data.params?.name || node.data.name, context) || '')
+        searchName = searchName.replace(/^[\/\\#!\.]\w+\s+/, '').trim()
+        if (searchName) {
+          const groups = dstStateStore.getServerGroups()
+          let playerData: any = null
+          for (const g of groups) {
+            if (g.server_id === serverId) {
+              playerData = g.all_players.find((p: any) =>
+                p.name && p.name.toLowerCase().includes(searchName.toLowerCase())
+              )
+              if (playerData) break
+            }
+          }
+          setContext(node.id, playerData || { error: 'player not found', search: searchName })
+        } else {
+          setContext(node.id, { error: 'no name provided' })
+        }
+
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+
+      } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
+        const actionType = node.data.action_type || node.type
+
+        if (actionType === 'http_request') {
+          setContext(node.id, await this.executeHttpRequest(node, context))
+        } else if (actionType === 'set_variable') {
+          setContext(node.id, this.executeSetVariable(node, context))
+        } else if (actionType === 'script') {
+          setContext(node.id, await this.executeScript(node, context, serverId))
+        } else {
+          this.runFlowAction(serverId, node, context)
+          setContext(node.id, { executed: true, action: actionType })
+        }
+
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        executedActions.push(actionType)
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+      }
+    } catch (nodeErr: any) {
+      this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message)
+      throw nodeErr
+    }
+
+    return null
+  }
+
+  // ─── Simple Flow Execution (no Wait nodes) ─────────
+
   private async executeFlow(flow: Flow, trigger: FlowNode, event: any, serverId: string) {
     const nodes = flow.nodes as FlowNode[]
     const edges = flow.edges as FlowEdge[]
     const executedActions: string[] = []
 
-    // Execution context — each node registers output here
-    // Also register aliases so {{myAlias.field}} works alongside {{node_id.field}}
     const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
     const context: Record<string, any> = {
       trigger: triggerData,
     }
-    // Register trigger alias if set (e.g., {{entrada.userid}} works like {{trigger.userid}})
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
     }
 
-    // Build alias map: alias -> node_id (from node.data.alias)
-    const aliasMap = new Map<string, string>()
-    for (const n of nodes) {
-      if (n.data.alias && typeof n.data.alias === 'string') {
-        aliasMap.set(n.data.alias, n.id)
-      }
-    }
-
-    // Helper: register node output in context by both id and alias
     const setContext = (nodeId: string, value: any) => {
       context[nodeId] = value
       const node = nodes.find(n => n.id === nodeId)
@@ -271,138 +432,15 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       }
     }
 
-    // Record trigger in trace (if capturing)
     this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger)
 
-    const processNode = async (node: FlowNode) => {
-      const inputSnapshot = { ...context }
-
-      try {
-        if (node.type === 'condition') {
-          const result = this.evaluateCondition(node, context)
-          setContext(node.id, { result, field: node.data.field, value: node.data.value })
-          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
-
-          // Traverse the condition's OWN outgoing edges, checking their sourceHandle
-          const conditionOutEdges = edges.filter(e => e.source === node.id)
-          for (const condEdge of conditionOutEdges) {
-            const shouldFollow = condEdge.sourceHandle === 'true' ? result
-              : condEdge.sourceHandle === 'false' ? !result
-              : result
-            if (shouldFollow) {
-              const nextNode = nodes.find(n => n.id === condEdge.target)
-              if (nextNode) await processNode(nextNode)
-            }
-          }
-
-        } else if (node.type === 'delay') {
-          const ms = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
-          setContext(node.id, { delayed: true, ms })
-          await new Promise(resolve => setTimeout(resolve, ms))
-          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
-
-          const outEdges = edges.filter(e => e.source === node.id)
-          for (const edge of outEdges) {
-            const nextNode = nodes.find(n => n.id === edge.target)
-            if (nextNode) await processNode(nextNode)
-          }
-
-        } else if (node.type === 'get_player') {
-          const userid = this.resolveValue(node.data.params?.userid || node.data.userid, context)
-          if (userid) {
-            // Find player data from DSTStateStore
-            const groups = dstStateStore.getServerGroups()
-            let playerData: any = null
-            for (const g of groups) {
-              if (g.server_id === serverId) {
-                playerData = g.all_players.find((p: any) => p.userid === userid)
-                if (playerData) break
-              }
-            }
-            setContext(node.id, playerData || { error: 'player not found', userid })
-          } else {
-            setContext(node.id, { error: 'no userid provided' })
-          }
-
-          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
-
-          const outEdges = edges.filter(e => e.source === node.id)
-          for (const edge of outEdges) {
-            const nextNode = nodes.find(n => n.id === edge.target)
-            if (nextNode) await processNode(nextNode)
-          }
-
-        } else if (node.type === 'find_player') {
-          let searchName = String(this.resolveValue(node.data.params?.name || node.data.name, context) || '')
-          // Strip common chat command prefixes so "/tp Marco" or "#tp Marco" finds "Marco"
-          searchName = searchName.replace(/^[\/\\#!\.]\w+\s+/, '').trim()
-          if (searchName) {
-            const groups = dstStateStore.getServerGroups()
-            let playerData: any = null
-            for (const g of groups) {
-              if (g.server_id === serverId) {
-                // Case-insensitive partial match
-                playerData = g.all_players.find((p: any) =>
-                  p.name && p.name.toLowerCase().includes(searchName.toLowerCase())
-                )
-                if (playerData) break
-              }
-            }
-            setContext(node.id, playerData || { error: 'player not found', search: searchName })
-          } else {
-            setContext(node.id, { error: 'no name provided' })
-          }
-
-          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
-
-          const outEdges = edges.filter(e => e.source === node.id)
-          for (const edge of outEdges) {
-            const nextNode = nodes.find(n => n.id === edge.target)
-            if (nextNode) await processNode(nextNode)
-          }
-
-        } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
-          const actionType = node.data.action_type || node.type
-
-          if (actionType === 'http_request') {
-            setContext(node.id, await this.executeHttpRequest(node, context))
-          } else if (actionType === 'set_variable') {
-            setContext(node.id, this.executeSetVariable(node, context))
-          } else if (actionType === 'script') {
-            setContext(node.id, await this.executeScript(node, context, serverId))
-          } else {
-            this.runFlowAction(serverId, node, context)
-            setContext(node.id, { executed: true, action: actionType })
-          }
-
-          this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
-          executedActions.push(actionType)
-
-          // Continue traversing this node's outgoing edges
-          const outEdges = edges.filter(e => e.source === node.id)
-          for (const edge of outEdges) {
-            const nextNode = nodes.find(n => n.id === edge.target)
-            if (nextNode) await processNode(nextNode)
-          }
-        }
-      } catch (nodeErr: any) {
-        this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message)
-        throw nodeErr
-      }
-    }
-
-    const traverse = async (nodeId: string) => {
-      const outEdges = edges.filter(e => e.source === nodeId)
-
+    try {
+      const outEdges = edges.filter(e => e.source === trigger.id)
       for (const edge of outEdges) {
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
-        await processNode(target)
+        await this.processNode(target, nodes, edges, context, serverId, executedActions, setContext, false)
       }
-    }
-
-    try {
-      await traverse(trigger.id)
     } catch (err) {
       console.error(`[DSTP Automation] Flow "${flow.name}" error:`, err)
     }
@@ -428,6 +466,165 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       eventType: event.type,
       actions: executedActions,
       context,
+    })
+
+    this.syncState(serverId)
+  }
+
+  // ─── Stateful Branch Execution (flows with Wait nodes) ─────
+
+  private async executeStatefulBranch(flow: Flow, trigger: FlowNode, event: any, serverId: string, analysis: FlowAnalysis) {
+    const nodes = flow.nodes as FlowNode[]
+    const edges = flow.edges as FlowEdge[]
+    const executedActions: string[] = []
+
+    const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
+    const context: Record<string, any> = {
+      trigger: triggerData,
+    }
+    if (trigger.data.alias) {
+      context[trigger.data.alias] = triggerData
+    }
+
+    const setContext = (nodeId: string, value: any) => {
+      context[nodeId] = value
+      const node = nodes.find(n => n.id === nodeId)
+      if (node?.data.alias) {
+        context[node.data.alias] = value
+      }
+    }
+
+    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger)
+
+    try {
+      // Walk from trigger, stopping at Wait nodes
+      const outEdges = edges.filter(e => e.source === trigger.id)
+      for (const edge of outEdges) {
+        const target = nodes.find(n => n.id === edge.target)
+        if (!target) continue
+
+        const waitNode = await this.processNode(target, nodes, edges, context, serverId, executedActions, setContext, true)
+
+        if (waitNode) {
+          // We reached a Wait node - record branch arrival
+          const waitConfig = waitNode.data
+          const waitAnalysis = analysis.waitNodes.find(w => w.nodeId === waitNode.id)
+          if (!waitAnalysis) continue
+
+          let correlationKey: string | null = null
+          const correlationMode: 'broadcast' | 'correlation_key' | 'all_to_one' = waitConfig.correlation || 'broadcast'
+          if (correlationMode === 'correlation_key' && waitConfig.correlationExpression) {
+            correlationKey = String(this.resolveValue(waitConfig.correlationExpression, context))
+          }
+
+          const store = WorkflowInstanceStore.getInstance()
+
+          // Capture flow reference for callbacks (flow may be GC'd)
+          const flowId = flow.id
+          const flowName = flow.name
+
+          store.recordBranchArrival(
+            flowId,
+            serverId,
+            waitNode.id,
+            trigger.id,
+            { ...context },
+            waitConfig.mode || 'all',
+            waitAnalysis.requiredTriggers,
+            correlationMode,
+            correlationKey,
+            waitConfig.timeoutMs || 300000,
+            // onSatisfied callback - continues execution after wait
+            (mergedContext: Record<string, any>) => {
+              this.executeBranchFromWait(flow, waitNode, mergedContext, serverId)
+            },
+            // onTimeout callback
+            waitConfig.timeoutAction === 'timeout_branch'
+              ? (partialContext: Record<string, any>) => {
+                  partialContext._timedOut = true
+                  this.executeBranchFromWait(flow, waitNode, partialContext, serverId, 'timeout')
+                }
+              : undefined
+          )
+        }
+      }
+    } catch (err) {
+      console.error(`[DSTP Automation] Flow "${flow.name}" stateful branch error:`, err)
+    }
+
+    // Log the branch arrival (not the full flow completion)
+    if (executedActions.length > 0) {
+      this.logRepo(serverId).create({
+        flowId: flow.id,
+        flowName: flow.name,
+        eventType: event.type,
+        actions: [...executedActions, '_branch_arrived'],
+        context,
+      })
+    }
+
+    this.flowRepo(serverId).updateStats(flow.id, (flow.triggerCount || 0) + 1)
+    this.syncState(serverId)
+  }
+
+  // ─── Continue execution after Wait node is satisfied ───
+
+  private async executeBranchFromWait(flow: Flow, waitNode: FlowNode, mergedContext: Record<string, any>, serverId: string, sourceHandle?: string) {
+    const nodes = flow.nodes as FlowNode[]
+    const edges = flow.edges as FlowEdge[]
+    const executedActions: string[] = []
+
+    // Set wait node output in context
+    const waitOutput = {
+      merged: true,
+      mode: mergedContext._mode,
+      correlationKey: mergedContext._correlationKey,
+      branchCount: Object.keys(mergedContext.branches || {}).length,
+      timedOut: mergedContext._timedOut || false,
+    }
+    mergedContext[waitNode.id] = waitOutput
+    if (waitNode.data.alias) {
+      mergedContext[waitNode.data.alias] = waitOutput
+    }
+
+    const setContext = (nodeId: string, value: any) => {
+      mergedContext[nodeId] = value
+      const node = nodes.find(n => n.id === nodeId)
+      if (node?.data.alias) {
+        mergedContext[node.data.alias] = value
+      }
+    }
+
+    this.pushTrace(serverId, waitNode.id, 'completed', {}, waitOutput)
+
+    try {
+      // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
+      const outEdges = edges.filter(e => {
+        if (e.source !== waitNode.id) return false
+        if (sourceHandle) {
+          // Follow edges matching the source handle, or edges with no handle
+          return e.sourceHandle === sourceHandle || !e.sourceHandle
+        }
+        // No source handle filter - follow all non-timeout edges
+        return e.sourceHandle !== 'timeout'
+      })
+
+      for (const edge of outEdges) {
+        const nextNode = nodes.find(n => n.id === edge.target)
+        if (!nextNode) continue
+        await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
+      }
+    } catch (err) {
+      console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, err)
+    }
+
+    // Log the post-wait execution
+    this.logRepo(serverId).create({
+      flowId: flow.id,
+      flowName: flow.name,
+      eventType: '_wait_satisfied',
+      actions: executedActions,
+      context: mergedContext,
     })
 
     this.syncState(serverId)

@@ -176,6 +176,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
       set_variable: { action_type: 'set_variable', params: {} },
       script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
+      wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
     }
     const newNode: Node = {
       id: genId(),
@@ -244,6 +245,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         <button onClick={() => addNode('delay')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/15 text-gray-400 border border-gray-500/20 hover:bg-gray-500/25 transition-colors">
           ⏱ Delay
         </button>
+        <button onClick={() => addNode('wait')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-pink-500/15 text-pink-400 border border-pink-500/20 hover:bg-pink-500/25 transition-colors">
+          🔀 Wait
+        </button>
         <button onClick={() => addNode('script')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors">
           🧩 Script
         </button>
@@ -294,6 +298,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
               if (n.type === 'http_request') return '#06b6d4'
               if (n.type === 'set_variable') return '#a855f7'
               if (n.type === 'script') return '#f97316'
+              if (n.type === 'wait') return '#ec4899'
               return '#3b82f6'
             }}
             className="!bg-[#111] !border-white/10 !rounded-lg"
