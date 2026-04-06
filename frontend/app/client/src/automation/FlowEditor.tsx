@@ -177,6 +177,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       set_variable: { action_type: 'set_variable', params: {} },
       script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
       wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
+      memory: { action: 'read', params: { key: '' } },
     }
     const newNode: Node = {
       id: genId(),
@@ -244,6 +245,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </button>
         <button onClick={() => addNode('delay')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/15 text-gray-400 border border-gray-500/20 hover:bg-gray-500/25 transition-colors">
           ⏱ Delay
+        </button>
+        <button onClick={() => addNode('memory')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-colors">
+          💾 Memory
         </button>
         <button onClick={() => addNode('wait')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-pink-500/15 text-pink-400 border border-pink-500/20 hover:bg-pink-500/25 transition-colors">
           🔀 Wait

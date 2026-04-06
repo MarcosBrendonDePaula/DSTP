@@ -393,6 +393,15 @@ export const nodeOutputSchemas: Record<string, NodeOutputSchema> = {
     description: 'Script return value',
     fields: [], // dynamic — whatever run() returns
   },
+  memory: {
+    description: 'Persistent key-value storage (SQLite)',
+    fields: [
+      { name: 'action', type: 'string', description: 'Operation performed (read/write/delete/read_all)' },
+      { name: 'key', type: 'string', description: 'Key name' },
+      { name: 'value', type: 'any', description: 'Stored value (on read/write)' },
+      { name: 'data', type: 'object', description: 'All key-values (on read_all)' },
+    ],
+  },
   wait: {
     description: 'Merged context from all branches',
     fields: [

@@ -2,7 +2,7 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
-import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
+import { FlowRepository, AutomationLogRepository, EventSchemaRepository, FlowMemoryRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
 import { getAnalysis, invalidateAnalysis, type FlowAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 
@@ -375,6 +375,40 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
           }
         }
 
+      } else if (node.type === 'memory') {
+        const memRepo = new FlowMemoryRepository(serverId)
+        const flowId = context._flowId || ''
+        const action = node.data.action || 'read' // 'read', 'write', 'delete', 'read_all'
+        const key = this.resolveValue(node.data.params?.key || '', context)
+
+        if (action === 'write' && key) {
+          const value = this.resolveValue(node.data.params?.value, context)
+          memRepo.set(flowId, String(key), value)
+          setContext(node.id, { action: 'write', key, value })
+        } else if (action === 'read' && key) {
+          const value = memRepo.get(flowId, String(key))
+          setContext(node.id, { action: 'read', key, value: value ?? null })
+        } else if (action === 'delete' && key) {
+          memRepo.delete(flowId, String(key))
+          setContext(node.id, { action: 'delete', key })
+        } else if (action === 'read_all') {
+          const all = memRepo.getAll(flowId)
+          setContext(node.id, { action: 'read_all', data: all })
+        } else {
+          setContext(node.id, { error: 'invalid action or missing key' })
+        }
+
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+
       } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
         const actionType = node.data.action_type || node.type
 
@@ -419,6 +453,8 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
     const context: Record<string, any> = {
       trigger: triggerData,
+      _flowId: flow.id,
+      _serverId: serverId,
     }
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
@@ -481,6 +517,8 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
     const context: Record<string, any> = {
       trigger: triggerData,
+      _flowId: flow.id,
+      _serverId: serverId,
     }
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
@@ -779,10 +817,18 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     if (!code) return { error: 'no code' }
 
     try {
-      // context.store is a shared key-value storage between flows
-      // Scripts can read/write: context.store.myKey = value
+      // context.store — shared in-memory key-value (between flows, lost on restart)
       const store = LiveAutomation.getStore(serverId || '')
       context.store = store
+      // context.memory — persistent key-value per flow (survives restart, stored in SQLite)
+      const flowId = context._flowId || ''
+      const memRepo = new FlowMemoryRepository(serverId || '')
+      context.memory = {
+        get: (key: string) => memRepo.get(flowId, key),
+        set: (key: string, value: any) => memRepo.set(flowId, key, value),
+        delete: (key: string) => memRepo.delete(flowId, key),
+        getAll: () => memRepo.getAll(flowId),
+      }
       // context.sendCommand(type, data) sends a command to the DST server
       context.sendCommand = (type: string, data: any = {}) => {
         dstStateStore.pushCommandToServer(serverId || '', type, data)

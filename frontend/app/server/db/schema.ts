@@ -58,11 +58,23 @@ export interface EventSchemaField {
 
 export type EventSchema = typeof eventSchemas.$inferSelect
 
+// ─── Flow Memory (persistent key-value store per flow) ────
+
+export const flowMemory = sqliteTable('flow_memory', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  flowId: text('flow_id').notNull(),
+  key: text('key').notNull(),
+  value: text('value', { mode: 'json' }).$type<any>(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type FlowMemoryEntry = typeof flowMemory.$inferSelect
+
 // ─── Types ───────────────────────────────────────────
 
 export interface FlowNode {
   id: string
-  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'http_request' | 'set_variable' | 'script' | 'wait'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'memory' | 'http_request' | 'set_variable' | 'script' | 'wait'
   data: Record<string, any>
   position: { x: number; y: number }
 }

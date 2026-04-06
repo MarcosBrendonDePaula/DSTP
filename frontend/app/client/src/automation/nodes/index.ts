@@ -8,6 +8,7 @@ import { DelayNode } from './actions/DelayNode'
 import { GetPlayerNode } from './actions/GetPlayerNode'
 import { FindPlayerNode } from './actions/FindPlayerNode'
 import { WaitNode } from './actions/WaitNode'
+import { MemoryNode } from './actions/MemoryNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -20,6 +21,7 @@ export const nodeTypes = {
   set_variable: SetVariableNode,
   script: ScriptNode,
   wait: WaitNode,
+  memory: MemoryNode,
 }
 
 export { TriggerNode, TRIGGER_EVENTS } from './triggers/TriggerNode'
