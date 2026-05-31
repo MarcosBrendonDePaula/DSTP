@@ -107,15 +107,33 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
   async saveFlow(payload: { flow: any }) {
     const { flow } = payload
+    console.log(`[DSTP Automation] saveFlow called: id=${flow?.id}, name=${flow?.name}, nodes=${flow?.nodes?.length}`)
     if (!flow?.id || !flow?.server_id) throw new Error('flow with id and server_id required')
 
-    this.flowRepo(flow.server_id).save({
-      id: flow.id,
-      name: flow.name,
-      enabled: flow.enabled ?? true,
-      nodes: flow.nodes || [],
-      edges: flow.edges || [],
-    })
+    // Safety guard: refuse to overwrite an existing non-empty flow with empty nodes
+    // This prevents race conditions where the editor auto-saves before data is hydrated
+    const nodesLen = (flow.nodes || []).length
+    if (nodesLen === 0) {
+      const existing = this.flowRepo(flow.server_id).findById(flow.id)
+      if (existing && (existing.nodes as any[]).length > 0) {
+        console.warn(`[DSTP Automation] saveFlow REFUSED: attempt to overwrite ${flow.id} (${(existing.nodes as any[]).length} nodes) with empty flow`)
+        return { success: false, reason: 'refused_empty_overwrite' }
+      }
+    }
+
+    try {
+      this.flowRepo(flow.server_id).save({
+        id: flow.id,
+        name: flow.name,
+        enabled: flow.enabled ?? true,
+        nodes: flow.nodes || [],
+        edges: flow.edges || [],
+      })
+      console.log(`[DSTP Automation] saveFlow: DB write OK for ${flow.id} (${nodesLen} nodes)`)
+    } catch (err: any) {
+      console.error(`[DSTP Automation] saveFlow ERROR:`, err.message, err.stack)
+      throw err
+    }
 
     invalidateAnalysis(flow.id)
     this.ensureEventCategories(flow)
@@ -790,6 +808,39 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       return
     }
 
+    // Rule actions: install/uninstall rules, set state
+    if (actionType.startsWith('rule_')) {
+      const userid = actionData.userid
+      delete actionData.userid
+
+      if (actionType === 'rule_install') {
+        // rules field comes as JSON string, parse it
+        let rules = actionData.rules
+        if (typeof rules === 'string') {
+          try { rules = JSON.parse(rules) } catch { return }
+        }
+        if (!Array.isArray(rules)) rules = [rules]
+        dstStateStore.pushCommandToServer(serverId, userid ? 'install_rules' : 'install_rules_all', {
+          userid, rules, seq: Date.now(),
+        })
+      } else if (actionType === 'rule_uninstall') {
+        let ids = actionData.ids
+        if (typeof ids === 'string') ids = ids.split(',').map((s: string) => s.trim())
+        if (!Array.isArray(ids)) ids = [ids]
+        dstStateStore.pushCommandToServer(serverId, 'uninstall_rules', {
+          userid, ids, seq: Date.now(),
+        })
+      } else if (actionType === 'rule_set_state') {
+        dstStateStore.pushCommandToServer(serverId, 'set_player_state', {
+          userid,
+          key: actionData.key,
+          value: actionData.value,
+          seq: Date.now(),
+        })
+      }
+      return
+    }
+
     dstStateStore.pushCommandToServer(serverId, actionType, actionData)
   }
 
@@ -883,6 +934,13 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       context.sendCommand = (type: string, data: any = {}) => {
         dstStateStore.pushCommandToServer(serverId || '', type, data)
       }
+      // context.getPlayers() returns the current player list (all shards) for this server,
+      // including buffs (is_ghost, is_starving, etc) as reported by the mod.
+      context.getPlayers = () => {
+        const groups = dstStateStore.getServerGroups()
+        const g = groups.find(x => x.server_id === serverId)
+        return g ? g.all_players : []
+      }
 
       const wrappedCode = `
         ${code}
@@ -904,14 +962,19 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   private ensureEventCategories(flow: any) {
     const categoryMap: Record<string, string> = {
       player_spawn: 'players', player_left: 'players', player_death: 'players',
-      player_ghost: 'players', player_respawn: 'players',
+      player_ghost: 'players', player_respawn: 'players', player_disconnected: 'players',
+      structure_burnt: 'griefing', structure_hammered: 'griefing',
+      container_opened: 'griefing', container_closed: 'griefing',
       chat_message: 'chat',
       new_day: 'world', phase_changed: 'world', season_changed: 'world',
+      moon_phase_changed: 'world', earthquake: 'world', sinkhole_warn: 'world',
+      world_save: 'world', player_teleported: 'world',
       player_kill: 'combat', player_attacked: 'combat',
       player_craft: 'crafting', player_build: 'crafting',
       player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory', player_unequip: 'inventory',
       storm_changed: 'weather', precipitation: 'weather', lightning_strike: 'weather',
       boss_event: 'bosses', boss_killed: 'bosses', fire_started: 'bosses',
+      hound_warning: 'bosses', hound_attack: 'bosses',
       player_eat: 'survival', player_insane: 'survival', player_sane: 'survival',
       player_starving: 'survival', player_fed: 'survival',
       player_freezing: 'survival', player_cooled: 'survival',
@@ -919,6 +982,10 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       player_mounted: 'survival', player_dismounted: 'survival',
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
+      recipe_learned: 'character', book_read: 'character', character_transform: 'character',
+      player_sleep_start: 'character', player_sleep_end: 'character',
+      player_sunk: 'exploration', fish_caught: 'exploration',
+      boat_entered: 'exploration', boat_exited: 'exploration',
     }
 
     const needed = new Set<string>()

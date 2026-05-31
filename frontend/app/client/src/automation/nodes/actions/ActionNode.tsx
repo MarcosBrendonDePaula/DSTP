@@ -69,6 +69,19 @@ export const ACTION_TYPES = [
   { value: 'ui_clear', label: '🧹 Limpar Widgets', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
   ] },
+  { value: 'rule_install', label: '⚙ Install Rule', params: [
+    { key: 'userid', label: 'Player (vazio = todos)', placeholder: '{{trigger.userid}}' },
+    { key: 'rules', label: 'Rules JSON', placeholder: '[{"id":"my_rule","when":{"event":"healthdelta"},"do":[...]}]' },
+  ] },
+  { value: 'rule_uninstall', label: '⚙ Uninstall Rule', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'ids', label: 'Rule IDs (vírgula)', placeholder: 'my_rule,another_rule' },
+  ] },
+  { value: 'rule_set_state', label: '⚙ Set Player State', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'key', label: 'Chave', placeholder: 'coins' },
+    { key: 'value', label: 'Valor', placeholder: '100' },
+  ] },
 ]
 
 export function ActionNode({ id, data, selected }: any) {

@@ -30,16 +30,9 @@ configuration_options = {
         },
         default = "auto",
     },
-    {
-        name = "BACKEND_URL",
-        label = "Backend URL",
-        hover = "URL of the DSTP backend server.",
-        options = {
-            {description = "localhost:3000", data = "http://127.0.0.1:3000"},
-            {description = "localhost:8080", data = "http://127.0.0.1:8080"},
-        },
-        default = "http://127.0.0.1:3000",
-    },
+    -- BACKEND_URL and PANEL_URL are hardcoded in modmain.lua.
+    -- The mod always talks to 127.0.0.1:3000 (DSTP relay); the relay forwards
+    -- to the actual panel backend. This is the only URL DST's sandbox allows.
     {
         name = "POLL_INTERVAL",
         label = "Poll Interval",
@@ -53,6 +46,13 @@ configuration_options = {
             {description = "30s (Slow)", data = 30},
         },
         default = 5,
+    },
+    {
+        name = "DEBUG_LOGS",
+        label = "Debug Logs",
+        hover = "Mostrar logs detalhados do DSTP no console do servidor. Desative em produção para manter o log limpo.",
+        options = {{description = "Off (recomendado)", data = false}, {description = "On", data = true}},
+        default = false,
     },
     -- Event categories
     {
@@ -129,6 +129,27 @@ configuration_options = {
         name = "EVT_HEALTH",
         label = "Events: Health Ticks",
         hover = "Track health/hunger/sanity changes. VERY HEAVY - only enable for debugging.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
+        name = "EVT_CHARACTER",
+        label = "Events: Character",
+        hover = "Track character-specific events: recipe learned, book read, were-transform, sleep/wake.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
+        name = "EVT_EXPLORATION",
+        label = "Events: Exploration",
+        hover = "Track ocean/boat events: sink, fish caught, boat entered/exited.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
+        name = "EVT_GRIEFING",
+        label = "Events: Griefing (Anti-Grief)",
+        hover = "Track structures burnt, hammered, containers opened/closed. Useful for anti-grief detection.",
         options = {{description = "On", data = true}, {description = "Off", data = false}},
         default = false,
     },

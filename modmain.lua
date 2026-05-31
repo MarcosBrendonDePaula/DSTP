@@ -1,11 +1,26 @@
 local require = GLOBAL.require
 
 local SERVER_ID = GetModConfigData("SERVER_ID") or ""
-local BACKEND_URL = GetModConfigData("BACKEND_URL") or "http://127.0.0.1:3000"
+-- BACKEND_URL is fixed: DST sandbox only allows 127.0.0.1 for outbound HTTP.
+-- Users run the DSTP relay (see relay/ directory), which listens on this port
+-- and forwards to the actual public panel URL configured at build time.
+-- Port 47834 is chosen from the unassigned IANA range to avoid conflicts
+-- with common dev services (3000 is typical of Node, 8080 of Tomcat, etc).
+local BACKEND_URL = "http://127.0.0.1:47834"
+-- PANEL_URL is the public address of the web panel (baked into the mod).
+-- Used only to build the link admins receive from #panel.
+local PANEL_URL = "https://local.marcosbrendon.com"
+local DEBUG_LOGS = GetModConfigData("DEBUG_LOGS") == true
+
+local function DebugLog(...)
+    if DEBUG_LOGS then print(...) end
+end
 local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
 -- Client-side UI widget manager (loaded on client only)
 local UIWidgets = nil
+-- Client-side rules engine (loaded on client only)
+local RulesEngine = nil
 
 -- Generate ID from world session_identifier if auto
 local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
@@ -15,20 +30,29 @@ local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
 -------------------------------------------------
 
 -- UI Widget button callback: client → server → backend event queue
-AddModRPCHandler(modname, "UICallback", function(player, callback_name, widget_id)
+-- data_json (optional): JSON-encoded custom payload from client (rules emit_event etc.)
+AddModRPCHandler(modname, "UICallback", function(player, callback_name, widget_id, data_json)
     if player and callback_name then
+        -- Parse optional custom payload
+        local data = nil
+        if data_json and data_json ~= "" then
+            local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, data_json)
+            if ok then data = parsed end
+        end
         local dstp_mod = require("dstp/client")
         dstp_mod.PushEvent("ui_callback", {
             userid = player.userid,
             name = player.name or "unknown",
             callback = callback_name,
+            callback_name = callback_name,  -- alias for rules/schema consistency
             widget_id = widget_id or "",
+            callback_data = data,
         })
     end
 end)
 
 AddModRPCHandler(modname, "RequestPanel", function(player)
-    print("[DSTP] RPC RequestPanel received from:", player and player.name or "unknown")
+    DebugLog("[DSTP] RPC RequestPanel received from:", player and player.name or "unknown")
     -- Server validates: is this player actually an admin?
     local is_admin = false
     for _, client in ipairs(GLOBAL.TheNet:GetClientTable() or {}) do
@@ -38,12 +62,28 @@ AddModRPCHandler(modname, "RequestPanel", function(player)
         end
     end
 
-    if is_admin and player.player_classified then
-        local dstp_mod = require("dstp/client")
-        local server_id = dstp_mod.GetServerId() or ""
-        local panel_url = "Panel: " .. BACKEND_URL .. "/?server=" .. server_id
-        player.player_classified._dstp_pm:set(panel_url)
-    end
+    if not (is_admin and player.player_classified) then return end
+
+    local dstp_mod = require("dstp/client")
+    local server_id = dstp_mod.GetServerId() or ""
+    -- BACKEND_URL: internal (LAN) URL used by QueryServer. Must be LAN/localhost — DST sandbox blocks public domains.
+    -- PANEL_URL:   public URL the admin's browser will open. Can be any https domain.
+    local base_url = PANEL_URL .. "/?server=" .. server_id
+
+    -- Ask backend for a one-shot magic link (expires in 2 min, consumed on first open).
+    local pc = player.player_classified
+    local link_url = BACKEND_URL .. "/api/panel-auth/issue-link/" .. server_id
+    GLOBAL.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
+        if not pc:IsValid() then return end
+        local final_url = base_url
+        if is_ok and http_code == 200 and result then
+            local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, result)
+            if ok and parsed and parsed.token then
+                final_url = base_url .. "&access=" .. tostring(parsed.token)
+            end
+        end
+        pc._dstp_pm:set("Panel: " .. final_url)
+    end, "GET")
 end)
 
 -------------------------------------------------
@@ -63,11 +103,16 @@ AddPrefabPostInit("player_classified", function(inst)
             local msg = inst._dstp_pm:value()
             if not msg or msg == "" then return end
 
-            local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
-            if url and url:find(BACKEND_URL, 1, true) == 1 then
-                GLOBAL.VisitURL(url)
+            -- Panel links: open the URL silently, do NOT echo to chat.
+            if msg:sub(1, 7) == "Panel: " then
+                local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
+                if url and (url:find(BACKEND_URL, 1, true) == 1 or url:find(PANEL_URL, 1, true) == 1) then
+                    GLOBAL.VisitURL(url)
+                end
+                return
             end
 
+            -- Other PMs (private_message action etc.): show in chat.
             if GLOBAL.ChatHistory then
                 GLOBAL.ChatHistory:AddToHistory(
                     GLOBAL.ChatTypes.Message,
@@ -89,15 +134,30 @@ AddPrefabPostInit("player_classified", function(inst)
                 UIWidgets.Init({ GLOBAL = GLOBAL })
 
                 -- Wire button callbacks: send RPC to server which queues an event
+                -- AND dispatch into the local rules engine (if loaded) as a synthetic event
                 UIWidgets.SetCallbackHandler(function(callback_name, widget_id)
                     if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["UICallback"] then
-                        SendModRPCToServer(MOD_RPC[modname]["UICallback"], callback_name, widget_id)
+                        SendModRPCToServer(MOD_RPC[modname]["UICallback"], callback_name, widget_id, "")
+                    end
+                    if RulesEngine then
+                        RulesEngine.OnUIButtonClick(callback_name, widget_id, nil)
                     end
                 end)
             end
 
-            local ok, cmd = pcall(GLOBAL.json.decode, cmd_str)
-            if ok and cmd then
+            local ok, cmd = GLOBAL.pcall(GLOBAL.json.decode, cmd_str)
+            if not (ok and cmd and cmd.action) then return end
+
+            -- Route rules_* / state_* to RulesEngine, others to UIWidgets
+            local act = tostring(cmd.action)
+            if act:sub(1, 6) == "rules_" or act:sub(1, 6) == "state_" then
+                if not RulesEngine then
+                    RulesEngine = GLOBAL.require("dstp/rules_engine")
+                    RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
+                    RulesEngine.SetUIWidgets(UIWidgets)
+                end
+                RulesEngine.ProcessCommand(cmd)
+            else
                 UIWidgets.ProcessCommand(cmd)
             end
         end)
@@ -118,7 +178,9 @@ dstp.Init(env, {
     server_id = is_auto_id and "auto" or SERVER_ID,
     is_auto_id = is_auto_id,
     backend_url = BACKEND_URL,
+    panel_url_base = PANEL_URL,
     poll_interval = POLL_INTERVAL,
+    debug_logs = GetModConfigData("DEBUG_LOGS") == true,
     events = {
         players = GetModConfigData("EVT_PLAYERS") ~= false,
         chat = GetModConfigData("EVT_CHAT") ~= false,
@@ -131,88 +193,15 @@ dstp.Init(env, {
         gathering = GetModConfigData("EVT_GATHERING") == true,
         survival = GetModConfigData("EVT_SURVIVAL") == true,
         health = GetModConfigData("EVT_HEALTH") == true,
+        character = GetModConfigData("EVT_CHARACTER") == true,
+        exploration = GetModConfigData("EVT_EXPLORATION") == true,
+        griefing = GetModConfigData("EVT_GRIEFING") == true,
     },
 })
 
 -------------------------------------------------
--- Admin Panel Button in Tab Scoreboard
+-- Admin Panel Access
 -------------------------------------------------
-
-local ImageButton = require("widgets/imagebutton")
-local PlayerStatusScreen = require("screens/playerstatusscreen")
-
--- Client-side: send RPC to server asking for the panel URL
-local function RequestPanelUrl()
-    print("[DSTP] RequestPanelUrl called, MOD_RPC:", MOD_RPC, "modname:", modname)
-    if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["RequestPanel"] then
-        print("[DSTP] Sending RPC...")
-        SendModRPCToServer(MOD_RPC[modname]["RequestPanel"])
-    else
-        print("[DSTP] MOD_RPC not available, trying GLOBAL")
-        SendModRPCToServer(GLOBAL.MOD_RPC[modname]["RequestPanel"])
-    end
-end
-
-local OldDoInit = PlayerStatusScreen.DoInit
-function PlayerStatusScreen:DoInit(ClientObjs, ...)
-    OldDoInit(self, ClientObjs, ...)
-
-    -- Only for admins (client-side check for UI only, server validates the real access)
-    if not GLOBAL.TheNet:GetIsServerAdmin() then return end
-
-    -- Guard: only wrap updatefn once (same pattern as Global Positions)
-    if not self.scroll_list._dstp_old_updatefn then
-        -- Add DSTP button to each static row widget
-        for _, playerListing in pairs(self.scroll_list.static_widgets) do
-            playerListing.dstp_btn = playerListing:AddChild(
-                ImageButton(
-                    "images/button_icons.xml", "configure_mod.tex",
-                    "configure_mod.tex", "configure_mod.tex", "configure_mod.tex",
-                    nil, {1, 1}, {0, 0}
-                )
-            )
-            playerListing.dstp_btn.scale_on_focus = false
-            playerListing.dstp_btn:SetHoverText(
-                "DSTP Admin Panel",
-                {font = GLOBAL.NEWFONT_OUTLINE, size = 24, offset_x = 0, offset_y = 30, colour = {1, 1, 1, 1}}
-            )
-
-            -- Hover feedback matching Global Positions style
-            local gainfocusfn = playerListing.dstp_btn.OnGainFocus
-            playerListing.dstp_btn.OnGainFocus = function()
-                gainfocusfn(playerListing.dstp_btn)
-                GLOBAL.TheFrontEnd:GetSound():PlaySound("dontstarve/HUD/click_mouseover")
-                playerListing.dstp_btn.image:SetScale(1.1)
-            end
-            local losefocusfn = playerListing.dstp_btn.OnLoseFocus
-            playerListing.dstp_btn.OnLoseFocus = function()
-                losefocusfn(playerListing.dstp_btn)
-                playerListing.dstp_btn.image:SetScale(1)
-            end
-
-            playerListing.dstp_btn:SetOnClick(function()
-                RequestPanelUrl()
-            end)
-            playerListing.dstp_btn:Hide()
-        end
-
-        -- Wrap updatefn to show button only on the admin's own row
-        self.scroll_list._dstp_old_updatefn = self.scroll_list.updatefn
-        self.scroll_list.updatefn = function(playerListing, client, ...)
-            self.scroll_list._dstp_old_updatefn(playerListing, client, ...)
-
-            if playerListing.dstp_btn then
-                if client and self.owner and client.userid == self.owner.userid then
-                    -- Position after viewprofile button (same x=92 as Global Positions)
-                    playerListing.dstp_btn:SetPosition(92, 3, 0)
-                    -- Wire focus navigation so the button is reachable
-                    playerListing.viewprofile:SetFocusChangeDir(GLOBAL.MOVE_RIGHT, playerListing.dstp_btn)
-                    playerListing.dstp_btn:SetFocusChangeDir(GLOBAL.MOVE_LEFT, playerListing.viewprofile)
-                    playerListing.dstp_btn:Show()
-                else
-                    playerListing.dstp_btn:Hide()
-                end
-            end
-        end
-    end
-end
+-- Panel access is via chat command `#panel` (admins only).
+-- See HandleBuiltinCommand in scripts/dstp/client.lua.
+-- The old Tab scoreboard button was removed to keep panel opening explicit.

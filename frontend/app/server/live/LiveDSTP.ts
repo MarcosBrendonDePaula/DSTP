@@ -95,6 +95,7 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
           phase: s.server?.phase,
           is_cave: s.server?.is_cave,
           max_players: s.server?.max_players,
+          time_scale: s.server?.time_scale,
           player_count: s.players.length,
         })),
       }

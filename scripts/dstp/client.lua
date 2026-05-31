@@ -20,9 +20,11 @@ local config = {
     shard_id = nil,   -- auto: server_id:master or server_id:caves
     shard_type = nil,  -- "master" or "caves"
     backend_url = "http://127.0.0.1:3000",
+    panel_url_base = nil,  -- public URL for browser links; defaults to backend_url
     poll_interval = 5,
     max_batch_size = 50,
     dump_mode = false,  -- when true, events include raw DST data
+    debug_logs = false,  -- when true, Log() prints to server log; errors always print
 }
 
 local command_handlers = {}
@@ -42,17 +44,36 @@ local RegisterPlayerEvents
 local RegisterWorldEvents
 local RegisterWeatherEvents
 local RegisterBossEvents
+local RegisterGriefEvents
 local RegisterGameEvents
 
 -------------------------------------------------
 -- Logging
+--
+-- HOT-PATH RULE: always gate Log() calls with `if DEBUG then ... end` so the
+-- string concatenation never runs when debug is off. `DEBUG` is a module-local
+-- alias of config.debug_logs, updated by DSTP.Init().
+--
+-- Log()      — debug-only (gated via DEBUG)
+-- LogError() — always prints (errors should never be silent)
+-- LogInfo()  — always prints (boot banners, critical warnings)
 -------------------------------------------------
+-- Module-local debug flag. Updated by Init() from mod config.
+-- Use `if DEBUG then Log(...) end` around expensive log lines to avoid
+-- string concatenation/tostring() cost when debug is off.
+DSTP._DEBUG = false
 local function Log(msg)
-    print("[DSTP] " .. msg)
+    if DSTP._DEBUG then
+        print("[DSTP] " .. msg)
+    end
 end
 
 local function LogError(msg)
     print("[DSTP ERROR] " .. msg)
+end
+
+local function LogInfo(msg)
+    print("[DSTP] " .. msg)
 end
 
 -------------------------------------------------
@@ -76,6 +97,10 @@ end
 -- Data collectors
 -------------------------------------------------
 local function GetServerInfo()
+    local timescale = 1
+    local ok_ts, ts = _G.pcall(function() return _G.TheSim:GetTimeScale() end)
+    if ok_ts and type(ts) == "number" then timescale = ts end
+
     return {
         name = _G.TheNet:GetServerName() or "DST Server",
         current_players = #_G.AllPlayers,
@@ -86,6 +111,7 @@ local function GetServerInfo()
         phase = _G.TheWorld.state and _G.TheWorld.state.phase or "unknown",
         is_cave = _G.TheWorld:HasTag("cave"),
         uptime = math.floor(_G.GetTime()),
+        time_scale = timescale,
     }
 end
 
@@ -344,6 +370,12 @@ function DSTP.PushEvent(event_type, data, raw_data)
     while #state.event_queue > config.max_batch_size * 2 do
         table.remove(state.event_queue, 1)
     end
+
+    -- Request an immediate flush so the next scheduled poll fires fast.
+    -- The scheduler in ComputeNextDelay already checks event_queue length, but
+    -- if a poll is currently in-flight this won't help — it just means the
+    -- next reschedule picks 0.5s. That's fine; we avoid spamming here.
+    state.flush_requested = true
 end
 
 -------------------------------------------------
@@ -370,7 +402,7 @@ end
 local function ProcessCommands(commands)
     if not commands then return end
     for _, cmd in ipairs(commands) do
-        Log("Exec: " .. tostring(cmd.type))
+        if DSTP._DEBUG then Log("Exec: " .. tostring(cmd.type)) end
         ExecuteCommand(cmd)
     end
 end
@@ -426,14 +458,14 @@ local function RegisterBuiltinCommands()
     DSTP.RegisterCommand("add_admin", function(data)
         if data.userid then
             _G.TheNet:SetIsClientAdmin(data.userid, true)
-            Log("Admin added: " .. tostring(data.userid))
+            if DSTP._DEBUG then Log("Admin added: " .. tostring(data.userid)) end
         end
     end)
 
     DSTP.RegisterCommand("remove_admin", function(data)
         if data.userid then
             _G.TheNet:SetIsClientAdmin(data.userid, false)
-            Log("Admin removed: " .. tostring(data.userid))
+            if DSTP._DEBUG then Log("Admin removed: " .. tostring(data.userid)) end
         end
     end)
 
@@ -445,10 +477,10 @@ local function RegisterBuiltinCommands()
     end)
 
     DSTP.RegisterCommand("respawn", function(data)
-        Log("Respawn command: userid=" .. tostring(data.userid))
+        if DSTP._DEBUG then Log("Respawn command: userid=" .. tostring(data.userid)) end
         local player = FindPlayer(data.userid)
         if player then
-            Log("  Found player: " .. tostring(player.name) .. " ghost=" .. tostring(player:HasTag("playerghost")))
+            if DSTP._DEBUG then Log("  Found player: " .. tostring(player.name) .. " ghost=" .. tostring(player:HasTag("playerghost"))) end
             if player:HasTag("playerghost") then
                 player:PushEvent("respawnfromghost")
                 Log("  Respawned!")
@@ -456,7 +488,7 @@ local function RegisterBuiltinCommands()
                 Log("  Player is NOT a ghost, skipping")
             end
         else
-            Log("  Player NOT found for userid: " .. tostring(data.userid))
+            if DSTP._DEBUG then Log("  Player NOT found for userid: " .. tostring(data.userid)) end
         end
     end)
 
@@ -487,7 +519,7 @@ local function RegisterBuiltinCommands()
             local enable = data.enabled ~= false
             player.components.health:SetInvincible(enable)
             player.components.health.invincible = enable
-            Log("Godmode " .. (enable and "ON" or "OFF") .. " for " .. tostring(player.name))
+            if DSTP._DEBUG then Log("Godmode " .. (enable and "ON" or "OFF") .. " for " .. tostring(player.name)) end
         else
             LogError("Godmode: player not found or no health - " .. tostring(data.userid))
         end
@@ -614,7 +646,7 @@ local function RegisterBuiltinCommands()
     DSTP.RegisterCommand("set_speed", function(data)
         local speed = data.speed or 1
         _G.TheSim:SetTimeScale(speed)
-        Log("Time scale set to " .. tostring(speed))
+        if DSTP._DEBUG then Log("Time scale set to " .. tostring(speed)) end
     end)
 
     DSTP.RegisterCommand("pause", function(data)
@@ -677,7 +709,7 @@ local function RegisterBuiltinCommands()
                 if count > 1 and ent.components.stackable then
                     ent.components.stackable:SetStackSize(count)
                 end
-                Log("Spawned " .. data.prefab .. " at " .. player.name)
+                if DSTP._DEBUG then Log("Spawned " .. data.prefab .. " at " .. player.name) end
             end
         end
     end)
@@ -698,7 +730,7 @@ local function RegisterBuiltinCommands()
                     if removed >= limit then break end
                 end
             end
-            Log("Removed " .. removed .. "x " .. data.prefab .. " near " .. player.name)
+            if DSTP._DEBUG then Log("Removed " .. removed .. "x " .. data.prefab .. " near " .. player.name) end
         end
     end)
 
@@ -710,7 +742,7 @@ local function RegisterBuiltinCommands()
             for _, ent in ipairs(ents) do
                 if (not data.prefab or ent.prefab == data.prefab) and ent.components and ent.components.workable then
                     ent.components.workable:Destroy(ent)
-                    Log("Destroyed " .. ent.prefab)
+                    if DSTP._DEBUG then Log("Destroyed " .. ent.prefab) end
                     if not data.all then break end
                 end
             end
@@ -719,7 +751,7 @@ local function RegisterBuiltinCommands()
 
     DSTP.RegisterCommand("set_dump_mode", function(data)
         config.dump_mode = data.enabled ~= false
-        Log("Dump mode: " .. tostring(config.dump_mode))
+        if DSTP._DEBUG then Log("Dump mode: " .. tostring(config.dump_mode)) end
     end)
 
     -- UI Widget commands: send JSON command to a specific player's client
@@ -745,7 +777,7 @@ local function RegisterBuiltinCommands()
             return
         end
         player.player_classified._dstp_ui:set(json_str)
-        Log("ui_command sent to " .. tostring(data.userid) .. ": " .. tostring(data.cmd.action))
+        if DSTP._DEBUG then Log("ui_command sent to " .. tostring(data.userid) .. ": " .. tostring(data.cmd.action)) end
     end)
 
     -- Broadcast UI command to all connected players
@@ -765,13 +797,89 @@ local function RegisterBuiltinCommands()
                 player.player_classified._dstp_ui:set(json_str)
             end
         end
-        Log("ui_broadcast: " .. tostring(data.cmd.action) .. " to " .. #_G.AllPlayers .. " players")
+        if DSTP._DEBUG then Log("ui_broadcast: " .. tostring(data.cmd.action) .. " to " .. #_G.AllPlayers .. " players") end
+    end)
+
+    -- Install rules for a specific player
+    DSTP.RegisterCommand("install_rules", function(data)
+        if not data.userid or not data.rules then return end
+        local player = FindPlayer(data.userid)
+        if not player or not player.player_classified or not player.player_classified._dstp_ui then return end
+        local cmd = { action = "rules_install", rules = data.rules, seq = data.seq }
+        local json_str = SafeEncode(cmd)
+        if json_str then
+            player.player_classified._dstp_ui:set(json_str)
+            if DSTP._DEBUG then Log("install_rules sent to " .. data.userid .. " (" .. #data.rules .. " rules)") end
+        end
+    end)
+
+    -- Uninstall rules
+    DSTP.RegisterCommand("uninstall_rules", function(data)
+        if not data.userid or not data.ids then return end
+        local player = FindPlayer(data.userid)
+        if not player or not player.player_classified or not player.player_classified._dstp_ui then return end
+        local cmd = { action = "rules_uninstall", ids = data.ids, seq = data.seq }
+        local json_str = SafeEncode(cmd)
+        if json_str then
+            player.player_classified._dstp_ui:set(json_str)
+        end
+    end)
+
+    -- Set player state value (backend pushes a variable to client player_state)
+    DSTP.RegisterCommand("set_player_state", function(data)
+        if not data.userid or not data.key then return end
+        local player = FindPlayer(data.userid)
+        if not player or not player.player_classified or not player.player_classified._dstp_ui then return end
+        local cmd = { action = "state_set", key = data.key, value = data.value, seq = data.seq }
+        local json_str = SafeEncode(cmd)
+        if json_str then
+            player.player_classified._dstp_ui:set(json_str)
+        end
+    end)
+
+    -- Broadcast rules to ALL players
+    DSTP.RegisterCommand("install_rules_all", function(data)
+        if not data.rules then return end
+        local cmd = { action = "rules_install", rules = data.rules, seq = data.seq }
+        local json_str = SafeEncode(cmd)
+        if not json_str then return end
+        for _, player in ipairs(_G.AllPlayers) do
+            if player.player_classified and player.player_classified._dstp_ui then
+                player.player_classified._dstp_ui:set(json_str)
+            end
+        end
+        if DSTP._DEBUG then Log("install_rules broadcast (" .. #data.rules .. " rules)") end
     end)
 end
 
 -------------------------------------------------
--- Polling
+-- Polling (adaptive)
 -------------------------------------------------
+-- Adaptive polling: rate depends on what the server is doing.
+-- Empty server idles at 30s, active server syncs at 5s, burst mode (events
+-- queued or commands arriving) drops to 0.5s briefly.
+-- `state.next_poll_delay` is read by ScheduleNextPoll after each cycle.
+state.next_poll_delay = nil
+state.last_cmd_count = 0
+
+local function ComputeNextDelay()
+    -- Events in queue → flush immediately next tick
+    if #state.event_queue > 0 then return 0.5 end
+
+    -- Burst mode: backend sent commands recently → stay responsive
+    if state.last_cmd_count > 0 then return 2 end
+
+    -- Idle: no players connected → slow way down
+    local client_count = 0
+    for _, c in pairs(_G.TheNet and _G.TheNet:GetClientTable() or {}) do
+        if c.userid and c.userid ~= "" then client_count = client_count + 1 end
+    end
+    if client_count == 0 then return 30 end
+
+    -- Active server: use configured poll_interval as baseline
+    return config.poll_interval
+end
+
 local function DoPoll()
     if not _G.TheWorld or not _G.TheWorld.ismastersim then return end
 
@@ -806,7 +914,10 @@ local function DoPoll()
                     state.connection_errors = 0
                     state.last_successful_poll = _G.GetTime()
                     if data.commands and #data.commands > 0 then
+                        state.last_cmd_count = #data.commands
                         ProcessCommands(data.commands)
+                    else
+                        state.last_cmd_count = 0
                     end
                     -- Hot-toggle event categories from backend
                     if data.enable_events then
@@ -859,7 +970,7 @@ RegisterPerPlayerEvents = function(player)
                 end
             end)
         else
-            Log("WARNING: Could not hook player events - userid still empty after retries")
+            LogInfo("WARNING: Could not hook player events - userid still empty after retries")
         end
         return
     end
@@ -1103,6 +1214,133 @@ RegisterPerPlayerEvents = function(player)
             target = data and data.target and data.target.prefab or "unknown",
         }, data)
     end)
+
+    -- world interactions
+    -- Player entered a wormhole
+    player:ListenForEvent("onwenthome", function(inst)
+        if not evt_config.world then return end
+        DSTP.PushEvent("player_teleported", {
+            userid = uid, name = pname,
+            type = "wormhole_enter",
+        })
+    end)
+
+    -- Player left a wormhole / teleport
+    player:ListenForEvent("onleftplayer", function(inst)
+        if not evt_config.world then return end
+        DSTP.PushEvent("player_teleported", {
+            userid = uid, name = pname,
+            type = "wormhole_exit",
+        })
+    end)
+
+    -- exploration
+    player:ListenForEvent("onsink", function(inst, data)
+        if not evt_config.exploration then return end
+        local x, _, z = 0, 0, 0
+        if inst.Transform then x, _, z = inst.Transform:GetWorldPosition() end
+        DSTP.PushEvent("player_sunk", {
+            userid = uid, name = pname,
+            x = math.floor(x), z = math.floor(z),
+        }, data)
+    end)
+
+    player:ListenForEvent("fishingcollect", function(inst, data)
+        if not evt_config.exploration then return end
+        local fish = data and data.fish
+        DSTP.PushEvent("fish_caught", {
+            userid = uid, name = pname,
+            fish = fish and fish.prefab or "unknown",
+        }, data)
+    end)
+
+    player:ListenForEvent("onboat", function(inst)
+        if not evt_config.exploration then return end
+        DSTP.PushEvent("boat_entered", { userid = uid, name = pname })
+    end)
+
+    player:ListenForEvent("onboatoff", function(inst)
+        if not evt_config.exploration then return end
+        DSTP.PushEvent("boat_exited", { userid = uid, name = pname })
+    end)
+
+    -- griefing: container open/close and hammer
+    player:ListenForEvent("onopencontainer", function(inst, data)
+        if not evt_config.griefing then return end
+        local c = data and data.container
+        DSTP.PushEvent("container_opened", {
+            userid = uid, name = pname,
+            container_prefab = c and c.prefab or "unknown",
+        }, data)
+    end)
+
+    player:ListenForEvent("onclosecontainer", function(inst, data)
+        if not evt_config.griefing then return end
+        local c = data and data.container
+        DSTP.PushEvent("container_closed", {
+            userid = uid, name = pname,
+            container_prefab = c and c.prefab or "unknown",
+        }, data)
+    end)
+
+    player:ListenForEvent("onhammer", function(inst, data)
+        if not evt_config.griefing then return end
+        local target = data and data.target
+        if not target then return end
+        DSTP.PushEvent("structure_hammered", {
+            userid = uid, name = pname,
+            prefab = target.prefab or "unknown",
+        }, data)
+    end)
+
+    -- character-specific events
+    -- Player learned a new cookbook recipe (fires when they eat something new)
+    player:ListenForEvent("learncookbookrecipe", function(inst, data)
+        if not evt_config.character then return end
+        DSTP.PushEvent("recipe_learned", {
+            userid = uid, name = pname,
+            product = data and data.product or "unknown",
+        }, data)
+    end)
+
+    -- Wickerbottom (or any character) read a book
+    player:ListenForEvent("readbook", function(inst, data)
+        if not evt_config.character then return end
+        DSTP.PushEvent("book_read", {
+            userid = uid, name = pname,
+            book = data and data.book and data.book.prefab or "unknown",
+        }, data)
+    end)
+
+    -- Woodie / Wurt / etc. transformed into were-form
+    player:ListenForEvent("transformwere", function(inst)
+        if not evt_config.character then return end
+        DSTP.PushEvent("character_transform", {
+            userid = uid, name = pname,
+            form = "were",
+        })
+    end)
+
+    -- Transformed back to normal form
+    player:ListenForEvent("transformnormal", function(inst)
+        if not evt_config.character then return end
+        DSTP.PushEvent("character_transform", {
+            userid = uid, name = pname,
+            form = "normal",
+        })
+    end)
+
+    -- Player went to sleep (tent, siesta, bedroll)
+    player:ListenForEvent("gotosleep", function(inst)
+        if not evt_config.character then return end
+        DSTP.PushEvent("player_sleep_start", { userid = uid, name = pname })
+    end)
+
+    -- Player woke up
+    player:ListenForEvent("onwakeup", function(inst)
+        if not evt_config.character then return end
+        DSTP.PushEvent("player_sleep_end", { userid = uid, name = pname })
+    end)
 end
 
 RegisterPlayerEvents = function(inst)
@@ -1127,6 +1365,16 @@ RegisterPlayerEvents = function(inst)
             userid = player.userid,
             name = player.name,
         }, player)
+    end)
+
+    inst:ListenForEvent("ms_playerdisconnected", function(world, data)
+        if not evt_config.players then return end
+        local p = data and data.player
+        DSTP.PushEvent("player_disconnected", {
+            userid = p and p.userid or (data and data.userid) or "unknown",
+            name = p and p.name or (data and data.name) or "unknown",
+            reason = data and data.reason or "disconnect",
+        }, data)
     end)
 
     inst:ListenForEvent("entity_death", function(world, data)
@@ -1163,6 +1411,78 @@ RegisterWorldEvents = function(inst)
             x = pt and pt.x and math.floor(pt.x) or 0,
             z = pt and pt.z and math.floor(pt.z) or 0,
         }, pt)
+    end)
+
+    -- Moon phase changed (fires when phase actually changes naturally)
+    -- Also listen to ms_setmoonphase for manual/console changes
+    local function OnMoonPhase(world, data)
+        if not evt_config.world then return end
+        local phase = (data and data.moonphase)
+            or (data and type(data) == "string" and data)
+            or (world.state and world.state.moonphase)
+            or "unknown"
+        DSTP.PushEvent("moon_phase_changed", {
+            phase = tostring(phase),
+            is_new = tostring(phase) == "new",
+            is_full = tostring(phase) == "full",
+        }, data)
+    end
+    inst:ListenForEvent("moonphasechanged", OnMoonPhase)
+    inst:ListenForEvent("ms_setmoonphase", OnMoonPhase)
+    -- Fallback: also listen to nightmarephase (triggered each phase transition)
+    inst:ListenForEvent("phasechanged", function(world, phase)
+        -- Check if moon phase actually changed
+        if not evt_config.world then return end
+        if world.state and world.state.moonphase and inst._last_moonphase ~= world.state.moonphase then
+            local prev = inst._last_moonphase
+            inst._last_moonphase = world.state.moonphase
+            if prev ~= nil then
+                DSTP.PushEvent("moon_phase_changed", {
+                    phase = tostring(world.state.moonphase),
+                    is_new = tostring(world.state.moonphase) == "new",
+                    is_full = tostring(world.state.moonphase) == "full",
+                })
+            end
+        end
+    end)
+
+    -- Earthquake started (caves only typically)
+    inst:ListenForEvent("ms_earthquake", function(world)
+        if not evt_config.world then return end
+        DSTP.PushEvent("earthquake", {
+            shard_type = config.shard_type,
+        })
+    end)
+
+    -- Sinkhole warning
+    inst:ListenForEvent("ms_sinkhole_warn", function(world)
+        if not evt_config.world then return end
+        DSTP.PushEvent("sinkhole_warn", {
+            shard_type = config.shard_type,
+        })
+    end)
+
+    -- World save triggered
+    inst:ListenForEvent("ms_save", function(world)
+        if not evt_config.world then return end
+        DSTP.PushEvent("world_save", {})
+    end)
+
+    -- Hound attack warning (houndwarningsound fires when hounds are about to attack)
+    -- This is on the hounded component of TheWorld
+    inst:ListenForEvent("houndwarningsound", function(world)
+        if not evt_config.bosses then return end
+        DSTP.PushEvent("hound_warning", {
+            shard_type = config.shard_type,
+        })
+    end)
+
+    -- Hound attack begins (when hounds actually spawn)
+    inst:ListenForEvent("ms_houndattack", function(world)
+        if not evt_config.bosses then return end
+        DSTP.PushEvent("hound_attack", {
+            shard_type = config.shard_type,
+        })
     end)
 end
 
@@ -1232,6 +1552,31 @@ RegisterBossEvents = function(inst)
     end)
 end
 
+-- Anti-grief detection: structure_burnt via entity_death + burnable check
+RegisterGriefEvents = function(inst)
+    inst:ListenForEvent("entity_death", function(world, data)
+        if not evt_config.griefing then return end
+        local ent = data and data.inst
+        if not ent then return end
+        -- Only report structures
+        if not (ent:HasTag("structure") or (ent.components and ent.components.workable)) then return end
+        -- Was it burnt?
+        local was_burnt = ent.components and ent.components.burnable and ent.components.burnable.burning
+        local is_fire_cause = data.cause == "fire"
+            or (data.afflicter and data.afflicter.HasTag and data.afflicter:HasTag("fire"))
+        if was_burnt or is_fire_cause then
+            local x, _, z = 0, 0, 0
+            if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
+            DSTP.PushEvent("structure_burnt", {
+                prefab = ent.prefab or "unknown",
+                cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "fire",
+                x = math.floor(x),
+                z = math.floor(z),
+            }, data)
+        end
+    end)
+end
+
 RegisterGameEvents = function(inst)
     world_inst = inst
 
@@ -1241,6 +1586,7 @@ RegisterGameEvents = function(inst)
     RegisterWorldEvents(inst)
     RegisterWeatherEvents(inst)
     RegisterBossEvents(inst)
+    RegisterGriefEvents(inst)
 
     -- Hook per-player events for existing players
     for _, player in ipairs(_G.AllPlayers) do
@@ -1251,7 +1597,7 @@ RegisterGameEvents = function(inst)
     for k, v in pairs(evt_config) do
         if v then table.insert(enabled, k) end
     end
-    Log("Event categories: " .. table.concat(enabled, ", "))
+    if DSTP._DEBUG then Log("Event categories: " .. table.concat(enabled, ", ")) end
 end
 
 -- Send private message to a specific player via net_string
@@ -1259,8 +1605,32 @@ SendPrivateMessage = function(player, message)
     if not player or not player:IsValid() then return end
     if player.player_classified and player.player_classified._dstp_pm then
         player.player_classified._dstp_pm:set(message)
-        Log("PM to " .. tostring(player.name) .. ": " .. message)
+        if DSTP._DEBUG then Log("PM to " .. tostring(player.name) .. ": " .. message) end
     end
+end
+
+-- Fetch a one-shot magic link from the backend and call cb(url) with the final URL.
+-- Falls back to the plain panel_url if the backend is unreachable.
+local function FetchPanelUrlWithToken(cb)
+    local link_url = config.backend_url .. "/api/panel-auth/issue-link/" .. config.server_id
+    if DSTP._DEBUG then Log("FetchPanelUrl: GET " .. link_url) end
+    _G.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
+        Log(string.format("FetchPanelUrl response: is_ok=%s http_code=%s result_len=%s",
+            tostring(is_ok), tostring(http_code), tostring(result and #result or 0)))
+        if result and #result > 0 and #result < 500 then
+            if DSTP._DEBUG then Log("FetchPanelUrl body: " .. tostring(result)) end
+        end
+        local final_url = config.panel_url
+        if is_ok and http_code == 200 and result then
+            local ok, parsed = _G.pcall(_G.json.decode, result)
+            Log(string.format("FetchPanelUrl parse: ok=%s has_token=%s",
+                tostring(ok), tostring(parsed and parsed.token ~= nil)))
+            if ok and parsed and parsed.token then
+                final_url = config.panel_url .. "&access=" .. tostring(parsed.token)
+            end
+        end
+        cb(final_url)
+    end, "GET")
 end
 
 -- Send panel URL to a specific player (if admin)
@@ -1269,7 +1639,11 @@ SendUrlToAdmin = function(player)
     local client_table = _G.TheNet:GetClientTable() or {}
     for _, client in pairs(client_table) do
         if client.userid == player.userid and client.admin then
-            SendPrivateMessage(player, "Panel: " .. config.panel_url)
+            FetchPanelUrlWithToken(function(url)
+                if player:IsValid() then
+                    SendPrivateMessage(player, "Panel: " .. url)
+                end
+            end)
             return
         end
     end
@@ -1281,7 +1655,12 @@ SendUrlToAdmins = function()
         if client.admin and client.userid then
             for _, player in ipairs(_G.AllPlayers) do
                 if player.userid == client.userid then
-                    SendPrivateMessage(player, "Panel: " .. config.panel_url)
+                    local captured = player
+                    FetchPanelUrlWithToken(function(url)
+                        if captured:IsValid() then
+                            SendPrivateMessage(captured, "Panel: " .. url)
+                        end
+                    end)
                 end
             end
         end
@@ -1289,10 +1668,47 @@ SendUrlToAdmins = function()
 end
 
 -- Hook chat via network message handler
+-- Built-in chat commands (client-facing, intercepted before Networking_Say)
+-- Return true to suppress the message (not broadcast to chat).
+local function HandleBuiltinCommand(userid, name, message, player)
+    if not message or type(message) ~= "string" then return false end
+    -- Normalize: DST rewrites "/" to "#" on send. Accept both.
+    local trimmed = message:match("^%s*(.-)%s*$") or message
+    local cmd = trimmed:lower()
+
+    if cmd == "#painel" or cmd == "/painel" or cmd == "#panel" or cmd == "/panel" then
+        -- Only admins get the panel link
+        local is_admin = false
+        for _, client in pairs(_G.TheNet:GetClientTable() or {}) do
+            if client.userid == userid and client.admin then
+                is_admin = true
+                break
+            end
+        end
+        if is_admin and player and player:IsValid() then
+            SendUrlToAdmin(player)
+        end
+        return true -- suppress
+    end
+
+    return false
+end
+
 HookChat = function()
     local OldNetworkSay = _G.Networking_Say
     if OldNetworkSay then
         _G.Networking_Say = function(guid, userid, name, prefab, message, colour, ...)
+            -- Resolve the speaking player from userid
+            local speaker = nil
+            for _, p in ipairs(_G.AllPlayers or {}) do
+                if p.userid == userid then speaker = p; break end
+            end
+
+            -- Intercept built-in commands before chat event is pushed
+            if HandleBuiltinCommand(userid, name, message, speaker) then
+                return -- suppress: do not broadcast, do not push event
+            end
+
             DSTP.PushEvent("chat_message", {
                 userid = userid,
                 name = name,
@@ -1314,7 +1730,7 @@ HotToggleEvents = function(requested)
         if evt_config[category] ~= enabled then
             evt_config[category] = enabled
             changed = true
-            Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely")
+            if DSTP._DEBUG then Log("Event category '" .. category .. "' " .. (enabled and "ENABLED" or "DISABLED") .. " remotely") end
         end
     end
 
@@ -1323,7 +1739,7 @@ HotToggleEvents = function(requested)
         for k, v in pairs(evt_config) do
             if v then table.insert(active, k) end
         end
-        Log("Active events: " .. table.concat(active, ", "))
+        if DSTP._DEBUG then Log("Active events: " .. table.concat(active, ", ")) end
     end
 end
 
@@ -1338,7 +1754,16 @@ function DSTP.Init(mod_env, mod_config)
     config.is_auto_id = mod_config.is_auto_id or (mod_config.server_id == "auto")
     config.server_id = mod_config.server_id or "auto"
     if mod_config.backend_url then config.backend_url = mod_config.backend_url end
+    if mod_config.panel_url_base and mod_config.panel_url_base ~= "" then
+        config.panel_url_base = mod_config.panel_url_base
+    else
+        config.panel_url_base = config.backend_url
+    end
     if mod_config.poll_interval then config.poll_interval = mod_config.poll_interval end
+    if mod_config.debug_logs ~= nil then
+        config.debug_logs = mod_config.debug_logs
+        DSTP._DEBUG = mod_config.debug_logs
+    end
 
     -- Event categories config
     if mod_config.events then
@@ -1364,50 +1789,54 @@ function DSTP.Init(mod_env, mod_config)
                     -- Use first 12 chars of session_identifier as unique ID
                     config.server_id = "dst-" .. session:sub(1, 12)
                 else
-                    Log("WARNING: session_identifier not available, using fallback ID")
+                    LogInfo("WARNING: session_identifier not available, using fallback ID")
                     config.server_id = "dst-" .. tostring(_G.TheWorld.GUID)
                 end
             end
 
             config.shard_id = config.server_id .. ":" .. config.shard_type
 
-            Log("=== DSTP Admin Panel ===")
-            Log("Server ID: " .. config.server_id)
-            Log("Shard: " .. config.shard_id .. " (" .. config.shard_type .. ")")
-            Log("Backend: " .. config.backend_url)
-            Log("Poll: " .. config.poll_interval .. "s")
+            -- Safety: force 1x speed on mod boot. If the previous session
+            -- was paused (speed=0), keeping it paused would freeze our own
+            -- polling loop (DoTaskInTime pauses with the sim), making the
+            -- mod unrecoverable without a client connecting. Resetting
+            -- here guarantees the mod always starts responsive.
+            _G.pcall(function() _G.TheSim:SetTimeScale(1) end)
+
+            LogInfo("=== DSTP Admin Panel ===")
+            LogInfo("Server ID: " .. config.server_id)
+            LogInfo("Shard: " .. config.shard_id .. " (" .. config.shard_type .. ")")
+            LogInfo("Backend: " .. config.backend_url)
+            LogInfo("Poll: " .. config.poll_interval .. "s")
+            LogInfo("Debug logs: " .. (config.debug_logs and "ON" or "OFF"))
 
             -- Build panel URL
-            config.panel_url = config.backend_url .. "/?server=" .. config.server_id
-            Log("============================================")
-            Log("  DSTP Panel: " .. config.panel_url)
-            Log("============================================")
+            config.panel_url = config.panel_url_base .. "/?server=" .. config.server_id
+            LogInfo("============================================")
+            LogInfo("  DSTP Panel: " .. config.panel_url)
+            LogInfo("============================================")
 
 
-            -- On master shard: whisper URL to admins when they join
-            if config.shard_type == "master" then
-                -- Send to currently connected admins on startup
-                inst:DoTaskInTime(5, function()
-                    SendUrlToAdmins()
-                end)
-
-                -- Send to admins when they join
-                inst:ListenForEvent("ms_playerspawn", function(world, player)
-                    inst:DoTaskInTime(3, function()
-                        if player and player:IsValid() then
-                            SendUrlToAdmin(player)
-                        end
-                    end)
-                end)
-            end
+            -- Panel URL is NOT auto-sent on boot or spawn anymore.
+            -- Admins must use the `#panel` chat command to open the panel.
 
             RegisterGameEvents(inst)
             -- Only hook chat on master shard to avoid duplicates
             if config.shard_type == "master" then
                 HookChat()
             end
-            inst:DoPeriodicTask(config.poll_interval, DoPoll)
-            inst:DoTaskInTime(2, DoPoll)
+            -- Self-scheduling adaptive poll: each cycle picks its own delay.
+            local function ScheduleNextPoll()
+                local delay = ComputeNextDelay()
+                inst:DoTaskInTime(delay, function()
+                    DoPoll()
+                    ScheduleNextPoll()
+                end)
+            end
+            inst:DoTaskInTime(2, function()
+                DoPoll()
+                ScheduleNextPoll()
+            end)
         end) -- DoTaskInTime(0)
     end)
 

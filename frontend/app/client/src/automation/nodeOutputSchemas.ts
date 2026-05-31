@@ -49,6 +49,45 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
     description: 'Player respawned from ghost form',
     fields: [...playerFields],
   },
+  player_disconnected: {
+    description: 'Player disconnected from the server (network drop or quit)',
+    fields: [
+      ...playerFields,
+      { name: 'reason', type: 'string', description: 'Disconnect reason (e.g. "disconnect", "kicked", "banned")' },
+    ],
+  },
+
+  // ── Griefing (anti-grief detection) ──────────────────
+  structure_burnt: {
+    description: 'A structure burned down (destroyed by fire)',
+    fields: [
+      { name: 'prefab', type: 'string', description: 'Burnt structure prefab' },
+      { name: 'cause', type: 'string', description: 'Cause of destruction (fire/prefab name)' },
+      { name: 'x', type: 'number', description: 'X world coordinate' },
+      { name: 'z', type: 'number', description: 'Z world coordinate' },
+    ],
+  },
+  structure_hammered: {
+    description: 'A player hammered a structure',
+    fields: [
+      ...playerFields,
+      { name: 'prefab', type: 'string', description: 'Hammered structure prefab' },
+    ],
+  },
+  container_opened: {
+    description: 'Player opened a container (chest, icebox, etc)',
+    fields: [
+      ...playerFields,
+      { name: 'container_prefab', type: 'string', description: 'Container prefab (treasurechest, icebox, etc)' },
+    ],
+  },
+  container_closed: {
+    description: 'Player closed a container',
+    fields: [
+      ...playerFields,
+      { name: 'container_prefab', type: 'string', description: 'Container prefab' },
+    ],
+  },
 
   // ── Chat ─────────────────────────────────────────────
   chat_message: {
@@ -214,6 +253,38 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'season', type: 'string', description: 'New season (autumn/winter/spring/summer)' },
     ],
   },
+  moon_phase_changed: {
+    description: 'Moon phase changed (full/waxing/new/etc)',
+    fields: [
+      { name: 'phase', type: 'string', description: 'Moon phase name' },
+      { name: 'is_new', type: 'boolean', description: 'True if new moon' },
+      { name: 'is_full', type: 'boolean', description: 'True if full moon' },
+    ],
+  },
+  earthquake: {
+    description: 'Earthquake started (typically in caves)',
+    fields: [
+      { name: 'shard_type', type: 'string', description: 'Which shard (master/caves)' },
+    ],
+  },
+  sinkhole_warn: {
+    description: 'Sinkhole will appear soon',
+    fields: [
+      { name: 'shard_type', type: 'string', description: 'Which shard' },
+    ],
+  },
+  world_save: {
+    description: 'World was saved',
+    fields: [],
+  },
+  player_teleported: {
+    description: 'Player entered or exited a wormhole',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player user ID' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'type', type: 'string', description: 'wormhole_enter or wormhole_exit' },
+    ],
+  },
 
   // ── Weather ──────────────────────────────────────────
   storm_changed: {
@@ -258,6 +329,18 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'prefab', type: 'string', description: 'Burning entity prefab' },
       { name: 'x', type: 'number', description: 'X world coordinate' },
       { name: 'z', type: 'number', description: 'Z coordinate' },
+    ],
+  },
+  hound_warning: {
+    description: 'Hound attack incoming (warning sound just played)',
+    fields: [
+      { name: 'shard_type', type: 'string', description: 'Which shard (master/caves)' },
+    ],
+  },
+  hound_attack: {
+    description: 'Hounds spawned and are attacking',
+    fields: [
+      { name: 'shard_type', type: 'string', description: 'Which shard (master/caves)' },
     ],
   },
 
@@ -311,6 +394,74 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
   player_dismounted: {
     description: 'Player dismounted a beefalo',
     fields: [...playerFields],
+  },
+
+  // ── Character ────────────────────────────────────────
+  recipe_learned: {
+    description: 'Player learned a new cookbook recipe (by eating new food)',
+    fields: [
+      ...playerFields,
+      { name: 'product', type: 'string', description: 'Recipe/food prefab learned' },
+    ],
+  },
+  book_read: {
+    description: 'Player read a book (Wickerbottom or any character)',
+    fields: [
+      ...playerFields,
+      { name: 'book', type: 'string', description: 'Book prefab (book_tentacles, book_birds, etc)' },
+    ],
+  },
+  character_transform: {
+    description: 'Character transformed (Woodie were-forms, Wurt, etc.)',
+    fields: [
+      ...playerFields,
+      { name: 'form', type: 'string', description: 'Target form: "were" or "normal"' },
+    ],
+  },
+  player_sleep_start: {
+    description: 'Player started sleeping (tent, siesta, bedroll)',
+    fields: [...playerFields],
+  },
+  player_sleep_end: {
+    description: 'Player woke up',
+    fields: [...playerFields],
+  },
+
+  // ── Exploration ──────────────────────────────────────
+  player_sunk: {
+    description: 'Player fell into water / sank',
+    fields: [
+      ...playerFields,
+      { name: 'x', type: 'number', description: 'X world coordinate' },
+      { name: 'z', type: 'number', description: 'Z world coordinate' },
+    ],
+  },
+  fish_caught: {
+    description: 'Player caught a fish',
+    fields: [
+      ...playerFields,
+      { name: 'fish', type: 'string', description: 'Fish prefab name' },
+    ],
+  },
+  boat_entered: {
+    description: 'Player stepped onto a boat',
+    fields: [...playerFields],
+  },
+  boat_exited: {
+    description: 'Player left a boat',
+    fields: [...playerFields],
+  },
+
+  // ── UI ───────────────────────────────────────────────
+  ui_callback: {
+    description: 'Player clicked a UI widget (button) or rule emitted event',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Player user ID' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'callback_name', type: 'string', description: 'Name of the callback (e.g. "buy_item")' },
+      { name: 'widget_id', type: 'string', description: 'ID of the widget that triggered' },
+      { name: 'callback_data', type: 'object', description: 'Custom data sent with callback (optional)' },
+    ],
   },
 }
 

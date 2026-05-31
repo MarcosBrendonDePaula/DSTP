@@ -70,6 +70,9 @@ class DSTStateStore {
 
     // Drain command queue
     const queue = this.commandQueues.get(shard_id) || []
+    if (queue.length > 0) {
+      console.log(`[DSTP] DRAIN shard="${shard_id}" — returning ${queue.length} commands: ${queue.map(c => c.type).join(',')}`)
+    }
     this.commandQueues.set(shard_id, [])
 
     // Check for pending requests
@@ -131,12 +134,30 @@ class DSTStateStore {
     return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
   }
 
+  // Subscribers notified whenever a command is enqueued. Used by the relay
+  // WS endpoint to push commands to the relay proactively (before the next
+  // mod poll arrives), so the relay can answer the poll locally with <5ms
+  // latency instead of round-tripping to the backend.
+  private commandListeners: Array<(shard_id: string, command: any) => void> = []
+
+  onCommandQueued(listener: (shard_id: string, command: any) => void): () => void {
+    this.commandListeners.push(listener)
+    return () => {
+      const i = this.commandListeners.indexOf(listener)
+      if (i >= 0) this.commandListeners.splice(i, 1)
+    }
+  }
+
   // Queue command for a specific shard
   pushCommand(shard_id: string, type: string, data: any = {}) {
     if (!this.commandQueues.has(shard_id)) {
       this.commandQueues.set(shard_id, [])
     }
-    this.commandQueues.get(shard_id)!.push({ type, data, queued_at: Date.now() })
+    const cmd = { type, data, queued_at: Date.now() }
+    this.commandQueues.get(shard_id)!.push(cmd)
+    for (const listener of this.commandListeners) {
+      try { listener(shard_id, cmd) } catch (e) { console.error('[DSTStateStore] listener error:', e) }
+    }
   }
 
   // Send command to all shards of a server
