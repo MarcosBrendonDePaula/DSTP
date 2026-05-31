@@ -32,6 +32,7 @@
     "build:backend": "cross-env NODE_ENV=production bun run core/cli/index.ts build --backend-only",
     "build:exe": "cross-env NODE_ENV=production && bun run core/cli/index.ts build && bun run core/cli/index.ts build:exe",
     "start": "NODE_ENV=production bun dist/index.js",
+    "sim": "bun run scripts/sim/sim.ts",
     "create": "bun run core/cli/index.ts create",
     "cli": "bun run core/cli/index.ts",
     "db:generate": "bunx drizzle-kit generate",
