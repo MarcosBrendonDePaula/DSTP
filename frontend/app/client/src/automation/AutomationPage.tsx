@@ -1,25 +1,41 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveAutomation } from '@server/live/LiveAutomation'
 import { LiveDSTP } from '@server/live/LiveDSTP'
 import { FlowEditor } from './FlowEditor'
 import type { Node, Edge } from '@xyflow/react'
+import { AccountMenu } from '../components/AccountMenu'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
   const dstp = Live.use(LiveDSTP)
 
-  const urlServer = useMemo(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('server') || ''
-  }, [])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlServer = searchParams.get('server') || ''
+  const urlFlow = searchParams.get('flow')
 
-  const [editingFlow, setEditingFlow] = useState<string | null>(null)
+  const [editingFlow, setEditingFlow] = useState<string | null>(urlFlow)
   const [flowName, setFlowName] = useState('')
   const [editorNodes, setEditorNodes] = useState<Node[]>([])
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
   const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
+
+  // Sync editingFlow to URL
+  useEffect(() => {
+    const currentFlow = searchParams.get('flow')
+    if (editingFlow && editingFlow !== currentFlow) {
+      setSearchParams(prev => {
+        prev.set('flow', editingFlow)
+        return prev
+      }, { replace: true })
+    } else if (!editingFlow && currentFlow) {
+      setSearchParams(prev => {
+        prev.delete('flow')
+        return prev
+      }, { replace: true })
+    }
+  }, [editingFlow])
 
   const flows = (auto.$state as any)[`flows:${urlServer}`] || []
   const logs = (auto.$state as any)[`logs:${urlServer}`] || []
@@ -38,27 +54,23 @@ export function AutomationPage() {
     return latest?.context || null
   }, [editingFlow, logs, captureData])
 
-  // Load flows from DB on mount — retry until connected
+  // Load flows when status becomes 'synced' (lib 0.9.0)
+  // $status: mounting → connecting → loading → synced
   useEffect(() => {
     if (!urlServer) return
-    const tryLoad = () => {
-      if (auto.$connected) {
-        auto.loadFlows({ server_id: urlServer })
-        return true
-      }
-      return false
+    const status = (auto as any).$status
+    const componentId = (auto as any).$componentId
+    // Only fire when fully ready (synced with a component ID)
+    if (status === 'synced' && componentId) {
+      auto.loadFlows({ server_id: urlServer })
     }
-    if (tryLoad()) return
-    // Retry every 500ms until connected (max 10s)
-    let attempts = 0
-    const interval = setInterval(() => {
-      if (tryLoad() || ++attempts > 20) clearInterval(interval)
-    }, 500)
-    return () => clearInterval(interval)
-  }, [urlServer])
+  }, [urlServer, (auto as any).$status, (auto as any).$componentId])
+
+  const justCreatedRef = useRef<string | null>(null)
 
   const createNewFlow = () => {
     const id = `flow_${Date.now()}`
+    justCreatedRef.current = id
     setEditingFlow(id)
     setFlowName('Novo Fluxo')
     setEditorNodes([])
@@ -74,21 +86,42 @@ export function AutomationPage() {
     setOriginalCreatedAt(flow.created_at || null)
   }
 
+  // When URL has ?flow=ID and flows list loads, hydrate the editor with that flow's data
+  const [hydrated, setHydrated] = useState<string | null>(null)
+  useEffect(() => {
+    if (!editingFlow || flows.length === 0) return
+    if (hydrated === editingFlow) return
+    const flow = flows.find((f: any) => f.id === editingFlow)
+    if (flow) {
+      setFlowName(flow.name)
+      setEditorNodes(flow.nodes || [])
+      setEditorEdges(flow.edges || [])
+      setOriginalCreatedAt(flow.created_at || null)
+      setHydrated(editingFlow) // triggers re-render AFTER state updates are applied
+    }
+  }, [editingFlow, flows, hydrated])
+
   const saveFlow = async (nodes: Node[], edges: Edge[], closeAfter = false) => {
     if (!editingFlow || !urlServer) return
-    await auto.saveFlow({
-      flow: {
-        id: editingFlow,
-        name: flowName || 'Sem nome',
-        enabled: true,
-        server_id: urlServer,
-        nodes: nodes.map(n => ({ id: n.id, type: n.type as any, data: n.data, position: n.position })),
-        edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || undefined, targetHandle: e.targetHandle || undefined })),
-        created_at: originalCreatedAt || Date.now(),
-        trigger_count: 0,
-      }
-    })
-    if (closeAfter) setEditingFlow(null)
+    try {
+      const result = await auto.saveFlow({
+        flow: {
+          id: editingFlow,
+          name: flowName || 'Sem nome',
+          enabled: true,
+          server_id: urlServer,
+          nodes: nodes.map(n => ({ id: n.id, type: n.type as any, data: n.data, position: n.position })),
+          edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || undefined, targetHandle: e.targetHandle || undefined })),
+          created_at: originalCreatedAt || Date.now(),
+          trigger_count: 0,
+        }
+      })
+      console.log('[DSTP] Flow saved:', editingFlow, result)
+      if (closeAfter) setEditingFlow(null)
+    } catch (err) {
+      console.error('[DSTP] saveFlow error:', err)
+      alert('Erro ao salvar: ' + (err as Error).message)
+    }
   }
 
   const deleteFlow = async (id: string) => {
@@ -126,6 +159,37 @@ export function AutomationPage() {
     reader.onload = async (e) => {
       try {
         const parsed = JSON.parse(e.target?.result as string)
+
+        // Bundle: multiple flows at once (exported via "Exportar tudo")
+        if (Array.isArray(parsed.flows)) {
+          if (!confirm(`Importar ${parsed.flows.length} fluxo(s)? Serão criados como novos (não sobrescrevem existentes).`)) return
+          let ok = 0, fail = 0
+          const base = Date.now()
+          for (let i = 0; i < parsed.flows.length; i++) {
+            const f = parsed.flows[i]
+            if (!f.nodes || !f.edges) { fail++; continue }
+            try {
+              await auto.saveFlow({
+                flow: {
+                  id: `flow_${base}_${i}`,
+                  name: f.name || `Fluxo ${i + 1}`,
+                  enabled: false,
+                  server_id: urlServer,
+                  nodes: f.nodes,
+                  edges: f.edges,
+                  created_at: base + i,
+                  trigger_count: 0,
+                }
+              })
+              ok++
+            } catch { fail++ }
+          }
+          await auto.loadFlows({ server_id: urlServer })
+          alert(`Importação concluída: ${ok} ok, ${fail} falharam.`)
+          return
+        }
+
+        // Single flow (legacy format)
         if (!parsed.nodes || !parsed.edges) {
           alert('Arquivo inválido: faltam nodes ou edges.')
           return
@@ -151,8 +215,65 @@ export function AutomationPage() {
     reader.readAsText(file)
   }
 
+  const exportAllFlows = () => {
+    if (!flows || flows.length === 0) {
+      alert('Nenhum fluxo para exportar.')
+      return
+    }
+    const bundle = {
+      version: 1,
+      kind: 'dstp.flows.bundle',
+      exported_at: Date.now(),
+      server_id: urlServer,
+      flow_count: flows.length,
+      flows: flows.map((f: any) => ({
+        name: f.name,
+        enabled: f.enabled,
+        nodes: f.nodes || [],
+        edges: f.edges || [],
+      })),
+    }
+    const json = JSON.stringify(bundle, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `dstp-flows-${urlServer}-${new Date().toISOString().slice(0,10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // Editor mode
   if (editingFlow) {
+    // Wait for state to arrive before rendering the editor.
+    // This prevents auto-save from overwriting with empty nodes when opening via URL.
+    const alreadyHydrated = hydrated === editingFlow
+    const componentReady = (auto as any).$status === 'synced'
+    const stateArrived = (auto.$state as any)[`flows:${urlServer}`] !== undefined
+    const flowExistsInList = flows.some((f: any) => f.id === editingFlow)
+
+    // Brand new flow (just created via createNewFlow): allow immediately (no server data yet)
+    const isBrandNewFlow = justCreatedRef.current === editingFlow
+
+    if (!alreadyHydrated && !isBrandNewFlow) {
+      // Wait until: component synced + state actually arrived + flow found
+      if (!componentReady || !stateArrived || !flowExistsInList) {
+        return (
+          <div className="h-screen flex items-center justify-center bg-[#0a0a0a]">
+            <div className="text-center">
+              <div className="text-3xl mb-3 animate-pulse">⏳</div>
+              <p className="text-gray-500 text-sm">Carregando fluxo...</p>
+              <p className="text-gray-600 text-[10px] mt-2">
+                {!componentReady ? 'conectando...' : !stateArrived ? 'buscando automações...' : 'fluxo não encontrado'}
+              </p>
+            </div>
+          </div>
+        )
+      }
+    }
+
     return (
       <div className="h-screen flex flex-col bg-[#0a0a0a]">
         {/* Back bar */}
@@ -165,6 +286,7 @@ export function AutomationPage() {
         </div>
         <div className="flex-1">
           <FlowEditor
+            key={editingFlow || 'new'}
             initialNodes={editorNodes}
             initialEdges={editorEdges}
             onSave={saveFlow}
@@ -199,8 +321,14 @@ export function AutomationPage() {
           title="Recarregar"
         >↻</button>
         <button
+          onClick={exportAllFlows}
+          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
+          title="Exporta todos os fluxos deste servidor em um arquivo"
+        >↓ Exportar tudo</button>
+        <button
           onClick={() => fileInputRef.current?.click()}
           className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
+          title="Importar fluxo único ou bundle com vários"
         >↑ Importar</button>
         <input
           ref={fileInputRef}
@@ -217,12 +345,24 @@ export function AutomationPage() {
           onClick={createNewFlow}
           className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
         >+ Novo Fluxo</button>
+        {urlServer && <AccountMenu serverId={urlServer} />}
       </div>
 
       <div className="flex gap-4">
         {/* Flows list */}
         <div className="flex-1">
           {flows.length === 0 ? (
+            !auto.$connected ? (
+              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
+                <div className="text-2xl mb-2 animate-pulse">⏳</div>
+                <p className="text-gray-500 text-sm">Conectando ao backend...</p>
+              </div>
+            ) : (auto.$state as any)[`flows:${urlServer}`] === undefined ? (
+              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
+                <div className="text-2xl mb-2 animate-pulse">⏳</div>
+                <p className="text-gray-500 text-sm">Carregando automações...</p>
+              </div>
+            ) : (
             <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
               <div className="text-2xl mb-2">⚡</div>
               <p className="text-gray-500 text-sm mb-4">Nenhuma automação criada</p>
@@ -231,6 +371,7 @@ export function AutomationPage() {
                 className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
               >Criar primeiro fluxo</button>
             </div>
+            )
           ) : (
             <div className="space-y-2">
               {flows.map((flow: any) => (

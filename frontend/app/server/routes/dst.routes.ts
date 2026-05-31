@@ -1,9 +1,53 @@
-import { Elysia } from "elysia"
+import { Elysia, t } from "elysia"
 import { dstStateStore } from "../services/DSTStateStore"
 import { processAutomationEvent } from "../live/LiveAutomation"
 import { EventHistoryRepository, EventSchemaRepository } from "../db"
+import { announceSetupTokenIfNeeded } from "../services/PanelAuthStore"
 
 setInterval(() => dstStateStore.checkHealth(), 15000)
+
+// Core sync logic, shared between HTTP POST /dst/sync and the WebSocket relay.
+// Returns the exact response shape the mod expects (`{ commands, enable_events?, debounce? }`).
+export function handleDstSync(data: any) {
+  const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = data
+  if (!server_id || !shard_id) return { error: 'missing server_id or shard_id' }
+
+  announceSetupTokenIfNeeded(server_id)
+
+  const result = dstStateStore.handleSync(
+    server_id,
+    shard_id,
+    shard_type || 'master',
+    server,
+    players || [],
+    events || [],
+    active_events,
+    debounce,
+  )
+
+  try { (require("../live/LiveDSTP") as any).notifyLiveDSTP?.() } catch {}
+
+  if (events && events.length > 0) {
+    const eventRepo = new EventHistoryRepository(server_id)
+    const schemaRepo = new EventSchemaRepository(server_id)
+    for (const evt of events) {
+      try { eventRepo.create({ type: evt.type, shardId: shard_id, shardType: shard_type, data: evt.data || {} }) } catch {}
+      try { schemaRepo.autoDetect(evt.type, evt.data || {}) } catch {}
+      try { processAutomationEvent(server_id, evt) } catch (e) { console.error('[DSTP Automation]', e) }
+
+      if (evt.raw) {
+        const fs = require('fs')
+        const path = require('path')
+        const dumpDir = path.join(process.cwd(), 'data', 'event_dumps')
+        if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true })
+        const entry = { type: evt.type, timestamp: Date.now(), data: evt.data, raw: evt.raw, server_id, shard_id }
+        fs.appendFileSync(path.join(dumpDir, `${evt.type}.jsonl`), JSON.stringify(entry) + '\n')
+      }
+    }
+  }
+
+  return result
+}
 
 export const dstRoutes = new Elysia({ prefix: "/dst" })
   .onError(({ code, error, path }) => {
@@ -19,70 +63,60 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
     }
   })
   .post("/sync", ({ body }) => {
-    // Body may arrive as string if DST sends non-JSON content-type
     let data: any = body
     if (typeof data === 'string') {
       try { data = JSON.parse(data) } catch { return { error: 'invalid json' } }
     }
-    const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = data
-
-    if (!server_id || !shard_id) {
-      return { error: 'missing server_id or shard_id' }
-    }
-
-    const result = dstStateStore.handleSync(
-      server_id,
-      shard_id,
-      shard_type || 'master',
-      server,
-      players || [],
-      events || [],
-      active_events,
-      debounce
-    )
-
-    // Notify live component
-    const { notifyLiveDSTP } = require("../live/LiveDSTP")
-    notifyLiveDSTP?.()
-
-    // Process events: persist to DB + auto-detect schema + automation engine
-    if (events && events.length > 0) {
-      const eventRepo = new EventHistoryRepository(server_id)
-      const schemaRepo = new EventSchemaRepository(server_id)
-      for (const evt of events) {
-        try { eventRepo.create({ type: evt.type, shardId: shard_id, shardType: shard_type, data: evt.data || {} }) } catch (e) { /* */ }
-        try { schemaRepo.autoDetect(evt.type, evt.data || {}) } catch (e) { /* */ }
-        try { processAutomationEvent(server_id, evt) } catch (e) { console.error('[DSTP Automation] Event processing error:', e) }
-
-        // If event has raw dump data, save to file
-        if (evt.raw) {
-          const fs = require('fs')
-          const path = require('path')
-          const dumpDir = path.join(process.cwd(), 'data', 'event_dumps')
-          if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true })
-
-          const entry = {
-            type: evt.type,
-            timestamp: Date.now(),
-            data: evt.data,
-            raw: evt.raw,
-            server_id,
-            shard_id,
-          }
-
-          // Append to a single dump file per event type
-          const filePath = path.join(dumpDir, `${evt.type}.jsonl`)
-          fs.appendFileSync(filePath, JSON.stringify(entry) + '\n')
-        }
-      }
-    }
-
-    return result
+    return handleDstSync(data)
   }, {
-    detail: {
-      tags: ['DST'],
-      summary: 'DST Shard Sync',
-    }
+    detail: { tags: ['DST'], summary: 'DST Shard Sync (HTTP)' },
+  })
+
+  // WebSocket relay endpoint. The DSTP relay process opens ONE persistent
+  // connection here and tunnels sync requests through it. Protocol (JSON):
+  //   Relay → Server: { id, type: "sync", data: <sync payload> }
+  //   Server → Relay: { id, type: "sync.response", data: <response> }
+  //   Server → Relay (push): { type: "command", shard_id, command }
+  //     (fired as soon as a command is enqueued; relay buffers it locally
+  //      so the next mod poll gets a sub-ms response.)
+  .ws("/relay", {
+    open(ws) {
+      console.log('[DSTP Relay WS] connected')
+      const unsubscribe = dstStateStore.onCommandQueued((shard_id, command) => {
+        try {
+          ws.send(JSON.stringify({ type: 'command', shard_id, command }))
+        } catch (e) {
+          // socket closing
+        }
+      })
+      ;(ws.data as any).unsubscribe = unsubscribe
+    },
+    message(ws, raw) {
+      let msg: any
+      try {
+        msg = typeof raw === 'string' ? JSON.parse(raw) : raw
+      } catch (e) {
+        ws.send(JSON.stringify({ type: 'error', error: 'invalid_json' }))
+        return
+      }
+      if (!msg || !msg.type) return
+
+      if (msg.type === 'sync') {
+        const response = handleDstSync(msg.data || {})
+        ws.send(JSON.stringify({ id: msg.id, type: 'sync.response', data: response }))
+        return
+      }
+
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ id: msg.id, type: 'pong' }))
+        return
+      }
+    },
+    close(ws) {
+      const unsubscribe = (ws.data as any)?.unsubscribe
+      if (typeof unsubscribe === 'function') unsubscribe()
+      console.log('[DSTP Relay WS] disconnected')
+    },
   })
 
   .get("/servers", () => {
