@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveDSTP } from '@server/live/LiveDSTP'
+import { AccountMenu } from '../components/AccountMenu'
 
 // ─── Confirm Dialog Hook ─────────────────────────────
 
@@ -459,6 +460,11 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
         <Badge color={shard.phase === 'day' ? '#facc15' : shard.phase === 'night' ? '#6366f1' : '#f97316'}>
           {shard.phase}
         </Badge>
+        {shard.time_scale !== undefined && shard.time_scale !== null && (
+          <Badge color={shard.time_scale === 0 ? '#ef4444' : shard.time_scale === 1 ? '#6b7280' : '#a855f7'}>
+            {shard.time_scale === 0 ? '⏸ pausado' : `${shard.time_scale}x`}
+          </Badge>
+        )}
         <span className={`text-[10px] ${shard.online ? 'text-green-500' : 'text-red-500'}`}>●</span>
       </div>
 
@@ -507,11 +513,20 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
 
       {/* Speed + Danger */}
       <div className="mt-3 pt-2 border-t border-white/5 flex items-center gap-1 flex-wrap">
-        <Btn color="#f59e0b" size="xs" onClick={() => onCmd('pause')}>⏸</Btn>
-        <Btn color="#22c55e" size="xs" onClick={() => onCmd('unpause')}>▶</Btn>
-        {[0.5, 1, 2, 4, 8].map(s => (
-          <Btn key={s} color="#8b5cf6" size="xs" onClick={() => onCmd('set_speed', { speed: s })}>{s}x</Btn>
-        ))}
+        <span className="text-[10px] text-gray-500 mr-1">Velocidade:</span>
+        {[0.5, 1, 2, 4, 8].map(s => {
+          const active = Math.abs((shard.time_scale ?? 1) - s) < 0.001
+          return (
+            <Btn
+              key={s}
+              color={active ? '#a855f7' : '#8b5cf6'}
+              size="xs"
+              onClick={() => onCmd('set_speed', { speed: s })}
+            >
+              {active ? `● ${s}x` : `${s}x`}
+            </Btn>
+          )
+        })}
         <input
           type="number"
           min="0" max="100" step="0.5"
@@ -673,6 +688,142 @@ function RightPanel({ events, onChatSend }: { events: any[]; onChatSend: (msg: s
   )
 }
 
+// ─── Landing Page ────────────────────────────────────
+
+function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverIds: string[]; requestedServer: string | null }) {
+  const status = dstp.$status
+  const isConnecting = status !== 'synced'
+  const notFound = !!requestedServer && !isConnecting
+
+  // Server not found → minimal error page, não vaza lista de servers.
+  if (notFound) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
+        <div className="w-full max-w-md text-center">
+          <div className="text-5xl mb-4">🔍</div>
+          <h1 className="text-xl font-bold text-white mb-2">Servidor não encontrado</h1>
+          <p className="text-sm text-gray-400 mb-1">
+            O identificador <span className="font-mono text-amber-300">{requestedServer}</span> não está registrado.
+          </p>
+          <p className="text-xs text-gray-600 mb-6">
+            Verifique o link ou peça ao admin do servidor um novo acesso via <span className="font-mono text-blue-400">#panel</span>.
+          </p>
+          <Link to="/" className="inline-block text-xs px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">
+            ← Voltar para a página inicial
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Landing / marketing page
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] bg-[radial-gradient(ellipse_at_top_right,rgba(59,130,246,0.12),transparent_60%),radial-gradient(ellipse_at_bottom_left,rgba(168,85,247,0.08),transparent_50%)] text-white">
+      {/* Hero */}
+      <section className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+        <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] mb-6">
+          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+          <span>{isConnecting ? 'Conectando...' : 'Backend online'}</span>
+        </div>
+        <h1 className="text-6xl font-bold tracking-tight mb-4">
+          <span className="bg-gradient-to-br from-white via-blue-100 to-blue-300 bg-clip-text text-transparent">DSTP</span>
+        </h1>
+        <p className="text-xl text-gray-300 mb-3">Don't Starve Together — Admin Panel</p>
+        <p className="text-sm text-gray-500 max-w-xl mx-auto mb-10">
+          Controle seus servidores DST por um painel web: jogadores, eventos, automações visuais e UI customizada in-game. Um backend, vários servidores.
+        </p>
+        <div className="flex items-center justify-center gap-3 text-xs">
+          <a
+            href="https://github.com/MarcosBrendonDePaula/DSTP"
+            target="_blank"
+            rel="noreferrer"
+            className="px-5 py-2.5 rounded-lg bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-colors"
+          >
+            Ver no GitHub
+          </a>
+          <div className="px-5 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 font-mono">
+            #panel <span className="text-blue-500">← comando no jogo</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="max-w-5xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Feature
+          icon="🎮"
+          title="Administração em tempo real"
+          body="Veja players, vida/fome/sanidade, posição e inventário ao vivo. Execute kick, ban, heal, teleport ou qualquer ação via painel."
+        />
+        <Feature
+          icon="⚡"
+          title="Automações visuais"
+          body="Editor estilo n8n com 11 tipos de nós. Reaja a eventos do jogo (boss, morte, chat) com condições, delays, HTTP e scripts customizados."
+        />
+        <Feature
+          icon="🧩"
+          title="UI in-game por flows"
+          body="Notifications, paineis, barras de progresso e botões clicáveis dentro do DST — renderizados pelo mod e disparados pelos seus flows."
+        />
+        <Feature
+          icon="🌐"
+          title="Multi-shard nativo"
+          body="Master e caves agrupados por server_id automaticamente. Comandos roteados pro shard certo, abas separadas na UI."
+        />
+        <Feature
+          icon="🔐"
+          title="Auth por servidor"
+          body="Cada servidor tem sua senha isolada. Acesso rápido via magic link no jogo ou senha pela web."
+        />
+        <Feature
+          icon="🔌"
+          title="Zero infra de jogo"
+          body="Só HTTP polling do mod. Sem sockets, sem FFI, sem hacks no DST — só Lua sandbox e TheSim:QueryServer."
+        />
+      </section>
+
+      {/* How it works */}
+      <section className="max-w-3xl mx-auto px-6 py-12">
+        <h2 className="text-2xl font-semibold text-center mb-8">Como funciona</h2>
+        <div className="space-y-3">
+          <Step n={1} title="Instale o mod DSTP no servidor" body="Disponível no Workshop. Aponte o BACKEND_URL para este painel nas opções do mod." />
+          <Step n={2} title="Inicie o mundo e entre como admin" body="O servidor se registra automaticamente no backend no primeiro sync." />
+          <Step n={3} title="Digite #panel no chat" body="Um magic link é gerado e abre o painel autenticado. Defina a senha e pronto." />
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="max-w-4xl mx-auto px-6 py-10 text-center text-[11px] text-gray-600">
+        <p>DSTP é open source. Admin-only por design — instale em uma rede de confiança.</p>
+        {!isConnecting && serverIds.length === 0 && (
+          <p className="mt-2 text-amber-500/70">Aguardando primeiro sync de um servidor DST...</p>
+        )}
+      </footer>
+    </div>
+  )
+}
+
+function Feature({ icon, title, body }: { icon: string; title: string; body: string }) {
+  return (
+    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5 hover:bg-white/[0.04] hover:border-white/10 transition-colors">
+      <div className="text-2xl mb-2">{icon}</div>
+      <h3 className="text-sm font-semibold text-white mb-1">{title}</h3>
+      <p className="text-xs text-gray-500 leading-relaxed">{body}</p>
+    </div>
+  )
+}
+
+function Step({ n, title, body }: { n: number; title: string; body: string }) {
+  return (
+    <div className="flex gap-4 bg-white/[0.02] border border-white/5 rounded-xl p-4">
+      <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-sm font-semibold flex items-center justify-center">{n}</div>
+      <div>
+        <h3 className="text-sm font-medium text-white mb-0.5">{title}</h3>
+        <p className="text-xs text-gray-500">{body}</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Panel ──────────────────────────────────────
 
 export function DSTPanel() {
@@ -742,31 +893,9 @@ export function DSTPanel() {
     sendPlayerCmd(type, player, extraData)
   }
 
-  // Loading / no server
-  if (!selectedServer || !serverInfo) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-1">DSTP</h1>
-          <p className="text-gray-600 text-xs mb-6">Don't Starve Together Panel</p>
-          <p className="text-gray-500 text-sm mb-4">
-            {!dstp.$connected ? 'Conectando ao painel...' : serverIds.length === 0 ? 'Aguardando servidor DST...' : 'Servidor não encontrado'}
-          </p>
-          {serverIds.length > 0 && (
-            <div className="text-xs text-gray-600">
-              {serverIds.map(id => (
-                <Link key={id} to={`?server=${id}`} className="inline-block mx-1 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">{id}</Link>
-              ))}
-            </div>
-          )}
-          {!dstp.$connected && (
-            <div className="mt-6">
-              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            </div>
-          )}
-        </div>
-      </div>
-    )
+  // No server selected OR server doesn't exist yet → landing page
+  if (!urlServer || !serverInfo) {
+    return <LandingPage dstp={dstp} serverIds={serverIds} requestedServer={urlServer} />
   }
 
   return (
@@ -813,6 +942,7 @@ export function DSTPanel() {
         <span className={`text-[10px] ${dstp.$connected ? 'text-green-600' : 'text-red-600'}`}>
           {dstp.$connected ? '● WS' : '○ WS'}
         </span>
+        <AccountMenu serverId={selectedServer!} />
       </div>
 
       {/* Announce */}

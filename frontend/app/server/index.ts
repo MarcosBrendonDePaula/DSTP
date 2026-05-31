@@ -24,6 +24,8 @@ import { DevAuthProvider } from "./auth/DevAuthProvider"
 // 🔐 Auth system (Guard + Provider, Laravel-inspired)
 import { initAuth } from "@server/auth"
 
+// 🔐 DSTP Panel auth: setup token is announced per server when they first POST /dst/sync
+
 // Registrar provider de desenvolvimento (tokens simples para testes)
 liveAuthManager.register(new DevAuthProvider())
 console.log('🔓 DevAuthProvider registered')

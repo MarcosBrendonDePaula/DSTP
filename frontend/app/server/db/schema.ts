@@ -70,6 +70,17 @@ export const flowMemory = sqliteTable('flow_memory', {
 
 export type FlowMemoryEntry = typeof flowMemory.$inferSelect
 
+// ─── Panel Auth (per-server password) ────────────────
+
+export const panelAuth = sqliteTable('panel_auth', {
+  id: integer('id').primaryKey(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type PanelAuth = typeof panelAuth.$inferSelect
+
 // ─── Types ───────────────────────────────────────────
 
 export interface FlowNode {

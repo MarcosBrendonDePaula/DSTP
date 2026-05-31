@@ -3,6 +3,7 @@ import { usersRoutes } from "./users.routes"
 import { roomRoutes } from "./room.routes"
 import { authRoutes } from "./auth.routes"
 import { dstRoutes } from "./dst.routes"
+import { panelAuthRoutes } from "./panel-auth.routes"
 
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .get("/", () => ({ message: "🔥 Hot Reload funcionando! FluxStack API v1.4.0 ⚡" }), {
@@ -36,6 +37,7 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
     }
   })
   // Register routes
+  .use(panelAuthRoutes)
   .use(authRoutes)
   .use(usersRoutes)
   .use(roomRoutes)
