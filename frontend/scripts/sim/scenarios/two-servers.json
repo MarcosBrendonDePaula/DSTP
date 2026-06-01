@@ -1,0 +1,14 @@
+{
+  "server": "sim-1",
+  "url": "http://127.0.0.1:3000",
+  "interval": 500,
+  "players": [
+    { "userid": "KU_alice", "name": "Alice", "admin": true }
+  ],
+  "steps": [
+    { "note": "sim-1: Alice morre — núcleo do sim-1 deve responder respawn" },
+    { "emit": "player_death", "data": { "userid": "KU_alice", "cause": "spider" } },
+    { "wait": 600 },
+    { "expectCommand": { "type": "respawn", "match": { "userid": "KU_alice" } } }
+  ]
+}

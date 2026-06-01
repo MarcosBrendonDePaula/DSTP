@@ -12,6 +12,13 @@ import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type Fl
 import { invalidateAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { FlowEngine, type EngineHost } from './FlowEngine'
+import { serverCoreManager, setPanelEmitter } from './ServerCoreManager'
+
+// Route the panel STATE_DELTA emitter to whatever LiveAutomation instance is
+// currently mounted. Per-server worker cores emit panel state via this seam.
+setPanelEmitter((delta) => {
+  if (_automationInstance) (_automationInstance as any).setState(delta)
+})
 
 // ─── State ───────────────────────────────────────────
 
@@ -55,8 +62,12 @@ function _getOrCreateInstance(): LiveAutomation {
   return _automationInstance
 }
 
+// Events are routed to the server's dedicated worker core. The inline headless
+// engine remains available (getFlowEngine) for UI actions that need synchronous
+// DB access on the main thread (capture toggles, flow CRUD), but event execution
+// itself runs in the per-server worker.
 export function processAutomationEvent(server_id: string, event: any) {
-  _getEngine().evaluateEvent(server_id, event)
+  serverCoreManager.route(server_id, event)
 }
 
 // ─── Component ───────────────────────────────────────
