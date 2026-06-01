@@ -280,13 +280,16 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     this._ensureEngine().evaluateEvent(server_id, event)
   }
 
-  // ─── Capture Mode (delegates to engine) ────────────
+  // ─── Capture Mode ──────────────────────────────────
+  // Event execution runs inside the per-server worker core, so capture must be
+  // toggled THERE (not on the main-thread engine, which never sees the events).
+  // The worker emits the trace back via emitState → panelEmit → this component.
 
   async startCapture(payload: { server_id: string }) {
-    this._ensureEngine().startCapture(payload.server_id)
+    serverCoreManager.startCapture(payload.server_id)
   }
 
   async stopCapture(payload: { server_id: string }) {
-    this._ensureEngine().stopCapture(payload.server_id)
+    serverCoreManager.stopCapture(payload.server_id)
   }
 }

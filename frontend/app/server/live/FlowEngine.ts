@@ -29,6 +29,33 @@ const MAX_STORE_KEYS = 500
 // Capture mode — when active, execution traces are collected and emitted at the end
 const MAX_CAPTURE_TRACE = 200
 
+// Editor inputs are always strings (React text fields), but the mod's commands
+// expect numbers for certain fields (heal amount, count, coords...). DoDelta("100")
+// in Lua doesn't behave like DoDelta(100). We coerce ONLY known-numeric/boolean
+// fields by name — NOT blindly — so a message/name/prefab that happens to be "100"
+// or "true" stays a string. Param keys whose value should be a number:
+const NUMERIC_PARAM_KEYS = new Set([
+  'amount', 'count', 'x', 'y', 'z', 'radius', 'limit', 'duration', 'days', 'speed',
+  'length', 'day', 'dusk', 'night', 'slot', 'width', 'height', 'value', 'max',
+  'offset_x', 'offset_z',
+])
+const BOOLEAN_PARAM_KEYS = new Set(['enabled'])
+
+function coerceParam(key: string, v: any): any {
+  if (typeof v !== 'string') return v
+  const t = v.trim()
+  if (t === '') return v
+  if (BOOLEAN_PARAM_KEYS.has(key)) {
+    if (t === 'true') return true
+    if (t === 'false') return false
+  }
+  if (NUMERIC_PARAM_KEYS.has(key) && /^-?\d+(\.\d+)?$/.test(t)) {
+    const n = Number(t)
+    if (Number.isFinite(n)) return n
+  }
+  return v
+}
+
 export class FlowEngine {
   constructor(private host: EngineHost) {}
 
@@ -664,7 +691,7 @@ export class FlowEngine {
 
     const actionData: Record<string, any> = {}
     for (const [key, val] of Object.entries(node.data.params || {})) {
-      actionData[key] = this.resolveValue(val, context)
+      actionData[key] = coerceParam(key, this.resolveValue(val, context))
     }
 
     // UI widget actions: convert to ui_command for per-player delivery
