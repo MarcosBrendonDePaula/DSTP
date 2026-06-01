@@ -897,9 +897,11 @@ local function CreateFollow(cmd)
         dbg = dbg + 1
         if dbg >= 30 then
             dbg = 0
-            Log(("follow '%s' mode=%s target=%s"):format(
+            Log(("follow '%s' mode=%s target=%s hp=%s/%s netvar=%s"):format(
                 tostring(cmd.id), tostring(follow.mode or (follow.prefab and ("prefab:"..follow.prefab)) or "nearest"),
-                ent and ent.prefab or "nil"))
+                ent and ent.prefab or "nil",
+                tostring(ent and ent.dstp_hp), tostring(ent and ent.dstp_hp_max),
+                tostring(ent and ent.dstp_net_hp ~= nil)))
         end
         if not (ent and ent:IsValid()) then
             w:Hide()

@@ -210,12 +210,34 @@ dstp.Init(env, {
 -- the netvar created synchronously (no DoTaskInTime).
 local net_ushortint = GLOBAL.net_ushortint
 
+-- Gate by PREFAB, not by tag. inst.prefab is deterministic and available on
+-- BOTH sides the instant AddPrefabPostInitAny runs; tags may not be set/
+-- replicated yet, which would make the server and client disagree on whether
+-- to create the netvar → desync / the value never arrives. (This is exactly
+-- how the "Health Info" mod does it — a curated prefab whitelist.)
+local DSTP_HP_PREFABS = {}
+for _, p in ipairs({
+    -- common mobs
+    "spider", "spider_warrior", "spider_hider", "spider_spitter", "spider_dropper",
+    "hound", "firehound", "icehound", "houndmound",
+    "killerbee", "bee", "mosquito", "frog", "tentacle", "tentacle_pillar",
+    "merm", "pigman", "pigguard", "bunnyman", "perd", "rabbit", "crow", "robin",
+    "robin_winter", "butterfly", "beefalo", "babybeefalo", "koalefant_summer",
+    "koalefant_winter", "walrus", "little_walrus", "rocky", "slurtle", "snurtle",
+    "buzzard", "catcoon", "lightninggoat", "monkey", "tallbird", "teenbird",
+    "smallbird", "knight", "bishop", "rook", "mole", "batilisk", "bat",
+    "worm", "lureplant", "eyeplant", "krampus", "spat", "penguin", "mandrake_active",
+    -- bosses / giants
+    "deerclops", "bearger", "moose", "dragonfly", "antlion", "minotaur",
+    "leif", "leif_sparse", "spiderqueen", "warg", "klaus", "toadstool",
+    "stalker", "stalker_forest", "beequeen", "crabking", "malbatross",
+    -- nightmare creatures
+    "crawlinghorror", "terrorbeak", "nightmarebeak", "crawlingnightmare",
+    "shadowtentacle", "bishop_nightmare", "rook_nightmare", "knight_nightmare",
+}) do DSTP_HP_PREFABS[p] = true end
+
 local function dstp_wants_healthbar(inst)
-    -- creature-ish tags only; never players/structures/items/fx
-    if inst:HasTag("player") or inst:HasTag("FX") or inst:HasTag("INLIMBO") then return false end
-    return inst:HasTag("monster") or inst:HasTag("animal")
-        or inst:HasTag("smallcreature") or inst:HasTag("largecreature")
-        or inst:HasTag("epic")
+    return inst.prefab ~= nil and DSTP_HP_PREFABS[inst.prefab] == true
 end
 
 AddPrefabPostInitAny(function(inst)
