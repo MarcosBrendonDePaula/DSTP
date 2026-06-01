@@ -31,7 +31,7 @@ ck(!!tree, `árvore emitida [tipos: ${[...new Set(got.map(c => c.type))].join(',
 ck(tree?.type === 'panel' && tree?.title === 'Loja', 'raiz panel Loja')
 const col = tree?.children?.[0]
 const rows = (col?.children || []).filter((c: any) => c.type === 'row')
-ck(col?.type === 'col' && rows.length === 3, `col com 3 rows [got ${rows.length} rows de ${col?.children?.length} filhos]`)
+ck(col?.type === 'col' && rows.length === 6, `col com 6 rows (3 buy + 3 sell) [got ${rows.length}]`)
 let okRows = true
 const cbs: string[] = []
 for (const r of rows) {
@@ -41,7 +41,8 @@ for (const r of rows) {
   if (btn) cbs.push(btn.callback)
 }
 ck(okRows, 'cada row tem icon+text+button')
-ck(cbs.includes('buy_log') && cbs.includes('buy_meat') && cbs.includes('buy_gears'), `callbacks: ${cbs.join(',')}`)
+ck(cbs.includes('buy_log') && cbs.includes('buy_gears'), `callbacks de compra: ${cbs.filter(c => c.startsWith('buy')).join(',')}`)
+ck(cbs.includes('sell_log') && cbs.includes('sell_gears'), `callbacks de venda: ${cbs.filter(c => c.startsWith('sell')).join(',')}`)
 const firstIcon = rows[0]?.children?.find((c: any) => c.type === 'icon')
 ck(!!firstIcon?.prefab, `primeiro item tem prefab [${firstIcon?.prefab}]`)
 // saldo: primeiro filho da coluna deve ser o texto de moedas com o valor lido

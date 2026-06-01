@@ -76,6 +76,8 @@ export function seedShop(serverId: string) {
     nodes: [
       { id: 'trg', type: 'trigger', position: { x: 0, y: 0 }, data: { event_type: 'ui_callback', alias: 'click' } },
       { id: 'item', type: 'action', position: { x: 200, y: 0 }, data: { action_type: 'script', alias: 'item', params: { code: RESOLVE_CODE } } },
+      // Só segue se o callback for um item de COMPRA (ignora sell_* etc).
+      { id: 'found', type: 'condition', position: { x: 300, y: 0 }, data: { field: '{{item.found}}', operator: 'equals', value: 'true' } },
       { id: 'bal', type: 'memory', position: { x: 400, y: 0 }, data: { action: 'read', alias: 'bal', params: { key: 'coins:{{click.userid}}' } } },
       { id: 'afford', type: 'action', position: { x: 600, y: 0 }, data: { action_type: 'script', alias: 'afford', params: { code: AFFORD_CODE } } },
       { id: 'cond', type: 'condition', position: { x: 800, y: 0 }, data: { field: '{{afford.ok}}', operator: 'equals', value: 'true' } },
@@ -88,7 +90,8 @@ export function seedShop(serverId: string) {
     ],
     edges: [
       { id: 'e1', source: 'trg', target: 'item' },
-      { id: 'e2', source: 'item', target: 'bal' },
+      { id: 'e2', source: 'item', target: 'found' },
+      { id: 'ef', source: 'found', target: 'bal', sourceHandle: 'true' },
       { id: 'e3', source: 'bal', target: 'afford' },
       { id: 'e4', source: 'afford', target: 'cond' },
       { id: 'e5', source: 'cond', target: 'debit', sourceHandle: 'true' },
