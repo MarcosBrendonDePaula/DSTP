@@ -1636,6 +1636,7 @@ RegisterPerPlayerEvents = function(player)
         DSTP.PushEvent("player_attack_other", {
             userid = uid, name = pname,
             target = target and target.prefab or "unknown",
+            target_guid = target and target.GUID or nil,
             target_is_player = target and target:HasTag("player") or false,
             weapon = data and data.weapon and data.weapon.prefab or nil,
         }, data)
@@ -1648,6 +1649,7 @@ RegisterPerPlayerEvents = function(player)
         DSTP.PushEvent("player_hit_other", {
             userid = uid, name = pname,
             target = target and target.prefab or "unknown",
+            target_guid = target and target.GUID or nil,  -- p/ HUD seguir o alvo exato
             target_is_player = target and target:HasTag("player") or false,
             damage = data and data.damage or 0,
         }, data)
