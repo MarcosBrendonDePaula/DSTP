@@ -46,8 +46,32 @@ export function handleDstSync(data: any) {
     }
   }
 
+  // Synthetic `tick` event per player — gives flows a periodic heartbeat for
+  // live HUDs (position/world don't arrive as events). Throttled per player so
+  // a 0.1s poll doesn't run tick flows 10×/s.
+  if (Array.isArray(players) && players.length > 0) {
+    const now = Date.now()
+    for (const p of players) {
+      if (!p?.userid) continue
+      const key = `${server_id}:${p.userid}`
+      const last = _tickLast.get(key) || 0
+      if (now - last < TICK_MS) continue
+      _tickLast.set(key, now)
+      const evt = { type: 'tick', data: {
+        userid: p.userid, name: p.name,
+        x: p.position?.x, y: p.position?.y, z: p.position?.z,
+        health: p.health, hunger: p.hunger, sanity: p.sanity,
+        day: server?.day, phase: server?.phase, season: server?.season,
+      }}
+      try { processAutomationEvent(server_id, evt) } catch (e) { console.error('[DSTP tick]', e) }
+    }
+  }
+
   return result
 }
+
+const TICK_MS = 1000
+const _tickLast: Map<string, number> = ((globalThis as any).__dstpTickLast ??= new Map())
 
 export const dstRoutes = new Elysia({ prefix: "/dst" })
   .onError(({ code, error, path }) => {

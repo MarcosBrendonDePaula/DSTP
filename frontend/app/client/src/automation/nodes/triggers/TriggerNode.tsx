@@ -45,6 +45,7 @@ export const TRIGGER_EVENTS = [
   { value: 'earthquake', label: '🌍 Earthquake', category: 'world' },
   { value: 'sinkhole_warn', label: '🕳 Sinkhole Warning', category: 'world' },
   { value: 'world_save', label: '💾 World Save', category: 'world' },
+  { value: 'tick', label: '⏲ Tick (heartbeat ~1s)', category: 'world' },
   { value: 'player_teleported', label: '🌀 Player Teleported', category: 'world' },
   // Weather
   { value: 'storm_changed', label: '⛈ Storm Changed', category: 'weather' },
