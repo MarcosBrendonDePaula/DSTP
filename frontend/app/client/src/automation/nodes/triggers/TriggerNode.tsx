@@ -20,6 +20,8 @@ export const TRIGGER_EVENTS = [
   // Combat
   { value: 'player_kill', label: '⚔ Player Kill', category: 'combat' },
   { value: 'player_attacked', label: '🛡 Player Attacked', category: 'combat' },
+  { value: 'player_attack_other', label: '⚔ Player Atacou Alguém', category: 'combat' },
+  { value: 'player_hit_other', label: '🩸 Player Acertou Alguém', category: 'combat' },
   // Crafting
   { value: 'player_craft', label: '🔨 Player Craft', category: 'crafting' },
   { value: 'player_build', label: '🏗 Player Build', category: 'crafting' },
@@ -28,6 +30,7 @@ export const TRIGGER_EVENTS = [
   { value: 'player_pickup', label: '📦 Player Pickup', category: 'inventory' },
   { value: 'player_drop', label: '📦 Player Drop', category: 'inventory' },
   { value: 'player_unequip', label: '🎒 Player Unequip', category: 'inventory' },
+  { value: 'player_item_get', label: '📥 Player Recebeu Item', category: 'inventory' },
   // Health
   { value: 'health_delta', label: '❤ Health Change', category: 'health' },
   { value: 'hunger_delta', label: '🍖 Hunger Change', category: 'health' },
@@ -69,6 +72,8 @@ export const TRIGGER_EVENTS = [
   { value: 'player_cooled', label: '❄ Player Cooled', category: 'survival' },
   { value: 'player_mounted', label: '🐂 Player Mounted', category: 'survival' },
   { value: 'player_dismounted', label: '🐂 Player Dismounted', category: 'survival' },
+  { value: 'player_on_fire', label: '🔥 Player Pegando Fogo', category: 'survival' },
+  { value: 'player_fire_out', label: '💧 Player Apagou o Fogo', category: 'survival' },
   // UI
   { value: 'ui_callback', label: '🖱 UI Callback (button click)', category: 'ui' },
   // Economy / inventory results (emitted back by inventory commands)

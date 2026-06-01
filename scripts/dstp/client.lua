@@ -1626,6 +1626,55 @@ RegisterPerPlayerEvents = function(player)
         if not evt_config.character then return end
         DSTP.PushEvent("player_sleep_end", { userid = uid, name = pname })
     end)
+
+    -- ── Combat / anti-grief: player attacking OTHER entities ───────────────
+    -- The local client only sees its own player's attacks. attackother fires
+    -- when this player swings at a target; useful to detect grief/PvP.
+    player:ListenForEvent("onattackother", function(inst, data)
+        if not evt_config.combat then return end
+        local target = data and data.target
+        DSTP.PushEvent("player_attack_other", {
+            userid = uid, name = pname,
+            target = target and target.prefab or "unknown",
+            target_is_player = target and target:HasTag("player") or false,
+            weapon = data and data.weapon and data.weapon.prefab or nil,
+        }, data)
+    end)
+
+    -- Player landed a hit on another entity (resolved damage).
+    player:ListenForEvent("onhitother", function(inst, data)
+        if not evt_config.combat then return end
+        local target = data and data.target
+        DSTP.PushEvent("player_hit_other", {
+            userid = uid, name = pname,
+            target = target and target.prefab or "unknown",
+            target_is_player = target and target:HasTag("player") or false,
+            damage = data and data.damage or 0,
+        }, data)
+    end)
+
+    -- ── Danger states ──────────────────────────────────────────────────────
+    -- Player started taking fire damage (on fire).
+    player:ListenForEvent("startfiredamage", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_on_fire", { userid = uid, name = pname }, inst)
+    end)
+
+    player:ListenForEvent("stopfiredamage", function(inst)
+        if not evt_config.survival then return end
+        DSTP.PushEvent("player_fire_out", { userid = uid, name = pname }, inst)
+    end)
+
+    -- Player received an item into the inventory (gift, pickup, crafting...).
+    player:ListenForEvent("itemget", function(inst, data)
+        if not evt_config.inventory then return end
+        local item = data and data.item
+        DSTP.PushEvent("player_item_get", {
+            userid = uid, name = pname,
+            prefab = item and item.prefab or "unknown",
+            slot = data and data.slot or nil,
+        }, data)
+    end)
 end
 
 RegisterPlayerEvents = function(inst)
