@@ -1,0 +1,19 @@
+{
+  "server": "sim-1",
+  "url": "http://127.0.0.1:3000",
+  "interval": 500,
+  "players": [
+    { "userid": "KU_alice", "name": "Alice", "admin": true }
+  ],
+  "steps": [
+    { "note": "Só o death chega — Wait(all) fica pendente, NENHUM announce ainda" },
+    { "emit": "player_death", "data": { "userid": "KU_alice", "cause": "spider" } },
+    { "wait": 700 },
+    { "expectNoCommand": { "type": "announce" } },
+
+    { "note": "Agora o chat chega — Wait satisfeito, announce deve disparar" },
+    { "emit": "chat_message", "data": { "userid": "KU_alice", "message": "oi" } },
+    { "wait": 800 },
+    { "expectCommand": { "type": "announce" } }
+  ]
+}

@@ -60,6 +60,48 @@ repo.save({
   edges: [{ id: 'e2', source: 'trg2', target: 'scr1' }],
 })
 
+// Wait/Merge flow: two different triggers converge on a Wait node (mode 'all').
+// The Wait only releases after BOTH a player_death AND a chat_message have
+// arrived — exercising the per-worker WorkflowInstanceStore across multiple
+// separate event messages to the core.
+repo.save({
+  id: 'sim-wait-merge',
+  name: 'sim: wait/merge (death + chat)',
+  enabled: true,
+  nodes: [
+    {
+      id: 'wtrgA',
+      type: 'trigger',
+      position: { x: 0, y: 0 },
+      data: { event_type: 'player_death', alias: 'death' },
+    },
+    {
+      id: 'wtrgB',
+      type: 'trigger',
+      position: { x: 0, y: 150 },
+      data: { event_type: 'chat_message', alias: 'chat' },
+    },
+    {
+      id: 'wnode',
+      type: 'wait',
+      position: { x: 300, y: 75 },
+      data: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
+    },
+    {
+      id: 'wact',
+      type: 'action',
+      position: { x: 600, y: 75 },
+      // generic action → command type "announce" carrying both branches' data
+      data: { action_type: 'announce', params: { message: 'merged: {{death.userid}} + {{chat.userid}}' } },
+    },
+  ],
+  edges: [
+    { id: 'we1', source: 'wtrgA', target: 'wnode' },
+    { id: 'we2', source: 'wtrgB', target: 'wnode' },
+    { id: 'we3', source: 'wnode', target: 'wact' },
+  ],
+})
+
 console.log(`Seeded test flows into server "${serverId}":`)
 for (const f of repo.findAll()) {
   console.log(`  ${f.enabled ? '●' : '○'} ${f.id}  "${f.name}"`)
