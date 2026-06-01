@@ -661,13 +661,20 @@ export class FlowEngine {
     const { field, operator, value } = node.data
     if (!field || !operator) return true
 
-    // Resolve field — can be a context path like "trigger.prefab" or plain "prefab"
+    // The field may be written several ways — be forgiving:
+    //   "{{tm.message}}"  (full template, as other fields use)
+    //   "tm.message"      (raw context path)
+    //   "message"         (plain key → tries trigger first)
     let actual: any
-    if (field.includes('.')) {
-      actual = this.resolveValue(`{{${field}}}`, context)
+    const fieldStr = String(field).trim()
+    if (fieldStr.includes('{{')) {
+      // Already a template — resolve as-is.
+      actual = this.resolveValue(fieldStr, context)
+    } else if (fieldStr.includes('.')) {
+      actual = this.resolveValue(`{{${fieldStr}}}`, context)
     } else {
-      // Try trigger data first, then full context
-      actual = context.trigger?.[field] ?? this.resolveValue(`{{${field}}}`, context)
+      // Plain key: try trigger data first, then full context.
+      actual = context.trigger?.[fieldStr] ?? this.resolveValue(`{{${fieldStr}}}`, context)
     }
 
     const resolvedValue = this.resolveValue(value, context)
