@@ -38,6 +38,8 @@ configuration_options = {
         label = "Poll Interval",
         hover = "How often to sync with the backend (in seconds).",
         options = {
+            {description = "0.1s (Insane)", data = 0.1},
+            {description = "0.25s (Ultra+)", data = 0.25},
             {description = "0.5s (Ultra)", data = 0.5},
             {description = "1s (Fast)", data = 1},
             {description = "2s", data = 2},

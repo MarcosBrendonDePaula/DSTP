@@ -863,11 +863,13 @@ state.next_poll_delay = nil
 state.last_cmd_count = 0
 
 local function ComputeNextDelay()
-    -- Events in queue → flush immediately next tick
-    if #state.event_queue > 0 then return 0.5 end
+    -- Events in queue → flush ASAP. With the relay buffering pushed commands
+    -- locally (WS), the round-trip cost of a fast poll is tiny, so we poll
+    -- aggressively to make reactions (e.g. heal-on-hit) near-instant.
+    if #state.event_queue > 0 then return 0.1 end
 
     -- Burst mode: backend sent commands recently → stay responsive
-    if state.last_cmd_count > 0 then return 2 end
+    if state.last_cmd_count > 0 then return 0.5 end
 
     -- Idle: no players connected → slow way down
     local client_count = 0
