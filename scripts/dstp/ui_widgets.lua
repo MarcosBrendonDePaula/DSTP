@@ -238,7 +238,13 @@ local function CreatePanel(cmd)
         close_btn:SetPosition(pw / 2 - 15, ph / 2 - 15)
         close_btn:SetScale(0.4)
         close_btn:SetOnClick(function()
-            UIWidgets.DestroyWidget({ id = cmd.id })
+            -- A menu's panel + buttons share a `group`; closing the panel must
+            -- tear down the whole group, not just the panel widget itself.
+            if cmd.group then
+                UIWidgets.DestroyGroup(cmd.group)
+            else
+                UIWidgets.DestroyWidget({ id = cmd.id })
+            end
         end)
     end
 
@@ -294,7 +300,15 @@ local function CreateButton(cmd)
     local col = ResolveColor(cmd.color)
     label:SetColour(col[1], col[2], col[3], col[4])
 
+    -- Debounce: ignore repeat clicks on the same button within a short window.
+    -- DST's ImageButton can fire OnClick more than once per real press, and an
+    -- impatient player double-clicking a shop button would otherwise queue
+    -- several ui_callback events (each a full flow run).
+    local last_click = -1
     btn:SetOnClick(function()
+        local now = _G.GetTime and _G.GetTime() or 0
+        if last_click >= 0 and (now - last_click) < 0.5 then return end
+        last_click = now
         if cmd.callback and UIWidgets._callback_fn then
             UIWidgets._callback_fn(cmd.callback, cmd.id)
         end
@@ -461,9 +475,23 @@ function UIWidgets.CreateWidget(cmd)
 
     local entry = creator(cmd)
     if entry then
+        entry.group = cmd.group
         active_widgets[cmd.id] = entry
         Log("created " .. cmd.type .. " '" .. cmd.id .. "'")
     end
+end
+
+--- Destroy every widget tagged with the given group (e.g. a whole menu).
+function UIWidgets.DestroyGroup(group)
+    if not group then return end
+    local ids = {}
+    for id, entry in pairs(active_widgets) do
+        if entry.group == group then table.insert(ids, id) end
+    end
+    for _, id in ipairs(ids) do
+        UIWidgets.DestroyWidget({ id = id })
+    end
+    Log("destroyed group '" .. tostring(group) .. "' (" .. #ids .. " widgets)")
 end
 
 function UIWidgets.UpdateWidget(cmd)
@@ -537,6 +565,8 @@ function UIWidgets.ProcessCommand(cmd)
         UIWidgets.UpdateWidget(cmd)
     elseif cmd.action == "destroy" then
         UIWidgets.DestroyWidget(cmd)
+    elseif cmd.action == "destroy_group" then
+        UIWidgets.DestroyGroup(cmd.group)
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
     elseif cmd.action == "batch" then

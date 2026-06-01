@@ -734,18 +734,21 @@ export class FlowEngine {
         const height = Number(actionData.height) || (headerH + buttons.length * (btnH + 8) + 20)
         const anchor = actionData.anchor || 'center'
 
+        // All widgets of one menu share `group: menuId` so closing the panel
+        // (or a destroy_group) tears the whole menu down, not just the panel.
         const sub: any[] = [
-          { action: 'create', id: menuId, type: 'panel', title: actionData.title, body: actionData.body, width, height, anchor, closeable: actionData.closeable !== false && actionData.closeable !== 'false' },
+          { action: 'create', id: menuId, group: menuId, type: 'panel', title: actionData.title, body: actionData.body, width, height, anchor, closeable: actionData.closeable !== false && actionData.closeable !== 'false' },
         ]
         // Stack buttons downward from just under the header.
         let y = height / 2 - headerH - btnH / 2
         buttons.forEach((b: any, i: number) => {
           const label = b.label ?? b.text ?? `Opção ${i + 1}`
           const callback = b.callback ?? b.value ?? label
-          sub.push({ action: 'create', id: `${menuId}_btn_${i}`, type: 'button', text: String(label), callback: String(callback), width: width - 40, height: btnH, anchor, y, x: 0 })
+          sub.push({ action: 'create', id: `${menuId}_btn_${i}`, group: menuId, type: 'button', text: String(label), callback: String(callback), width: width - 40, height: btnH, anchor, y, x: 0 })
           y -= btnH + 8
         })
-        cmd = { action: 'batch', commands: sub }
+        // seq lets the client dedup a re-delivered batch (net_string replays).
+        cmd = { action: 'batch', seq: Date.now(), commands: sub }
       } else if (actionType === 'ui_track') {
         // HUD that follows a world entity (e.g. health bar over a boss).
         // The mod resolves the entity client-side and repositions each tick.
