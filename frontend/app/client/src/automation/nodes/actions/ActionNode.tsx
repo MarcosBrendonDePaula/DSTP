@@ -26,6 +26,15 @@ export const ACTION_TYPES = [
   { value: 'set_speed', label: '⏩ Set Speed', params: [{ key: 'speed', label: 'Velocidade', placeholder: '1' }] },
   { value: 'rollback', label: '↩ Rollback', params: [{ key: 'days', label: 'Dias', placeholder: '0' }] },
   { value: 'execute', label: '🔧 Execute Lua', params: [{ key: 'lua', label: 'Código Lua', placeholder: 'print("hello")' }] },
+  // Admin / World control
+  { value: 'ban', label: '🔨 Ban', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'lightning', label: '⚡ Lightning no Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }] },
+  { value: 'regenerate', label: '🌍 Regenerate World', params: [] },
+  { value: 'set_next_phase', label: '⏭ Próxima Fase', params: [] },
+  { value: 'set_snow', label: '❄ Set Snow', params: [{ key: 'enabled', label: 'Ativar', placeholder: 'true' }] },
+  { value: 'set_day_length', label: '🕐 Duração do Ciclo', params: [{ key: 'day', label: 'Dia (segs)', placeholder: '10' }, { key: 'dusk', label: 'Anoitecer (segs)', placeholder: '4' }, { key: 'night', label: 'Noite (segs)', placeholder: '8' }] },
+  { value: 'set_season_length', label: '🍂 Duração da Estação', params: [{ key: 'season', label: 'Estação', placeholder: 'autumn' }, { key: 'length', label: 'Dias', placeholder: '20' }] },
+  { value: 'remove_inventory', label: '🗑 Remover Item (slot)', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'slot', label: 'Slot', placeholder: '1' }] },
   // Spawn/Remove
   { value: 'spawn_at_player', label: '🏗 Spawn at Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'count', label: 'Qtd', placeholder: '1' }, { key: 'offset_x', label: 'Offset X', placeholder: '0' }, { key: 'offset_z', label: 'Offset Z', placeholder: '0' }] },
   { value: 'spawn_prefab', label: '🏗 Spawn (coords)', params: [{ key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'count', label: 'Qtd', placeholder: '1' }] },
