@@ -68,14 +68,19 @@ unconditionally on the client for ALL prefabs, while the server only added it to
 ones with `components.health` — instant desync.
 
 The Health Info mod avoids this by adding the netvar only to a **curated prefab
-set** and creating it identically on both sides. Rules if you retry this:
-- Gate by a known prefab list (or a tag checked the SAME way on both sides),
-  never "every entity".
+set** and creating it identically on both sides. Rules:
+- **Gate by `inst.prefab`, NOT by tag.** This is critical: tags may not be
+  set/replicated yet when `AddPrefabPostInitAny` runs, so a tag check can return
+  different results on server vs client → the netvar isn't created on one side →
+  the value never arrives (bar stays full) or the net stream desyncs.
+  `inst.prefab` is deterministic and present on both sides immediately.
 - Declare the netvar in the SAME place/condition on server and client.
-- Test prefab by prefab; a single mismatch corrupts the entity's net stream.
+- Use a curated prefab whitelist (common mobs + bosses), never "every entity".
 
-Status in DSTP: reverted. The HP-bar feature shows position/name but not real
-mob HP until this is redone carefully.
+Status in DSTP: **working.** `modmain.lua` adds the `dstp_hp`/`dstp_hp_max`
+netvar to a curated prefab list (`DSTP_HP_PREFABS`); the follow HUD reads
+`inst.dstp_hp` and the bar tracks real mob health. Adding more mobs = add their
+prefab to the list (the dynamic-bindings proposal would generalize this).
 
 ## net_string holds ONE value — coalesce per frame
 

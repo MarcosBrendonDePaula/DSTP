@@ -885,23 +885,12 @@ local function CreateFollow(cmd)
     local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label }
     local lost = 0
     local task
-    local dbg = 0
     local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
     task = player:DoPeriodicTask(0, function()
         local ent = entry.target
         if dynamic or not (ent and ent:IsValid()) then
             ent = FindFollowTarget(follow)
             entry.target = ent
-        end
-        -- debug heartbeat (~every 1s) so the client log shows what the follow sees
-        dbg = dbg + 1
-        if dbg >= 30 then
-            dbg = 0
-            Log(("follow '%s' mode=%s target=%s hp=%s/%s netvar=%s"):format(
-                tostring(cmd.id), tostring(follow.mode or (follow.prefab and ("prefab:"..follow.prefab)) or "nearest"),
-                ent and ent.prefab or "nil",
-                tostring(ent and ent.dstp_hp), tostring(ent and ent.dstp_hp_max),
-                tostring(ent and ent.dstp_net_hp ~= nil)))
         end
         if not (ent and ent:IsValid()) then
             w:Hide()
