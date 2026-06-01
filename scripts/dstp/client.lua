@@ -401,9 +401,38 @@ end
 
 local function ProcessCommands(commands)
     if not commands then return end
+
+    -- A player's _dstp_ui net_string holds a SINGLE value, so multiple
+    -- ui_command in one sync would clobber each other (only the last :set
+    -- survives). Coalesce all ui_command per userid into one batch so the
+    -- client receives them all in a single net_string update.
+    local ui_by_user = {}        -- userid -> { sub_cmd, sub_cmd, ... }
+    local ui_order = {}          -- preserve first-seen userid order
+
     for _, cmd in ipairs(commands) do
-        if DSTP._DEBUG then Log("Exec: " .. tostring(cmd.type)) end
-        ExecuteCommand(cmd)
+        if cmd.type == "ui_command" and cmd.data and cmd.data.userid and cmd.data.cmd then
+            local uid = cmd.data.userid
+            if not ui_by_user[uid] then ui_by_user[uid] = {}; table.insert(ui_order, uid) end
+            local c = cmd.data.cmd
+            if c.action == "batch" and c.commands then
+                for _, sub in ipairs(c.commands) do table.insert(ui_by_user[uid], sub) end
+            else
+                table.insert(ui_by_user[uid], c)
+            end
+        else
+            if DSTP._DEBUG then Log("Exec: " .. tostring(cmd.type)) end
+            ExecuteCommand(cmd)
+        end
+    end
+
+    -- Flush one batched ui_command per player.
+    for _, uid in ipairs(ui_order) do
+        local subs = ui_by_user[uid]
+        if #subs == 1 then
+            ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = subs[1] } })
+        elseif #subs > 1 then
+            ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = { action = "batch", commands = subs } } })
+        end
     end
 end
 

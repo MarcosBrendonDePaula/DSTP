@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // HUD pequeno no canto inferior direito mostrando dados do player ao vivo:
 // posição (x,z), dinheiro e dia/fase. Server-push via evento `tick` (~1s).
-//   hud-open: player_spawn → UI Builder (painel ancorado bottomright)
+//   hud-open: player_spawn → UI Builder (painel ancorado bottomleft)
 //   hud-tick: tick → ui_set nos textos (pos, dinheiro lido da memory, mundo)
 //
 // Usage: bun run scripts/sim/seed-hud.ts [serverId]
@@ -13,7 +13,7 @@ export function seedHud(serverId: string) {
 
   // Painel compacto, ancorado no canto inferior direito. Textos endereçáveis.
   const tree = {
-    type: 'panel', title: 'Você', closeable: false, anchor: 'bottomright', gap: 4, min_width: 180,
+    type: 'panel', title: 'Você', closeable: false, anchor: 'bottomleft', gap: 4, min_width: 180,
     children: [
       { type: 'text', id: 'pos_txt', text: 'Pos: -, -', size: 15, color: [0.8, 0.9, 1, 1] },
       { type: 'text', id: 'coins_txt', text: 'Moedas: 0', size: 15, color: [1, 0.9, 0.4, 1] },
@@ -25,7 +25,7 @@ export function seedHud(serverId: string) {
     id: 'hud-open', name: 'HUD: abrir', enabled: true,
     nodes: [
       { id: 'trg', type: 'trigger', position: { x: 0, y: 0 }, data: { event_type: 'player_spawn', alias: 'p' } },
-      { id: 'ui', type: 'ui_builder', position: { x: 220, y: 0 }, data: { tree, params: { id: 'hud', userid: '{{p.userid}}', anchor: 'bottomright' } } },
+      { id: 'ui', type: 'ui_builder', position: { x: 220, y: 0 }, data: { tree, params: { id: 'hud', userid: '{{p.userid}}', anchor: 'bottomleft' } } },
     ],
     edges: [{ id: 'e1', source: 'trg', target: 'ui' }],
   })

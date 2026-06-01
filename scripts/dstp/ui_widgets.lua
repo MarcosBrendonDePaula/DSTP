@@ -69,8 +69,16 @@ end
 --- Resolve anchor name to x/y offset base from screen center
 --- Returns base_x, base_y that positions a widget at that corner/edge
 local function AnchorOffset(anchor_name)
-    -- Screen half-extents (approximate for 1920x1080 in widget space ÷ 2)
-    local hw, hh = 480, 270
+    -- Half-extents of the UI coordinate space. The root is ANCHOR_MIDDLE +
+    -- SCALEMODE_PROPORTIONAL, so coords are relative to screen center in DST's
+    -- virtual UI space (RESOLUTION_X/Y, ~1280x720). Use those constants instead
+    -- of a hardcoded guess, with a margin so widgets stay on-screen. Falls back
+    -- to 640x360 if the constants aren't available.
+    local resx = _G.RESOLUTION_X or 1280
+    local resy = _G.RESOLUTION_Y or 720
+    local margin = 120
+    local hw = resx / 2 - margin
+    local hh = resy / 2 - margin
     local map = {
         topleft      = {-hw,  hh},
         top          = {  0,  hh},
