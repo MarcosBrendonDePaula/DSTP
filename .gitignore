@@ -12,3 +12,4 @@ relay/dist/dstp-relay.exe
 relay/dist/dstp-relay
 dist/
 *.exe
+scripts_extracted/
