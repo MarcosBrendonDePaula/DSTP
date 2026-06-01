@@ -9,6 +9,7 @@ import { GetPlayerNode } from './actions/GetPlayerNode'
 import { FindPlayerNode } from './actions/FindPlayerNode'
 import { WaitNode } from './actions/WaitNode'
 import { MemoryNode } from './actions/MemoryNode'
+import { MenuNode } from './actions/MenuNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -22,6 +23,7 @@ export const nodeTypes = {
   script: ScriptNode,
   wait: WaitNode,
   memory: MemoryNode,
+  ui_menu: MenuNode,
 }
 
 export { TriggerNode, TRIGGER_EVENTS } from './triggers/TriggerNode'

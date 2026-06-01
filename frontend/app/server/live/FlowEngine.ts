@@ -341,7 +341,7 @@ export class FlowEngine {
           }
         }
 
-      } else if (['action', 'http_request', 'set_variable', 'script'].includes(node.type)) {
+      } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu'].includes(node.type)) {
         const actionType = node.data.action_type || node.type
 
         if (actionType === 'http_request') {
@@ -717,6 +717,58 @@ export class FlowEngine {
         const val = Number(actionData.value) || 0
         const max = Number(actionData.max) || 1
         cmd = { action: 'create', id: actionData.id || `bar_${Date.now()}`, type: 'progress_bar', value: val / max, label: actionData.label, width: Number(actionData.width) || 200 }
+      } else if (actionType === 'ui_menu') {
+        // Menu = panel + N buttons laid out vertically. Buttons come as a JSON
+        // array of { label, callback } (or { text, callback }). Each button's
+        // click sends back a `ui_callback` event carrying its `callback` string.
+        const menuId = actionData.id || `menu_${Date.now()}`
+        let buttons = actionData.buttons
+        if (typeof buttons === 'string') {
+          try { buttons = JSON.parse(buttons) } catch { buttons = [] }
+        }
+        if (!Array.isArray(buttons)) buttons = []
+
+        const width = Number(actionData.width) || 360
+        const btnH = 46
+        const headerH = actionData.title || actionData.body ? 70 : 20
+        const height = Number(actionData.height) || (headerH + buttons.length * (btnH + 8) + 20)
+        const anchor = actionData.anchor || 'center'
+
+        const sub: any[] = [
+          { action: 'create', id: menuId, type: 'panel', title: actionData.title, body: actionData.body, width, height, anchor, closeable: actionData.closeable !== false && actionData.closeable !== 'false' },
+        ]
+        // Stack buttons downward from just under the header.
+        let y = height / 2 - headerH - btnH / 2
+        buttons.forEach((b: any, i: number) => {
+          const label = b.label ?? b.text ?? `Opção ${i + 1}`
+          const callback = b.callback ?? b.value ?? label
+          sub.push({ action: 'create', id: `${menuId}_btn_${i}`, type: 'button', text: String(label), callback: String(callback), width: width - 40, height: btnH, anchor, y, x: 0 })
+          y -= btnH + 8
+        })
+        cmd = { action: 'batch', commands: sub }
+      } else if (actionType === 'ui_track') {
+        // HUD that follows a world entity (e.g. health bar over a boss).
+        // The mod resolves the entity client-side and repositions each tick.
+        // Delivered as a normal widget create with a `follow` block the mod reads.
+        cmd = {
+          action: 'create',
+          id: actionData.id || `track_${Date.now()}`,
+          type: actionData.widget || 'progress_bar',
+          follow: {
+            prefab: actionData.prefab || undefined,
+            guid: actionData.guid ? Number(actionData.guid) : undefined,
+            nearest: actionData.nearest === true || actionData.nearest === 'true',
+            offset_y: Number(actionData.offset_y) || 60,
+            max_dist: Number(actionData.max_dist) || 0,
+            bind: actionData.bind || undefined,
+          },
+          label: actionData.label,
+          width: Number(actionData.width) || 80,
+          height: Number(actionData.height) || 10,
+          value: Number(actionData.value) || 1,
+          max: Number(actionData.max) || 1,
+          text: actionData.text,
+        }
       } else if (actionType === 'ui_destroy') {
         cmd = { action: 'destroy', id: actionData.id }
       } else if (actionType === 'ui_clear') {

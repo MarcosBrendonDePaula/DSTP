@@ -178,6 +178,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
       wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
       memory: { action: 'read', params: { key: '' } },
+      ui_menu: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
     }
     const newNode: Node = {
       id: genId(),
@@ -254,6 +255,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </button>
         <button onClick={() => addNode('script')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors">
           🧩 Script
+        </button>
+        <button onClick={() => addNode('ui_menu')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
+          📋 Menu
         </button>
         <div className="flex-1" />
         {captureData?.active ? (
