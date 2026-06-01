@@ -580,6 +580,12 @@ RenderNode = function(node, parent, ctx)
             end
         end
 
+        -- Whole block (bar + gap + content) is centered on the holder origin so
+        -- the parent col lays it out correctly. Bar sits at the top, content below.
+        local totalH = barH + gap + contentH
+        local barY = totalH / 2 - barH / 2                 -- bar centered at top
+        local contentY = totalH / 2 - barH - gap - contentH / 2  -- content below bar
+
         local barX = -totalBar / 2 + btnW / 2
         for i, tab in ipairs(tabs) do
             local bwrap = holder:AddChild(Widget("tabbtn_" .. i))
@@ -589,18 +595,17 @@ RenderNode = function(node, parent, ctx)
                 "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
             btn:SetScale(btnW / 340, barH / 70)
             local lbl = bwrap:AddChild(Text(_G.NEWFONT_OUTLINE, 18, tab.label or ("Aba " .. i)))
-            bwrap:SetPosition(barX + (i - 1) * (btnW + gap), contentH / 2 + barH, 0)
+            bwrap:SetPosition(barX + (i - 1) * (btnW + gap), barY, 0)
             local idx = i
             btn:SetOnClick(function() activate(idx) end)
             barWidgets[i] = { btn = btn, label = lbl }
         end
 
-        -- Position content stack just below the bar.
-        for _, pg in ipairs(pages) do pg:SetPosition(0, 0, 0) end
+        -- Content stack sits below the bar.
+        for _, pg in ipairs(pages) do pg:SetPosition(0, contentY, 0) end
         activate((node.active or 0) + 1)
 
         local totalW = math.max(contentW, totalBar)
-        local totalH = contentH + barH + gap
         return holder, totalW, totalH
 
     elseif t == "text" then
