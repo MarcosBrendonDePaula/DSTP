@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import { useReactFlow } from '@xyflow/react'
 
 // Visual tree editor for a ui_builder node. Builds node.data.tree — the same
 // {type, ...props, children} the backend renders. No canvas spam, no JSON: pick
@@ -75,17 +74,15 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
   return clone
 }
 
-export function UITreeEditor({ nodeId, tree }: { nodeId: string; tree: UINode | null }) {
-  const { updateNodeData, getNode: rfGetNode } = useReactFlow()
+export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
   const [addType, setAddType] = useState('text')
 
   const root: UINode = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
 
   const save = useCallback((next: UINode) => {
-    const n = rfGetNode(nodeId)
-    updateNodeData(nodeId, { ...(n?.data || {}), tree: next })
-  }, [nodeId, rfGetNode, updateNodeData])
+    onChange(next)
+  }, [onChange])
 
   const selected = getNode(root, selPath)
 

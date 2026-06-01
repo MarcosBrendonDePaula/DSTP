@@ -200,6 +200,12 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     setNodes(nds => [...nds, newNode])
   }, [nodes.length, setNodes])
 
+  // Update a ui_builder node's tree from the detail-panel editor. Passed down
+  // because the modal renders outside <ReactFlow>, so it can't use useReactFlow.
+  const updateNodeTree = useCallback((nodeId: string, tree: any) => {
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, tree } } : n))
+  }, [setNodes])
+
   const handleSave = () => onSave(nodes, edges, true)
 
   // Auto-save: debounce 500ms to let editors (Monaco) commit their changes
@@ -347,6 +353,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         <NodeDetailPanel
           node={detailNode}
           onClose={() => setDetailNodeId(null)}
+          onUpdateTree={updateNodeTree}
           captureTrace={captureData?.trace || null}
           captureContext={captureData?.context || executionContext || null}
           allNodes={nodes}

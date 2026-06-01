@@ -102,6 +102,7 @@ interface NodeDetailPanelProps {
   captureContext?: Record<string, any> | null
   allNodes?: Node[]
   allEdges?: Array<{ source: string; target: string }>
+  onUpdateTree?: (nodeId: string, tree: any) => void
 }
 
 // ─── Helpers: find upstream data ──────────────────────
@@ -180,7 +181,7 @@ function getOutputData(
 
 // ─── Modal ────────────────────────────────────────────
 
-export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, allNodes = [], allEdges = [] }: NodeDetailPanelProps) {
+export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, allNodes = [], allEdges = [], onUpdateTree }: NodeDetailPanelProps) {
   const [showConfig, setShowConfig] = useState(true)
 
   const type = node.type || 'unknown'
@@ -284,7 +285,7 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
         {/* UI Builder: visual tree editor (replaces input/output body) */}
         {type === 'ui_builder' ? (
           <div className="flex-1 overflow-y-auto p-4 min-h-0">
-            <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} />
+            <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
           </div>
         ) : (
         /* Two-column body */
