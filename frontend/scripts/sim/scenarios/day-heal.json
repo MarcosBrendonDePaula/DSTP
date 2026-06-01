@@ -1,0 +1,25 @@
+{
+  "server": "sim-1",
+  "url": "http://127.0.0.1:3000",
+  "interval": 500,
+  "players": [
+    { "userid": "KU_alice", "name": "Alice", "admin": true }
+  ],
+  "steps": [
+    { "note": "É DIA — atacar deve curar o dano de volta (heal)" },
+    { "world": { "phase": "day" } },
+    { "poll": true },
+    { "emit": "player_attacked", "data": { "userid": "KU_alice", "attacker": "spider", "damage": 20, "damage_resolved": 20 } },
+    { "wait": 700 },
+    { "expectCommand": { "type": "heal", "match": { "userid": "KU_alice" } } },
+
+    { "note": "Agora é NOITE — atacar NÃO deve curar" },
+    { "clearReceived": true },
+    { "world": { "phase": "night" } },
+    { "poll": true },
+    { "wait": 300 },
+    { "emit": "player_attacked", "data": { "userid": "KU_alice", "attacker": "hound", "damage": 30, "damage_resolved": 30 } },
+    { "wait": 700 },
+    { "expectNoCommand": { "type": "heal" } }
+  ]
+}

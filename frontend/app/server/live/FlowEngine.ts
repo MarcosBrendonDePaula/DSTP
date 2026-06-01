@@ -81,6 +81,15 @@ export class FlowEngine {
     catch (err: any) { console.warn(`[FlowEngine] log create failed: ${err?.message ?? err}`) }
   }
 
+  // Current world state (phase/day/season) for a server, read from the host's
+  // server groups (the worker mirror carries a `world` field per group). Lets
+  // every trigger expose {{trigger.phase}}/{{trigger.day}}/{{trigger.season}}.
+  private worldFor(serverId: string): { phase: string; day: number; season: string } {
+    const groups = this.host.getServerGroups()
+    const g = groups.find((x: any) => x.server_id === serverId)
+    return g?.world ?? { phase: 'unknown', day: 0, season: 'unknown' }
+  }
+
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
@@ -346,7 +355,18 @@ export class FlowEngine {
     const edges = flow.edges as FlowEdge[]
     const executedActions: string[] = []
 
-    const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
+    const world = this.worldFor(serverId)
+    const triggerData = {
+      ...event.data,
+      _event_type: event.type,
+      _timestamp: Date.now(),
+      // World context on every event, so conditions can check {{trigger.phase}}
+      // etc even for events that don't natively carry it (e.g. player_attacked).
+      // Event data takes precedence if it already provides these keys.
+      phase: event.data?.phase ?? world.phase,
+      day: event.data?.day ?? world.day,
+      season: event.data?.season ?? world.season,
+    }
     const context: Record<string, any> = {
       trigger: triggerData,
       _flowId: flow.id,
@@ -410,7 +430,18 @@ export class FlowEngine {
     const edges = flow.edges as FlowEdge[]
     const executedActions: string[] = []
 
-    const triggerData = { ...event.data, _event_type: event.type, _timestamp: Date.now() }
+    const world = this.worldFor(serverId)
+    const triggerData = {
+      ...event.data,
+      _event_type: event.type,
+      _timestamp: Date.now(),
+      // World context on every event, so conditions can check {{trigger.phase}}
+      // etc even for events that don't natively carry it (e.g. player_attacked).
+      // Event data takes precedence if it already provides these keys.
+      phase: event.data?.phase ?? world.phase,
+      day: event.data?.day ?? world.day,
+      season: event.data?.season ?? world.season,
+    }
     const context: Record<string, any> = {
       trigger: triggerData,
       _flowId: flow.id,

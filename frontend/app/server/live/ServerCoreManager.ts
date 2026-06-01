@@ -33,6 +33,18 @@ interface Core {
   pingSeq: number
 }
 
+// Extract world state (phase/day/season) from a server group's master shard.
+// The mod sends these in `server.{phase,day,season}` on every sync.
+function worldFrom(group: any): { phase: string; day: number; season: string } {
+  const master = (group.shards || []).find((s: any) => s.shard_type === 'master') || (group.shards || [])[0]
+  const srv = master?.server || {}
+  return {
+    phase: srv.phase ?? 'unknown',
+    day: typeof srv.day === 'number' ? srv.day : 0,
+    season: srv.season ?? 'unknown',
+  }
+}
+
 // Forwarded to the connected Live panel (set by LiveAutomation on mount). Kept
 // as a setter so we don't create an import cycle with LiveAutomation.
 let panelEmit: ((delta: Record<string, any>) => void) | null = null
@@ -123,11 +135,14 @@ class ServerCoreManager {
       return groups.map((g: any) => ({
         server_id: g.server_id,
         all_players: JSON.parse(JSON.stringify(g.all_players ?? [])),
+        // World state (phase/day/season) taken from the master shard, so the
+        // engine can expose {{trigger.phase}}/day/season on every event.
+        world: worldFrom(g),
       }))
     } catch {
       // If even the players don't serialize, send an empty mirror rather than
       // crashing the worker — get_player just won't find anyone this tick.
-      return groups.map((g: any) => ({ server_id: g.server_id, all_players: [] }))
+      return groups.map((g: any) => ({ server_id: g.server_id, all_players: [], world: worldFrom(g) }))
     }
   }
 

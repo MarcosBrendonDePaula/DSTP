@@ -28,6 +28,7 @@ interface Step {
   world?: { day?: number; phase?: string; season?: string }
   expectCommand?: { type: string; match?: Record<string, any> }
   expectNoCommand?: { type: string }
+  clearReceived?: boolean                // forget commands seen so far (for fresh expectNoCommand windows)
   note?: string
 }
 
@@ -70,6 +71,7 @@ export async function runScenarioObject(host: SimHost, scenario: Scenario): Prom
     stepNo++
     if (step.note) console.log(`\x1b[90m# ${step.note}\x1b[0m`)
 
+    if (step.clearReceived) { received.length = 0 }
     if (step.join) { host.addPlayer(step.join); host.emit('player_spawn', { userid: step.join.userid }) }
     if (step.leave) { host.emit('player_left', { userid: step.leave }); host.removePlayer(step.leave) }
     if (step.world) host.setWorld(step.world)

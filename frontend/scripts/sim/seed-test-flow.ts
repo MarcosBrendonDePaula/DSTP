@@ -102,6 +102,24 @@ repo.save({
   ],
 })
 
+// "Heal damage during the day": player_attacked → if phase==day → heal back the
+// damage taken (effective daytime invulnerability). Exercises the world context
+// (phase) now injected into every event.
+repo.save({
+  id: 'sim-day-heal',
+  name: 'sim: heal damage during day',
+  enabled: true,
+  nodes: [
+    { id: 'dtrg', type: 'trigger', position: { x: 0, y: 0 }, data: { event_type: 'player_attacked', alias: 'hit' } },
+    { id: 'dcond', type: 'condition', position: { x: 300, y: 0 }, data: { field: 'phase', operator: 'equals', value: 'day' } },
+    { id: 'dheal', type: 'action', position: { x: 600, y: 0 }, data: { action_type: 'heal', params: { userid: '{{hit.userid}}', amount: '{{hit.damage_resolved}}' } } },
+  ],
+  edges: [
+    { id: 'de1', source: 'dtrg', target: 'dcond' },
+    { id: 'de2', source: 'dcond', target: 'dheal', sourceHandle: 'true' },
+  ],
+})
+
 console.log(`Seeded test flows into server "${serverId}":`)
 for (const f of repo.findAll()) {
   console.log(`  ${f.enabled ? '●' : '○'} ${f.id}  "${f.name}"`)
