@@ -39,7 +39,7 @@ const NUMERIC_PARAM_KEYS = new Set([
   'length', 'day', 'dusk', 'night', 'slot', 'width', 'height', 'value', 'max',
   'offset_x', 'offset_z',
 ])
-const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop'])
+const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop', 'visible'])
 
 function coerceParam(key: string, v: any): any {
   if (typeof v !== 'string') return v
@@ -749,6 +749,11 @@ export class FlowEngine {
       return undefined
     }
 
+    // Generic on every node: an explicit node_id makes it addressable for
+    // ui_set, and a callback makes ANY node clickable (emits ui_callback).
+    if (p.node_id) out.id = String(p.node_id)
+    if (p.callback) out.callback = String(r(p.callback))
+
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
       out.closeable = p.closeable !== false && p.closeable !== 'false'
@@ -760,8 +765,6 @@ export class FlowEngine {
       if (p.size != null) out.size = num(p.size)
       const c = color(p.color); if (c) out.color = c
       if (p.wrap_width != null) out.wrap_width = num(p.wrap_width)
-      // An explicit id makes this text addressable for in-place ui_set_text.
-      if (p.node_id) out.id = String(p.node_id)
     } else if (type === 'icon') {
       if (p.prefab) out.prefab = String(r(p.prefab))
       if (p.atlas) out.atlas = r(p.atlas)
@@ -831,9 +834,22 @@ export class FlowEngine {
       } else if (actionType === 'ui_panel') {
         cmd = { action: 'create', id: actionData.id || `panel_${Date.now()}`, type: 'panel', title: actionData.title, body: actionData.body, width: Number(actionData.width) || 400, height: Number(actionData.height) || 300 }
       } else if (actionType === 'ui_set_text') {
-        // Patch one addressable text node inside an open tree, in place.
-        // id = tree/group id (e.g. 'loja'), node = the text node_id, text = new value.
-        cmd = { action: 'set_text', id: actionData.id, node: actionData.node, text: String(actionData.text ?? '') }
+        // Legacy convenience: patch a text node by string. Generalized by ui_set.
+        cmd = { action: 'set', id: actionData.id, node: actionData.node, props: { text: String(actionData.text ?? '') } }
+      } else if (actionType === 'ui_set') {
+        // Generic in-place patch of any addressable node's props. `props` may be
+        // a JSON string or an object: { text, color, value, max, visible, tint,
+        // prefab, tex, atlas }. id = tree/group id, node = the node's node_id.
+        let props = actionData.props
+        if (typeof props === 'string') { try { props = JSON.parse(props) } catch { props = {} } }
+        if (props == null || typeof props !== 'object') {
+          // Allow flat shorthand: ui_set with text/color/value/visible directly.
+          props = {}
+          for (const k of ['text', 'color', 'value', 'max', 'visible', 'tint', 'prefab', 'tex', 'atlas', 'label']) {
+            if (actionData[k] !== undefined) props[k] = actionData[k]
+          }
+        }
+        cmd = { action: 'set', id: actionData.id, node: actionData.node, props }
       } else if (actionType === 'ui_progress_bar') {
         const val = Number(actionData.value) || 0
         const max = Number(actionData.max) || 1

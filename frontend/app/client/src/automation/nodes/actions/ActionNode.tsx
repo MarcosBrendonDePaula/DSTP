@@ -80,6 +80,15 @@ export const ACTION_TYPES = [
     { key: 'label', label: 'Label', placeholder: 'HP' },
     { key: 'width', label: 'Largura', placeholder: '200' },
   ] },
+  { value: 'ui_set', label: '🔧 Atualizar UI (prop)', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'ID da UI', placeholder: 'loja' },
+    { key: 'node', label: 'Node ID', placeholder: 'saldo_txt' },
+    { key: 'text', label: 'Texto', placeholder: 'Suas moedas: {{x}}' },
+    { key: 'value', label: 'Valor (barra)', placeholder: '' },
+    { key: 'visible', label: 'Visível (true/false)', placeholder: '' },
+    { key: 'props', label: 'Props JSON (avançado)', placeholder: '{"color":[1,0,0,1]}' },
+  ] },
   { value: 'ui_destroy', label: '❌ Remover Widget', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
     { key: 'id', label: 'Widget ID', placeholder: 'meu_label' },

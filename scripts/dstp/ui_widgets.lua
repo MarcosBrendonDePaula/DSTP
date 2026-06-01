@@ -491,6 +491,42 @@ local function LayoutChildren(node, container, ctx, axis)
     end
 end
 
+-- Register an addressable node: ctx.byId[id] = { widget, patch }. `patch` is a
+-- per-type closure that applies prop updates in place. `visible` is handled
+-- generically here (Show/Hide). This is what makes ui_set work on any node.
+local function Register(ctx, node, widget, patch)
+    if not (node.id and ctx.byId) then return end
+    ctx.byId[node.id] = {
+        widget = widget,
+        patch = function(props)
+            if props.visible ~= nil and widget.inst:IsValid() then
+                if props.visible then widget:Show() else widget:Hide() end
+            end
+            if patch then patch(props) end
+        end,
+    }
+end
+
+-- Make any widget clickable if the node carries a callback (debounced 0.5s).
+-- DST widgets receive clicks via OnControl; we attach a lightweight handler.
+local function MaybeClickable(widget, node, ctx)
+    if not node.callback then return end
+    local last = -1
+    local cb = node.callback
+    local function fire()
+        local now = _G.GetTime and _G.GetTime() or 0
+        if last >= 0 and (now - last) < 0.5 then return end
+        last = now
+        if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+    end
+    -- Text/Image widgets aren't buttons; wire OnControl + make focusable.
+    widget.OnControl = function(self, control, down)
+        if not down and (control == _G.CONTROL_ACCEPT) then fire(); return true end
+        return false
+    end
+    if widget.SetClickable then widget:SetClickable(true) end
+end
+
 RenderNode = function(node, parent, ctx)
     if not node or not node.type then return nil, 0, 0 end
     local Widget      = _G.require("widgets/widget")
@@ -504,6 +540,69 @@ RenderNode = function(node, parent, ctx)
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
         return c, w, h
 
+    elseif t == "tabs" then
+        -- Tab bar (row of buttons) on top + a content stack below; only the
+        -- active tab's content is shown. Switching is fully client-side.
+        local tabs = node.tabs or {}
+        local holder = parent:AddChild(Widget("tabs"))
+        local barH = 40
+        local gap = 8
+
+        -- Render each tab's content once, stacked at the same spot; hide all but active.
+        local pages = {}
+        local contentW, contentH = 0, 0
+        for i, tab in ipairs(tabs) do
+            local pageWrap = holder:AddChild(Widget("page_" .. i))
+            local cw, ch = 0, 0
+            if tab.child then
+                local _, w, h = RenderNode(tab.child, pageWrap, ctx)
+                cw, ch = w or 0, h or 0
+            end
+            if cw > contentW then contentW = cw end
+            if ch > contentH then contentH = ch end
+            pages[i] = pageWrap
+            pageWrap:Hide()
+        end
+
+        -- Tab buttons row, centered above the content.
+        local btnW = 120
+        local totalBar = #tabs * btnW + (#tabs - 1) * gap
+        local barWidgets = {}
+        local function activate(idx)
+            for j, pg in ipairs(pages) do
+                if j == idx then pg:Show() else pg:Hide() end
+            end
+            for j, b in ipairs(barWidgets) do
+                -- highlight active tab label
+                if b.label and b.label.inst:IsValid() then
+                    if j == idx then b.label:SetColour(1, 1, 0.5, 1) else b.label:SetColour(0.7, 0.7, 0.7, 1) end
+                end
+            end
+        end
+
+        local barX = -totalBar / 2 + btnW / 2
+        for i, tab in ipairs(tabs) do
+            local bwrap = holder:AddChild(Widget("tabbtn_" .. i))
+            local btn = bwrap:AddChild(ImageButton(
+                "images/global_redux.xml",
+                "button_carny_long_normal.tex", "button_carny_long_hover.tex",
+                "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
+            btn:SetScale(btnW / 340, barH / 70)
+            local lbl = bwrap:AddChild(Text(_G.NEWFONT_OUTLINE, 18, tab.label or ("Aba " .. i)))
+            bwrap:SetPosition(barX + (i - 1) * (btnW + gap), contentH / 2 + barH, 0)
+            local idx = i
+            btn:SetOnClick(function() activate(idx) end)
+            barWidgets[i] = { btn = btn, label = lbl }
+        end
+
+        -- Position content stack just below the bar.
+        for _, pg in ipairs(pages) do pg:SetPosition(0, 0, 0) end
+        activate((node.active or 0) + 1)
+
+        local totalW = math.max(contentW, totalBar)
+        local totalH = contentH + barH + gap
+        return holder, totalW, totalH
+
     elseif t == "text" then
         local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, node.text or ""))
         local col = ResolveColor(node.color)
@@ -512,9 +611,12 @@ RenderNode = function(node, parent, ctx)
             txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
             txt:EnableWordWrap(true)
         end
-        -- Register addressable text nodes so a later ui_set can patch them
-        -- in place (e.g. live balance) without rebuilding the whole tree.
-        if node.id and ctx.texts then ctx.texts[node.id] = txt end
+        MaybeClickable(txt, node, ctx)
+        Register(ctx, node, txt, function(props)
+            if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
+            if props.color and txt.inst:IsValid() then local c = ResolveColor(props.color); txt:SetColour(c[1], c[2], c[3], c[4]) end
+            if props.size and txt.inst:IsValid() then txt:SetSize(props.size) end
+        end)
         local w, h = txt:GetRegionSize()
         return txt, w or (#(node.text or "") * (node.size or 18) * 0.5), h or (node.size or 18)
 
@@ -527,6 +629,13 @@ RenderNode = function(node, parent, ctx)
         local ok = _G.pcall(function() img = parent:AddChild(Image(atlas, tex)) end)
         if ok and img then
             img:SetSize(size, size)
+            MaybeClickable(img, node, ctx)
+            Register(ctx, node, img, function(props)
+                if not img.inst:IsValid() then return end
+                if props.prefab then local a, x = ResolveItemAtlas(props.prefab); img:SetTexture(a, x) end
+                if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
+                if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+            end)
             return img, size, size
         end
         return parent:AddChild(Widget("noicon")), size, size
@@ -536,6 +645,12 @@ RenderNode = function(node, parent, ctx)
         local img = parent:AddChild(Image(node.atlas or "images/global.xml", node.tex or "square.tex"))
         img:SetSize(node.width or size, node.height or size)
         if node.tint then local c = ResolveColor(node.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+        MaybeClickable(img, node, ctx)
+        Register(ctx, node, img, function(props)
+            if not img.inst:IsValid() then return end
+            if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
+            if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+        end)
         return img, node.width or size, node.height or size
 
     elseif t == "button" then
@@ -558,6 +673,10 @@ RenderNode = function(node, parent, ctx)
             last = now
             if cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
         end)
+        Register(ctx, node, holder, function(props)
+            if props.text ~= nil and label.inst:IsValid() then label:SetString(tostring(props.text)) end
+            if props.color and label.inst:IsValid() then local c = ResolveColor(props.color); label:SetColour(c[1], c[2], c[3], c[4]) end
+        end)
         return holder, bw, bh
 
     elseif t == "bar" then
@@ -575,6 +694,18 @@ RenderNode = function(node, parent, ctx)
         local fillw = math.max(1, bw * pct)
         fg:SetSize(fillw, bh - 2); fg:SetTint(fgc[1], fgc[2], fgc[3], fgc[4])
         fg:SetPosition(-(bw - fillw) / 2, 0)
+        local curMax = maxv
+        Register(ctx, node, holder, function(props)
+            if not fg.inst:IsValid() then return end
+            if props.max ~= nil then curMax = tonumber(props.max) or curMax end
+            if props.value ~= nil then
+                local v = math.max(0, math.min(tonumber(props.value) or 0, curMax))
+                local p = curMax > 0 and (v / curMax) or 0
+                local fw = math.max(1, bw * p)
+                fg:SetSize(fw, bh - 2); fg:SetPosition(-(bw - fw) / 2, 0)
+            end
+            if props.color then local c = ResolveColor(props.color); fg:SetTint(c[1], c[2], c[3], c[4]) end
+        end)
         return holder, bw, bh
 
     elseif t == "spacer" then
@@ -613,29 +744,31 @@ local function CreateTree(cmd)
     local root = GetRoot()
     if not root or not cmd.tree then return nil end
     local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
-    local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id, texts = {} }
+    local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id, byId = {} }
     RenderNode(cmd.tree, w, ctx)
     local ax, ay = AnchorOffset(cmd.anchor or "center")
     w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    return { widget = w, type = "tree", group = cmd.group, texts = ctx.texts }
+    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId }
 end
 
---- Patch a single addressable text node inside an existing tree, in place.
---- cmd = { id = <tree/widget id>, node = <text node id>, text = <new string> }
-function UIWidgets.SetText(cmd)
+--- Generic in-place update: patch any addressable node's props (text, color,
+--- value, max, visible, tint, prefab, tex/atlas) without rebuilding the tree.
+--- cmd = { id = <tree id>, node = <node id>, props = {...} }
+--- (Legacy: cmd.text patches the `text` prop; kept for set_text compatibility.)
+function UIWidgets.SetProps(cmd)
     local entry = active_widgets[cmd.id]
-    if not entry or not entry.texts then return end
-    local txt = entry.texts[cmd.node]
-    if txt and txt.inst:IsValid() and cmd.text ~= nil then
-        txt:SetString(tostring(cmd.text))
-    end
+    if not entry or not entry.byId then return end
+    local target = entry.byId[cmd.node]
+    if not target or not target.patch then return end
+    local props = cmd.props
+    if not props and cmd.text ~= nil then props = { text = cmd.text } end
+    if props then target.patch(props) end
 end
 
 local function UpdateTree(entry, cmd)
-    -- If only a text patch is requested, do it in place (no rebuild, no flicker).
-    if cmd.set_text and entry.texts then
-        local txt = entry.texts[cmd.set_text.node]
-        if txt and txt.inst:IsValid() then txt:SetString(tostring(cmd.set_text.text)) end
+    -- In-place prop patch (no rebuild, no flicker).
+    if cmd.set_props then
+        UIWidgets.SetProps({ id = cmd.id, node = cmd.set_props.node, props = cmd.set_props.props })
         return entry
     end
     -- Otherwise rebuild wholesale (tree changed on open/refresh).
@@ -798,8 +931,11 @@ function UIWidgets.ProcessCommand(cmd)
     elseif cmd.action == "destroy_group" then
         UIWidgets.DestroyGroup(cmd.group)
     elseif cmd.action == "set_text" then
-        -- Patch one addressable text node in a tree, in place (no rebuild).
-        UIWidgets.SetText({ id = cmd.id, node = cmd.node, text = cmd.text })
+        -- Legacy: patch a text node by string. Generalized by set/ui_set below.
+        UIWidgets.SetProps({ id = cmd.id, node = cmd.node, text = cmd.text })
+    elseif cmd.action == "set" or cmd.action == "ui_set" then
+        -- Generic in-place prop patch on any addressable node.
+        UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
     elseif cmd.action == "batch" then

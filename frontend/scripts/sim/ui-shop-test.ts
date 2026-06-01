@@ -53,10 +53,10 @@ ck(saldoTxt?.id === 'saldo_txt', `saldo é endereçável (id=saldo_txt) [got ${s
 // comprar log (5) → saldo 73→68, e um set_text deve ser emitido para 'loja'/'saldo_txt'
 await sync([{ type: 'ui_callback', data: { userid: USER, name: 'U', callback: 'buy_log', callback_name: 'buy_log', widget_id: 'loja' } }])
 const buy = await drain()
-const setTxt = buy.find(c => c.type === 'ui_command' && c.data?.cmd?.action === 'set_text')
-ck(!!setTxt, `set_text emitido após compra [tipos: ${[...new Set(buy.map(c => c.type))].join(',')}]`)
-ck(setTxt?.data?.cmd?.id === 'loja' && setTxt?.data?.cmd?.node === 'saldo_txt', `set_text alvo loja/saldo_txt [got ${setTxt?.data?.cmd?.id}/${setTxt?.data?.cmd?.node}]`)
-ck(setTxt?.data?.cmd?.text === 'Suas moedas: 68', `set_text com saldo novo 68 [got "${setTxt?.data?.cmd?.text}"]`)
+const setTxt = buy.find(c => c.type === 'ui_command' && c.data?.cmd?.action === 'set')
+ck(!!setTxt, `ui_set emitido após compra [tipos: ${[...new Set(buy.map(c => c.type))].join(',')}]`)
+ck(setTxt?.data?.cmd?.id === 'loja' && setTxt?.data?.cmd?.node === 'saldo_txt', `set alvo loja/saldo_txt [got ${setTxt?.data?.cmd?.id}/${setTxt?.data?.cmd?.node}]`)
+ck(setTxt?.data?.cmd?.props?.text === 'Suas moedas: 68', `set props.text saldo 68 [got "${setTxt?.data?.cmd?.props?.text}"]`)
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)

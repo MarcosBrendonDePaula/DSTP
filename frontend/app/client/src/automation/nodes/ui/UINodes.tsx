@@ -101,6 +101,8 @@ export function UITextNode({ id, data, selected }: any) {
       {field('Texto', data.params?.text ?? '', v => set('text', v), '{{item.nome}}')}
       {field('Tamanho', String(data.params?.size ?? ''), v => set('size', v), '18')}
       {field('Cor [r,g,b,a]', data.params?.color ?? '', v => set('color', v), '[1,1,1,1]')}
+      {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), 'saldo_txt')}
+      {field('Callback (clicável)', data.params?.callback ?? '', v => set('callback', v), '')}
     </UIBox>
   )
 }
@@ -111,6 +113,8 @@ export function UIIconNode({ id, data, selected }: any) {
     <UIBox id={id} data={data} selected={selected} icon="🖼" label="UI Ícone">
       {field('Prefab', data.params?.prefab ?? '', v => set('prefab', v), 'log')}
       {field('Tamanho', String(data.params?.size ?? ''), v => set('size', v), '56')}
+      {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), '')}
+      {field('Callback (clicável)', data.params?.callback ?? '', v => set('callback', v), '')}
       <div className="text-[8px] text-gray-500">Ícone do item (atlas resolvido pelo prefab).</div>
     </UIBox>
   )
@@ -134,6 +138,7 @@ export function UIBarNode({ id, data, selected }: any) {
       {field('Valor', String(data.params?.value ?? ''), v => set('value', v), '{{p.health_current}}')}
       {field('Max', String(data.params?.max ?? ''), v => set('max', v), '{{p.health_max}}')}
       {field('Cor [r,g,b,a]', data.params?.color ?? '', v => set('color', v), '[0.2,0.9,0.2,1]')}
+      {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), 'hp_bar')}
     </UIBox>
   )
 }
