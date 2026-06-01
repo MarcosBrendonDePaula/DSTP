@@ -25,13 +25,18 @@ a list of bindings, wires up the capture + replication + exposure generically.
 {
   "id": "mob_hp",
   "scope": "entity",            // entity | player | world
-  "gate":  "tag:monster|animal|epic",   // which entities (TAG-based, see safety)
-  "source": "health.percent",  // a whitelisted readable path
-  "as": "dstp_hp",              // client reads inst.dstp_hp
-  "net": "ushortint",           // how to replicate
-  "on": "health.delta"          // server re-push trigger (event/component hook)
+  "prefabs": ["spider","hound","deerclops"], // which prefabs (see safety — NOT tags)
+  "source": "health",           // a whitelisted reader (sets <as> and <as>_max)
+  "as": "dstp_hp",              // client reads inst.dstp_hp / inst.dstp_hp_max
+  "net": "ushortint"            // how to replicate (ushortint | uint)
 }
 ```
+
+> **Gate by `prefab`, not tag** — learned the hard way (see
+> `dst-client-constraints.md`). Tags aren't reliably set/replicated when
+> `AddPrefabPostInitAny` runs, so a tag gate gives different answers on server
+> vs client and the netvar desyncs / never arrives. `inst.prefab` is
+> deterministic and present immediately on both sides.
 
 The backend pushes a `bindings` set (like it pushes `rules`); the mod's binding
 interpreter sets them up. Adding "show mob temperature" becomes one binding, not
@@ -43,9 +48,10 @@ The netvar crash taught the hard rule: **netvars are positional — server and
 client must declare the same ones, in the same order, on the same entities, or
 the entity's whole net stream corrupts.** So the interpreter is NOT free-form:
 
-1. **Gate by TAGS only.** Tags replicate, so `inst:HasTag(...)` returns the same
-   result on both sides → the same bindings are created on both sides. Never
-   gate by `components.*` (server-only) or by anything async.
+1. **Gate by PREFAB only.** `inst.prefab` is deterministic and present on both
+   sides at PostInit time → the same bindings are created on both sides. Do NOT
+   gate by tags (may be unset/unsynced at PostInit) or `components.*`
+   (server-only) — both desync the netvar stream. (Verified the hard way.)
 2. **Deterministic order.** Bindings are applied in a fixed, sorted order (by
    `id`) so the netvar declaration order is identical everywhere.
 3. **Declared synchronously** in the PostInit, both sides, before any value is

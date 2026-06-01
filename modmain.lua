@@ -200,24 +200,37 @@ dstp.Init(env, {
 })
 
 -------------------------------------------------
--- Mob health replication (for HUD health bars) — SURGICAL
+-- Dynamic data bindings — replicate server-only data to the client
 -------------------------------------------------
--- DST doesn't replicate mob health to clients. Like the "Health Info" mod, we
--- add our own netvar — but ONLY to creatures, gated by TAGS (which replicate,
--- so the check returns the SAME result on server and client → no desync). The
--- earlier "every entity" version corrupted the net stream and crashed; see
--- specs/dst-client-constraints.md. The gate MUST be identical on both sides and
--- the netvar created synchronously (no DoTaskInTime).
-local net_ushortint = GLOBAL.net_ushortint
+-- DST doesn't replicate things like mob health to clients. A "binding" declares
+-- a piece of data to mirror via our own netvar. A generic interpreter wires it
+-- up identically on both sides, so adding a new datum is a config entry, not a
+-- new hand-written netvar. See specs/dynamic-data-bindings.md.
+--
+-- HARD RULES (learned from a net-stream crash — see specs/dst-client-constraints):
+--  * Gate by inst.prefab (deterministic both sides), NEVER by tag.
+--  * Declare the netvar synchronously, identically, on server and client.
+--  * Only the server's value push may be deferred.
+local _BIND = {
+    net = { ushortint = GLOBAL.net_ushortint, uint = GLOBAL.net_uint },
+}
 
--- Gate by PREFAB, not by tag. inst.prefab is deterministic and available on
--- BOTH sides the instant AddPrefabPostInitAny runs; tags may not be set/
--- replicated yet, which would make the server and client disagree on whether
--- to create the netvar → desync / the value never arrives. (This is exactly
--- how the "Health Info" mod does it — a curated prefab whitelist.)
-local DSTP_HP_PREFABS = {}
-for _, p in ipairs({
-    -- common mobs
+-- Whitelisted SOURCES: how the server reads a datum (returns cur, max) and which
+-- component method to hook so changes re-push. Data, not arbitrary code.
+local BIND_SOURCES = {
+    health = {
+        read = function(inst)
+            local h = inst.components and inst.components.health
+            if not h then return nil end
+            return h.currenthealth, h.maxhealth
+        end,
+        hook = { comp = "health", method = "DoDelta" },
+    },
+    -- add more here (temperature, hunger, etc.) with zero changes elsewhere
+}
+
+-- Curated prefab sets a binding applies to.
+local CREATURE_PREFABS = {
     "spider", "spider_warrior", "spider_hider", "spider_spitter", "spider_dropper",
     "hound", "firehound", "icehound", "houndmound",
     "killerbee", "bee", "mosquito", "frog", "tentacle", "tentacle_pillar",
@@ -227,53 +240,60 @@ for _, p in ipairs({
     "buzzard", "catcoon", "lightninggoat", "monkey", "tallbird", "teenbird",
     "smallbird", "knight", "bishop", "rook", "mole", "batilisk", "bat",
     "worm", "lureplant", "eyeplant", "krampus", "spat", "penguin", "mandrake_active",
-    -- bosses / giants
     "deerclops", "bearger", "moose", "dragonfly", "antlion", "minotaur",
     "leif", "leif_sparse", "spiderqueen", "warg", "klaus", "toadstool",
     "stalker", "stalker_forest", "beequeen", "crabking", "malbatross",
-    -- nightmare creatures
     "crawlinghorror", "terrorbeak", "nightmarebeak", "crawlingnightmare",
     "shadowtentacle", "bishop_nightmare", "rook_nightmare", "knight_nightmare",
-}) do DSTP_HP_PREFABS[p] = true end
+}
 
-local function dstp_wants_healthbar(inst)
-    return inst.prefab ~= nil and DSTP_HP_PREFABS[inst.prefab] == true
-end
+-- The active bindings. The mob-HP feature is now just the first binding.
+-- Applied in a fixed order so netvar declaration order matches everywhere.
+local BINDINGS = {
+    { id = "hp", source = "health", as = "dstp_hp", net = "ushortint", prefabs = CREATURE_PREFABS },
+}
+
+-- Build a prefab->binding lookup (sorted by id for deterministic order).
+table.sort(BINDINGS, function(a, b) return a.id < b.id end)
+local function clamp16(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
 
 AddPrefabPostInitAny(function(inst)
-    if not dstp_wants_healthbar(inst) then return end
+    if inst.prefab == nil then return end
+    local isServer = (not GLOBAL.TheWorld) or GLOBAL.TheWorld.ismastersim
 
-    -- Declared identically on BOTH sides (tags are replicated, so the gate
-    -- above matches). ushortint covers up to 65535 HP (enough for our use).
-    inst.dstp_net_hp = net_ushortint(inst.GUID, "dstp_hp", "dstp_hp_dirty")
-    inst.dstp_net_hp_max = net_ushortint(inst.GUID, "dstp_hp_max", "dstp_hp_max_dirty")
+    for _, b in ipairs(BINDINGS) do
+        local applies = false
+        for _, p in ipairs(b.prefabs) do if p == inst.prefab then applies = true break end end
+        if applies then
+            local ctor = _BIND.net[b.net] or GLOBAL.net_ushortint
+            -- declare identically on both sides (cur + max)
+            inst["_b_" .. b.as] = ctor(inst.GUID, b.as, b.as .. "_dirty")
+            inst["_b_" .. b.as .. "_max"] = ctor(inst.GUID, b.as .. "_max", b.as .. "_max_dirty")
 
-    if not GLOBAL.TheWorld or not GLOBAL.TheWorld.ismastersim then
-        -- CLIENT: cache synced values for the HUD to read.
-        inst:ListenForEvent("dstp_hp_dirty", function()
-            inst.dstp_hp = inst.dstp_net_hp:value()
-        end)
-        inst:ListenForEvent("dstp_hp_max_dirty", function()
-            inst.dstp_hp_max = inst.dstp_net_hp_max:value()
-        end)
-        return
+            if isServer then
+                local src = BIND_SOURCES[b.source]
+                local nv, nvmax = inst["_b_" .. b.as], inst["_b_" .. b.as .. "_max"]
+                local function push()
+                    local cur, max = src.read(inst)
+                    if cur == nil then return end
+                    nv:set(clamp16(cur)); nvmax:set(clamp16(max))
+                end
+                inst:DoTaskInTime(0, function()
+                    local comp = inst.components and inst.components[src.hook.comp]
+                    if not comp then return end
+                    local m = src.hook.method
+                    local orig = comp[m]
+                    comp[m] = function(self, ...) local r = orig(self, ...); push(); return r end
+                    push()
+                end)
+            else
+                -- client: cache values on the entity under <as>/<as>_max
+                local as, asmax = b.as, b.as .. "_max"
+                inst:ListenForEvent(as .. "_dirty", function() inst[as] = inst["_b_" .. as]:value() end)
+                inst:ListenForEvent(asmax .. "_dirty", function() inst[asmax] = inst["_b_" .. asmax]:value() end)
+            end
+        end
     end
-
-    -- SERVER: mirror real health into the netvar (clamped to 0..65535).
-    local function push()
-        local h = inst.components and inst.components.health
-        if not h then return end
-        local function clamp(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
-        inst.dstp_net_hp:set(clamp(h.currenthealth))
-        inst.dstp_net_hp_max:set(clamp(h.maxhealth))
-    end
-    inst:DoTaskInTime(0, function()
-        local h = inst.components and inst.components.health
-        if not h then return end
-        local orig = h.DoDelta
-        h.DoDelta = function(self, ...) local r = orig(self, ...); push(); return r end
-        push()
-    end)
 end)
 
 -------------------------------------------------
