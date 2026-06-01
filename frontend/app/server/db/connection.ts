@@ -39,6 +39,11 @@ export function getDb(serverId: string) {
 
   sqlite.run('PRAGMA journal_mode=WAL')
   sqlite.run('PRAGMA foreign_keys=ON')
+  // With per-server worker cores, the worker and the main process can both hold
+  // this DB open. WAL allows concurrent readers, but concurrent WRITERS still
+  // serialize — under burst load that surfaces as SQLITE_BUSY. busy_timeout makes
+  // a writer wait for the lock (up to 5s) instead of throwing immediately.
+  sqlite.run('PRAGMA busy_timeout=5000')
 
   const db = drizzle(sqlite, { schema })
 

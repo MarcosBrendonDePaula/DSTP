@@ -67,6 +67,20 @@ export class FlowEngine {
   private flowRepo(serverId: string) { return new FlowRepository(serverId) }
   private logRepo(serverId: string) { return new AutomationLogRepository(serverId) }
 
+  // Stats/log writes are best-effort bookkeeping: under burst load the DB can be
+  // momentarily locked (SQLITE_BUSY) even with busy_timeout. Never let that
+  // bubble up and kill the worker — losing one stat bump or log row is fine,
+  // losing the whole core (and the events queued behind it) is not.
+  private safeUpdateStats(serverId: string, flowId: string, triggerCount: number) {
+    try { this.flowRepo(serverId).updateStats(flowId, triggerCount) }
+    catch (err: any) { console.warn(`[FlowEngine] updateStats failed for ${flowId}: ${err?.message ?? err}`) }
+  }
+
+  private safeLog(serverId: string, entry: any) {
+    try { this.logRepo(serverId).create(entry) }
+    catch (err: any) { console.warn(`[FlowEngine] log create failed: ${err?.message ?? err}`) }
+  }
+
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
@@ -376,9 +390,9 @@ export class FlowEngine {
     }
 
     // Always log and update stats
-    this.flowRepo(serverId).updateStats(flow.id, (flow.triggerCount || 0) + 1)
+    this.safeUpdateStats(serverId, flow.id, (flow.triggerCount || 0) + 1)
 
-    this.logRepo(serverId).create({
+    this.safeLog(serverId, {
       flowId: flow.id,
       flowName: flow.name,
       eventType: event.type,
@@ -474,7 +488,7 @@ export class FlowEngine {
 
     // Log the branch arrival (not the full flow completion)
     if (executedActions.length > 0) {
-      this.logRepo(serverId).create({
+      this.safeLog(serverId, {
         flowId: flow.id,
         flowName: flow.name,
         eventType: event.type,
@@ -483,7 +497,7 @@ export class FlowEngine {
       })
     }
 
-    this.flowRepo(serverId).updateStats(flow.id, (flow.triggerCount || 0) + 1)
+    this.safeUpdateStats(serverId, flow.id, (flow.triggerCount || 0) + 1)
     this.syncState(serverId)
   }
 
@@ -539,7 +553,7 @@ export class FlowEngine {
     }
 
     // Log the post-wait execution
-    this.logRepo(serverId).create({
+    this.safeLog(serverId, {
       flowId: flow.id,
       flowName: flow.name,
       eventType: '_wait_satisfied',

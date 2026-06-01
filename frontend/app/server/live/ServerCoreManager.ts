@@ -22,6 +22,7 @@ interface Core {
   serverId: string
   lastUsed: number
   ready: boolean
+  alive: boolean
 }
 
 // Forwarded to the connected Live panel (set by LiveAutomation on mount). Kept
@@ -60,7 +61,7 @@ class ServerCoreManager {
 
   private spawn(serverId: string): Core {
     const worker = new Worker(WORKER_URL)
-    const core: Core = { worker, serverId, lastUsed: Date.now(), ready: false }
+    const core: Core = { worker, serverId, lastUsed: Date.now(), ready: false, alive: true }
 
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data
@@ -71,7 +72,11 @@ class ServerCoreManager {
       }
     }
     worker.onerror = (err: any) => {
-      console.error(`[ServerCore ${serverId}] worker error:`, err?.message ?? err)
+      // A worker error (uncaught throw, fatal message-handling failure) leaves
+      // the core unusable. Mark it dead so the next route() respawns it instead
+      // of posting into a corpse and silently losing events.
+      console.error(`[ServerCore ${serverId}] worker error — marking dead for respawn:`, err?.message ?? err)
+      core.alive = false
     }
 
     worker.postMessage({ type: 'init', serverId })
@@ -82,21 +87,57 @@ class ServerCoreManager {
 
   private get(serverId: string): Core {
     let core = this.cores.get(serverId)
-    if (!core) core = this.spawn(serverId)
+    if (!core || !core.alive) {
+      if (core) {
+        try { core.worker.terminate() } catch {}
+        this.cores.delete(serverId)
+        console.warn(`[ServerCoreManager] respawning dead core for "${serverId}"`)
+      }
+      core = this.spawn(serverId)
+    }
     core.lastUsed = Date.now()
     return core
   }
 
-  // Snapshot of this server's player groups, sent with each event so the worker's
-  // mirror stays fresh for get_player / find_player / script getPlayers().
+  // Minimal, structured-clone-safe snapshot of this server's players, sent with
+  // each event so the worker's mirror stays fresh for get_player / find_player /
+  // script getPlayers(). The engine only reads { server_id, all_players }, so we
+  // ship just that — NOT the full ServerGroup (which carries each shard's event
+  // buffer and other refs that can break postMessage with "error: 72").
+  // The JSON round-trip strips any non-cloneable values defensively.
   private groupsFor(serverId: string): any[] {
-    return dstStateStore.getServerGroups().filter((g: any) => g.server_id === serverId)
+    const groups = dstStateStore.getServerGroups().filter((g: any) => g.server_id === serverId)
+    try {
+      return groups.map((g: any) => ({
+        server_id: g.server_id,
+        all_players: JSON.parse(JSON.stringify(g.all_players ?? [])),
+      }))
+    } catch {
+      // If even the players don't serialize, send an empty mirror rather than
+      // crashing the worker — get_player just won't find anyone this tick.
+      return groups.map((g: any) => ({ server_id: g.server_id, all_players: [] }))
+    }
   }
 
-  // Route a game event to the server's core. Spawns the core on demand.
+  // Route a game event to the server's core. Spawns the core on demand. If the
+  // postMessage itself throws (e.g. a non-cloneable payload slipped through),
+  // mark the core dead, respawn, and retry once — never let it bubble up and
+  // break handleDstSync (which would drop the rest of the sync's events).
   route(serverId: string, event: any) {
+    const groups = this.groupsFor(serverId)
     const core = this.get(serverId)
-    core.worker.postMessage({ type: 'event', event, groups: this.groupsFor(serverId) })
+    try {
+      core.worker.postMessage({ type: 'event', event, groups })
+    } catch (err: any) {
+      console.error(`[ServerCore ${serverId}] postMessage failed, respawning + retrying:`, err?.message ?? err)
+      core.alive = false
+      const fresh = this.get(serverId)
+      try {
+        fresh.worker.postMessage({ type: 'event', event, groups })
+      } catch (err2: any) {
+        console.error(`[ServerCore ${serverId}] retry postMessage failed, dropping event:`, err2?.message ?? err2)
+      }
+    }
   }
 
   // Push a fresh player mirror to a server's core (called on /dst/sync) without
