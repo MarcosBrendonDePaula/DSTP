@@ -17,12 +17,20 @@ const WORKER_URL = new URL('./ServerCore.worker.ts', import.meta.url).href
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000   // tear down a core after 10min idle
 const SWEEP_INTERVAL_MS = 60 * 1000
 
+// Watchdog: ping each active core periodically; if it misses pongs for longer
+// than HANG_TIMEOUT_MS it's considered hung (e.g. a script's while(true)) and is
+// terminated + respawned so that server recovers instead of staying stuck.
+const HEARTBEAT_INTERVAL_MS = 2000
+const HANG_TIMEOUT_MS = 8000
+
 interface Core {
   worker: Worker
   serverId: string
   lastUsed: number
   ready: boolean
   alive: boolean
+  lastPong: number      // last time the core answered a ping
+  pingSeq: number
 }
 
 // Forwarded to the connected Live panel (set by LiveAutomation on mount). Kept
@@ -35,9 +43,11 @@ export function setPanelEmitter(fn: ((delta: Record<string, any>) => void) | nul
 class ServerCoreManager {
   private cores = new Map<string, Core>()
   private sweepTimer: ReturnType<typeof setInterval> | null = null
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   constructor() {
     this.sweepTimer = setInterval(() => this.sweepIdle(), SWEEP_INTERVAL_MS)
+    this.heartbeatTimer = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS)
   }
 
   private handleRpc(serverId: string, method: string, args: any[]) {
@@ -61,12 +71,14 @@ class ServerCoreManager {
 
   private spawn(serverId: string): Core {
     const worker = new Worker(WORKER_URL)
-    const core: Core = { worker, serverId, lastUsed: Date.now(), ready: false, alive: true }
+    const core: Core = { worker, serverId, lastUsed: Date.now(), ready: false, alive: true, lastPong: Date.now(), pingSeq: 0 }
 
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data
       if (msg.type === 'ready') {
         core.ready = true
+      } else if (msg.type === 'pong') {
+        core.lastPong = Date.now()
       } else if (msg.type === 'rpc') {
         this.handleRpc(serverId, msg.method, msg.args)
       }
@@ -156,6 +168,28 @@ class ServerCoreManager {
     if (core) core.worker.postMessage({ type: 'stopCapture' })
   }
 
+  // Ping each ready core; if one hasn't ponged within HANG_TIMEOUT_MS it's stuck
+  // in a synchronous loop (a runaway script). Terminate + respawn it so that
+  // server recovers. Other servers' cores are unaffected — only the hung one is
+  // killed. Any events that were queued behind the hang in that worker are lost,
+  // but the alternative (a permanently dead server) is worse.
+  private heartbeat() {
+    const now = Date.now()
+    for (const [serverId, core] of this.cores) {
+      if (!core.ready || !core.alive) continue
+      if (now - core.lastPong > HANG_TIMEOUT_MS) {
+        console.warn(`[ServerCoreManager] core "${serverId}" hung (no pong for ${now - core.lastPong}ms) — killing + respawning`)
+        try { core.worker.terminate() } catch {}
+        this.cores.delete(serverId)
+        // Respawn immediately so the server is ready for the next event.
+        this.spawn(serverId)
+        continue
+      }
+      core.pingSeq++
+      try { core.worker.postMessage({ type: 'ping', id: core.pingSeq }) } catch {}
+    }
+  }
+
   private sweepIdle() {
     const now = Date.now()
     for (const [serverId, core] of this.cores) {
@@ -173,6 +207,7 @@ class ServerCoreManager {
 
   destroy() {
     if (this.sweepTimer) clearInterval(this.sweepTimer)
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     for (const core of this.cores.values()) {
       try { core.worker.terminate() } catch {}
     }

@@ -76,6 +76,13 @@ self.onmessage = (e: MessageEvent) => {
       }
       break
     }
+    case 'ping': {
+      // Liveness probe. A core stuck in a synchronous loop (e.g. a script's
+      // while(true)) can't process this, so the main thread's pong timeout is
+      // what detects the hang and respawns the core.
+      self.postMessage({ type: 'pong', id: msg.id })
+      break
+    }
     case 'startCapture': {
       ensureEngine().startCapture(serverId)
       break

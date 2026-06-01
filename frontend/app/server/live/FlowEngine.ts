@@ -764,10 +764,12 @@ export class FlowEngine {
 
   // ─── Script node executor ───────────────────────────
   // SECURITY WARNING: new Function() allows arbitrary code execution (RCE).
-  // This is intentional for admin-only server automation scripts, but the code
-  // runs in the same Node.js process with full access to the server environment.
-  // Do NOT expose this to untrusted users. Future improvement: use vm2 or
-  // isolated-vm for sandboxed execution.
+  // Admin-only by design. When the engine runs inside a per-server worker core
+  // (the normal path), the script is isolated to that core: a runaway loop or
+  // crash takes down only that server's core (auto-respawned by the watchdog),
+  // not the API process or other servers. context.{sendCommand,memory,
+  // getPlayers,store} resolve locally inside the worker — no async/RPC needed,
+  // since the script already runs where the engine lives.
 
   private async executeScript(node: FlowNode, context: Record<string, any>, serverId?: string): Promise<any> {
     const code = node.data.params?.code
