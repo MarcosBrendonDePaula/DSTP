@@ -10,6 +10,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Sandbox constraint:** DST's Lua `TheSim:QueryServer` has a hardcoded whitelist that only allows `127.0.0.1` and `localhost`. This was confirmed by Klei in their 2025 mod API thread. There is NO bypass via Lua, modinfo, DNS trick, or Workshop signing — the check is a textual string match on the URL before DNS resolution. To host DSTP centrally (one backend for many DST servers), each DST host must run `relay/` (a tiny Bun HTTP forwarder) on their machine that listens on 127.0.0.1 and proxies to the central backend. See `relay/README.md`.
 
+## Specs — READ BEFORE working on UI or client/server code
+
+`specs/` holds hard-won technical knowledge that is NOT obvious from the code and cost real debugging time to discover. **Check the relevant spec first** — re-discovering these is expensive:
+- `specs/dst-client-constraints.md` — what the DST client can/can't see (mob health is NOT replicated, `onhitother`/`onattackother` are server-only, `net_string` holds one value so per-frame UI commands must be coalesced, HUD coordinate space). The "why it didn't work" doc.
+- `specs/ui-by-nodes.md` — building in-game UI from flows: UI Builder, the generic renderer (`ui_set`/`callback`/tabs/follow-entity), shops, live HUDs. Principle: a new UI needing new Lua means a missing generic prop/action.
+- `specs/ui-system.md` — full UI tree contract (node types, props, actions, events).
+
 ## Architecture
 
 ```
