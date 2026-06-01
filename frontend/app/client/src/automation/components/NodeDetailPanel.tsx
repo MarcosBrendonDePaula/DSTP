@@ -7,6 +7,7 @@ import {
   type NodeOutputSchema,
 } from '../nodeOutputSchemas'
 import { TRIGGER_EVENTS } from '../nodes'
+import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
 
@@ -74,6 +75,7 @@ const nodeTypeMeta: Record<string, { icon: string; label: string; color: string 
   script:       { icon: '🧩', label: 'Script',    color: '#f97316' },
   memory:       { icon: '💾', label: 'Memory',     color: '#f59e0b' },
   wait:         { icon: '🔀', label: 'Wait/Merge', color: '#ec4899' },
+  ui_builder:   { icon: '🎨', label: 'UI Builder', color: '#818cf8' },
 }
 
 function getNodeCategory(type: string): string {
@@ -279,7 +281,13 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
           </button>
         </div>
 
-        {/* Two-column body */}
+        {/* UI Builder: visual tree editor (replaces input/output body) */}
+        {type === 'ui_builder' ? (
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} />
+          </div>
+        ) : (
+        /* Two-column body */
         <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Left: Input */}
           <div className="flex-1 bg-[#0d0d0d] border-r border-white/5 overflow-y-auto p-4">
@@ -364,6 +372,7 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   )

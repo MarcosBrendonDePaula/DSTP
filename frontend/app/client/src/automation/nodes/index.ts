@@ -11,7 +11,7 @@ import { WaitNode } from './actions/WaitNode'
 import { MemoryNode } from './actions/MemoryNode'
 import { MenuNode } from './actions/MenuNode'
 import { HudRuleNode } from './actions/HudRuleNode'
-import { UIPanelNode, UIColNode, UIRowNode, UITabsNode, UITextNode, UIIconNode, UIButtonNode, UIBarNode, UISpacerNode } from './ui/UINodes'
+import { UIBuilderNode, UIPanelNode, UIColNode, UIRowNode, UITabsNode, UITextNode, UIIconNode, UIButtonNode, UIBarNode, UISpacerNode } from './ui/UINodes'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -27,6 +27,7 @@ export const nodeTypes = {
   memory: MemoryNode,
   ui_menu: MenuNode,
   ui_rule: HudRuleNode,
+  ui_builder: UIBuilderNode,
   ui_panel: UIPanelNode,
   ui_col: UIColNode,
   ui_row: UIRowNode,

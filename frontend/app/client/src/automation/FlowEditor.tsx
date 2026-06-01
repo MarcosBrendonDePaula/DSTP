@@ -180,6 +180,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       memory: { action: 'read', params: { key: '' } },
       ui_menu: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
       ui_rule: { action_type: 'rule_install', preset: 'vital', vital: 'health', anchor: 'bottom', x: 0, y: 80, params: { userid: '{{trigger.userid}}', rules: JSON.stringify([{ id: 'health_bar', when: { event: 'healthdelta' }, do: [{ action: 'update_widget', id: 'health_bar_w', type: 'progress_bar', value: '{{player.health_current}}', max: '{{player.health_max}}', label: 'HP', color: [0.2, 0.9, 0.2, 1], anchor: 'bottom', x: 0, y: 80, width: 220, height: 16 }] }]) } },
+      ui_builder: { params: { userid: '{{trigger.userid}}', id: 'ui' }, tree: { type: 'panel', title: 'Painel', children: [] } },
       ui_panel: { params: { userid: '{{trigger.userid}}', id: 'ui', title: '', gap: '8', anchor: 'center' } },
       ui_col: { params: { gap: '8' } },
       ui_row: { params: { gap: '8' } },
@@ -272,7 +273,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         <button onClick={() => addNode('ui_rule')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
           🖥️ HUD
         </button>
-        <span className="w-px h-5 bg-white/10 mx-0.5 self-center" title="Componentes de UI (compor por nodes)" />
+        <span className="w-px h-5 bg-white/10 mx-0.5 self-center" title="UI" />
+        <button onClick={() => addNode('ui_builder')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-violet-500/20 text-violet-200 border border-violet-500/30 hover:bg-violet-500/30 transition-colors font-medium">
+          🎨 UI Builder
+        </button>
         {([
           ['ui_panel', '🪟'], ['ui_col', '↕'], ['ui_row', '↔'], ['ui_tabs', '🗂'], ['ui_text', '🔤'],
           ['ui_icon', '🖼'], ['ui_button', '🔘'], ['ui_bar', '📊'], ['ui_spacer', '␣'],
