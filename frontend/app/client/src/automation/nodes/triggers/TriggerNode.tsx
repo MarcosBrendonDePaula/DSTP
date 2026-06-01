@@ -70,6 +70,12 @@ export const TRIGGER_EVENTS = [
   { value: 'player_dismounted', label: '🐂 Player Dismounted', category: 'survival' },
   // UI
   { value: 'ui_callback', label: '🖱 UI Callback (button click)', category: 'ui' },
+  // Economy / inventory results (emitted back by inventory commands)
+  { value: 'item_removed', label: '🗑 Item Removido (venda)', category: 'economy' },
+  { value: 'item_count', label: '🔢 Contagem de Item', category: 'economy' },
+  { value: 'item_has', label: '❓ Tem Item (resultado)', category: 'economy' },
+  { value: 'item_transferred', label: '🔄 Item Transferido', category: 'economy' },
+  { value: 'inventory_dump', label: '📋 Inventário Listado', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'book_read', label: '📚 Book Read', category: 'character' },

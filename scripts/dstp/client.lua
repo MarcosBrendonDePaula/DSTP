@@ -550,6 +550,260 @@ local function RegisterBuiltinCommands()
         end
     end)
 
+    -- Count how many of a prefab a player holds (main inventory + overflow/backpack,
+    -- summing stack sizes). Reports back via a `item_count` event so flows can read it.
+    local function CountPrefab(inv, prefab)
+        local total = 0
+        local function scan(slots)
+            for _, item in pairs(slots or {}) do
+                if item and item.prefab == prefab then
+                    if item.components.stackable then
+                        total = total + item.components.stackable:StackSize()
+                    else
+                        total = total + 1
+                    end
+                end
+            end
+        end
+        scan(inv.itemslots)
+        local bp = inv:GetOverflowContainer()
+        if bp then scan(bp.slots) end
+        return total
+    end
+
+    DSTP.RegisterCommand("count_item", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.inventory and data.prefab then
+            local n = CountPrefab(player.components.inventory, data.prefab)
+            DSTP.PushEvent("item_count", {
+                userid = data.userid, prefab = data.prefab, count = n,
+                token = data.token,  -- echo so the flow can correlate
+            })
+        end
+    end)
+
+    -- Remove N of a prefab from a player's inventory, ATOMICALLY: only removes if
+    -- the player has at least N (so a sale can't credit coins for items they lack).
+    -- Reports the outcome via an `item_removed` event { prefab, requested, removed,
+    -- success } — a sell flow listens for it and credits coins only on success.
+    DSTP.RegisterCommand("remove_item", function(data)
+        local player = FindPlayer(data.userid)
+        local prefab = data.prefab
+        local need = tonumber(data.count) or 1
+        if not (player and player.components.inventory and prefab) then return end
+        local inv = player.components.inventory
+
+        local have = CountPrefab(inv, prefab)
+        local success = have >= need
+        local removed = 0
+
+        if success then
+            local remaining = need
+            -- Walk a snapshot of matching items; remove/shrink stacks until satisfied.
+            local function take(slots)
+                for _, item in pairs(slots or {}) do
+                    if remaining <= 0 then return end
+                    if item and item.prefab == prefab then
+                        local stack = item.components.stackable and item.components.stackable:StackSize() or 1
+                        if stack <= remaining then
+                            inv:RemoveItem(item, true)
+                            item:Remove()
+                            removed = removed + stack
+                            remaining = remaining - stack
+                        else
+                            -- shrink the stack in place
+                            item.components.stackable:SetStackSize(stack - remaining)
+                            removed = removed + remaining
+                            remaining = 0
+                        end
+                    end
+                end
+            end
+            take(inv.itemslots)
+            local bp = inv:GetOverflowContainer()
+            if bp then take(bp.slots) end
+        end
+
+        DSTP.PushEvent("item_removed", {
+            userid = data.userid, prefab = prefab,
+            requested = need, removed = removed, success = success,
+            token = data.token,
+        })
+    end)
+
+    -- has_item: boolean check (count >= need), reported via `item_has` event.
+    DSTP.RegisterCommand("has_item", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.inventory and data.prefab then
+            local need = tonumber(data.count) or 1
+            local have = CountPrefab(player.components.inventory, data.prefab)
+            DSTP.PushEvent("item_has", {
+                userid = data.userid, prefab = data.prefab,
+                count = have, needed = need, has = have >= need,
+                token = data.token,
+            })
+        end
+    end)
+
+    -- equip_item: spawn an item and equip it (falls back to inventory if not equippable).
+    DSTP.RegisterCommand("equip_item", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.inventory and data.prefab then
+            local item = _G.SpawnPrefab(data.prefab)
+            if item then
+                if item.components.equippable then
+                    player.components.inventory:Equip(item)
+                else
+                    player.components.inventory:GiveItem(item)
+                end
+            end
+        end
+    end)
+
+    -- unequip: remove the item in an equip slot (hand/body/head) to inventory or drop.
+    DSTP.RegisterCommand("unequip", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.inventory then
+            local SLOTS = { hand = _G.EQUIPSLOTS.HANDS, body = _G.EQUIPSLOTS.BODY, head = _G.EQUIPSLOTS.HEAD }
+            local slot = SLOTS[tostring(data.slot or "hand")] or _G.EQUIPSLOTS.HANDS
+            local item = player.components.inventory:GetEquippedItem(slot)
+            if item then
+                player.components.inventory:Unequip(slot)
+                if data.drop then
+                    player.components.inventory:DropItem(item)
+                end
+            end
+        end
+    end)
+
+    -- drop_item: drop N of a prefab on the ground at the player's feet.
+    DSTP.RegisterCommand("drop_item", function(data)
+        local player = FindPlayer(data.userid)
+        local prefab = data.prefab
+        if not (player and player.components.inventory and prefab) then return end
+        local inv = player.components.inventory
+        local need = tonumber(data.count) or 1
+        local dropped = 0
+        local function take(slots)
+            for _, item in pairs(slots or {}) do
+                if dropped >= need then return end
+                if item and item.prefab == prefab then
+                    inv:DropItem(item)
+                    local stack = item.components.stackable and item.components.stackable:StackSize() or 1
+                    dropped = dropped + stack
+                end
+            end
+        end
+        take(inv.itemslots)
+        local bp = inv:GetOverflowContainer()
+        if bp then take(bp.slots) end
+    end)
+
+    -- clear_inventory: remove everything, or only a given prefab when data.prefab set.
+    DSTP.RegisterCommand("clear_inventory", function(data)
+        local player = FindPlayer(data.userid)
+        if not (player and player.components.inventory) then return end
+        local inv = player.components.inventory
+        local only = data.prefab
+        local function purge(slots)
+            local victims = {}
+            for _, item in pairs(slots or {}) do
+                if item and (not only or item.prefab == only) then
+                    table.insert(victims, item)
+                end
+            end
+            for _, item in ipairs(victims) do
+                inv:RemoveItem(item, true)
+                item:Remove()
+            end
+        end
+        purge(inv.itemslots)
+        local bp = inv:GetOverflowContainer()
+        if bp then purge(bp.slots) end
+        if not only then
+            -- also clear equipped
+            for _, slot in pairs(_G.EQUIPSLOTS) do
+                local eq = inv:GetEquippedItem(slot)
+                if eq then inv:Unequip(slot); eq:Remove() end
+            end
+        end
+    end)
+
+    -- transfer_item: move N of a prefab from one player to another. Atomic on the
+    -- source side (only transfers what it can remove). Reports via item_transferred.
+    DSTP.RegisterCommand("transfer_item", function(data)
+        local from = FindPlayer(data.from_userid or data.userid)
+        local to = FindPlayer(data.to_userid)
+        local prefab = data.prefab
+        local need = tonumber(data.count) or 1
+        if not (from and to and prefab and from.components.inventory and to.components.inventory) then return end
+        local inv = from.components.inventory
+        local have = CountPrefab(inv, prefab)
+        local moved = 0
+        if have >= need then
+            local remaining = need
+            local function take(slots)
+                for _, item in pairs(slots or {}) do
+                    if remaining <= 0 then return end
+                    if item and item.prefab == prefab then
+                        local stack = item.components.stackable and item.components.stackable:StackSize() or 1
+                        if stack <= remaining then
+                            inv:RemoveItem(item, true)
+                            item:Remove()
+                            moved = moved + stack
+                            remaining = remaining - stack
+                        else
+                            item.components.stackable:SetStackSize(stack - remaining)
+                            moved = moved + remaining
+                            remaining = 0
+                        end
+                    end
+                end
+            end
+            take(inv.itemslots)
+            local bp = inv:GetOverflowContainer()
+            if bp then take(bp.slots) end
+            -- give the moved amount to the recipient
+            if moved > 0 then
+                local gift = _G.SpawnPrefab(prefab)
+                if gift then
+                    if moved > 1 and gift.components.stackable then
+                        gift.components.stackable:SetStackSize(moved)
+                    end
+                    to.components.inventory:GiveItem(gift)
+                end
+            end
+        end
+        DSTP.PushEvent("item_transferred", {
+            from_userid = data.from_userid or data.userid, to_userid = data.to_userid,
+            prefab = prefab, requested = need, moved = moved, success = moved >= need,
+            token = data.token,
+        })
+    end)
+
+    -- dump_inventory: report the player's full inventory (item -> total count) via
+    -- an `inventory_dump` event, so a sell UI can list what they can sell.
+    DSTP.RegisterCommand("dump_inventory", function(data)
+        local player = FindPlayer(data.userid)
+        if not (player and player.components.inventory) then return end
+        local inv = player.components.inventory
+        local counts = {}
+        local function scan(slots)
+            for _, item in pairs(slots or {}) do
+                if item then
+                    local stack = item.components.stackable and item.components.stackable:StackSize() or 1
+                    counts[item.prefab] = (counts[item.prefab] or 0) + stack
+                end
+            end
+        end
+        scan(inv.itemslots)
+        local bp = inv:GetOverflowContainer()
+        if bp then scan(bp.slots) end
+        DSTP.PushEvent("inventory_dump", {
+            userid = data.userid, items = counts, token = data.token,
+        })
+    end)
+
     DSTP.RegisterCommand("teleport", function(data)
         local player = FindPlayer(data.userid)
         if player and data.x and data.z then

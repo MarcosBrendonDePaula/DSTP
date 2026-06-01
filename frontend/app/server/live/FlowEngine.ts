@@ -39,7 +39,7 @@ const NUMERIC_PARAM_KEYS = new Set([
   'length', 'day', 'dusk', 'night', 'slot', 'width', 'height', 'value', 'max',
   'offset_x', 'offset_z',
 ])
-const BOOLEAN_PARAM_KEYS = new Set(['enabled'])
+const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop'])
 
 function coerceParam(key: string, v: any): any {
   if (typeof v !== 'string') return v
