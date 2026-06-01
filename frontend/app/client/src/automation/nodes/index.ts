@@ -10,6 +10,7 @@ import { FindPlayerNode } from './actions/FindPlayerNode'
 import { WaitNode } from './actions/WaitNode'
 import { MemoryNode } from './actions/MemoryNode'
 import { MenuNode } from './actions/MenuNode'
+import { HudRuleNode } from './actions/HudRuleNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -24,6 +25,7 @@ export const nodeTypes = {
   wait: WaitNode,
   memory: MemoryNode,
   ui_menu: MenuNode,
+  ui_rule: HudRuleNode,
 }
 
 export { TriggerNode, TRIGGER_EVENTS } from './triggers/TriggerNode'

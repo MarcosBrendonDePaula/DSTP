@@ -78,15 +78,15 @@ export const ACTION_TYPES = [
   { value: 'ui_clear', label: '🧹 Limpar Widgets', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
   ] },
-  { value: 'rule_install', label: '⚙ Install Rule', params: [
+  { value: 'rule_install', label: '🖥️ Instalar Regra HUD (JSON)', params: [
     { key: 'userid', label: 'Player (vazio = todos)', placeholder: '{{trigger.userid}}' },
     { key: 'rules', label: 'Rules JSON', placeholder: '[{"id":"my_rule","when":{"event":"healthdelta"},"do":[...]}]' },
   ] },
-  { value: 'rule_uninstall', label: '⚙ Uninstall Rule', params: [
+  { value: 'rule_uninstall', label: '🖥️ Remover HUD', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
-    { key: 'ids', label: 'Rule IDs (vírgula)', placeholder: 'my_rule,another_rule' },
+    { key: 'ids', label: 'IDs das regras (vírgula)', placeholder: 'health_bar,coins_label' },
   ] },
-  { value: 'rule_set_state', label: '⚙ Set Player State', params: [
+  { value: 'rule_set_state', label: '🗃 Setar Estado Client', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
     { key: 'key', label: 'Chave', placeholder: 'coins' },
     { key: 'value', label: 'Valor', placeholder: '100' },

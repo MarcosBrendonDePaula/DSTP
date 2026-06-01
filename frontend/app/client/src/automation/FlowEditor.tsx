@@ -179,6 +179,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
       memory: { action: 'read', params: { key: '' } },
       ui_menu: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
+      ui_rule: { action_type: 'rule_install', preset: 'vital', vital: 'health', anchor: 'bottom', x: 0, y: 80, params: { userid: '{{trigger.userid}}', rules: JSON.stringify([{ id: 'health_bar', when: { event: 'healthdelta' }, do: [{ action: 'update_widget', id: 'health_bar_w', type: 'progress_bar', value: '{{player.health_current}}', max: '{{player.health_max}}', label: 'HP', color: [0.2, 0.9, 0.2, 1], anchor: 'bottom', x: 0, y: 80, width: 220, height: 16 }] }]) } },
     }
     const newNode: Node = {
       id: genId(),
@@ -258,6 +259,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </button>
         <button onClick={() => addNode('ui_menu')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
           📋 Menu
+        </button>
+        <button onClick={() => addNode('ui_rule')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
+          🖥️ HUD
         </button>
         <div className="flex-1" />
         {captureData?.active ? (

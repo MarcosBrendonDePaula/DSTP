@@ -341,7 +341,7 @@ export class FlowEngine {
           }
         }
 
-      } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu'].includes(node.type)) {
+      } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
         const actionType = node.data.action_type || node.type
 
         if (actionType === 'http_request') {
