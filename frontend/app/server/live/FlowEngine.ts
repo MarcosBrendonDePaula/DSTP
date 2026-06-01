@@ -341,6 +341,27 @@ export class FlowEngine {
           }
         }
 
+      } else if (node.type === 'ui_panel') {
+        // A ui_panel is the ROOT of a UI composed from connected ui_* nodes.
+        // Its outgoing edges mean "child of", not "next action": we walk the
+        // subgraph, build a render tree, and push one ui_render. We do NOT
+        // continue the normal action chain from here (children are consumed).
+        const tree = this.buildUITree(node, nodes, edges, context)
+        const userid = this.resolveValue(node.data.params?.userid ?? node.data.userid ?? '', context)
+        const payload: any = {
+          id: node.data.params?.id || node.data.id || `ui_${node.id}`,
+          group: node.data.params?.id || node.data.id || `ui_${node.id}`,
+          tree,
+          anchor: node.data.params?.anchor || node.data.anchor || 'center',
+          seq: Date.now(),
+        }
+        if (userid) {
+          this.host.pushCommand(serverId, 'ui_command', { userid, cmd: { action: 'create', type: 'tree', ...payload } })
+        }
+        setContext(node.id, { rendered: true, tree })
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        // Intentionally do not follow edges as actions.
+
       } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
         const actionType = node.data.action_type || node.type
 
@@ -688,6 +709,98 @@ export class FlowEngine {
       case 'exists': return actual != null
       default: return true
     }
+  }
+
+  // ─── UI tree builder (compose UI from connected ui_* nodes) ───
+
+  // Walk the subgraph rooted at a ui_* node and produce a render tree:
+  //   { type, ...props, children: [...] }
+  // Children are the targets of this node's outgoing edges, ordered by canvas
+  // position: vertical (Y) for col/panel, horizontal (X) for row. Templates in
+  // props are resolved against the flow context. `seen` guards against cycles.
+  private buildUITree(
+    node: FlowNode,
+    nodes: FlowNode[],
+    edges: FlowEdge[],
+    context: Record<string, any>,
+    seen: Set<string> = new Set(),
+  ): any {
+    if (seen.has(node.id)) return null
+    seen.add(node.id)
+
+    const TYPE_MAP: Record<string, string> = {
+      ui_panel: 'panel', ui_col: 'col', ui_row: 'row',
+      ui_text: 'text', ui_icon: 'icon', ui_image: 'image',
+      ui_button: 'button', ui_bar: 'bar', ui_spacer: 'spacer',
+    }
+    const type = TYPE_MAP[node.type] || node.type.replace(/^ui_/, '')
+    const p = node.data.params || {}
+    const r = (v: any) => this.resolveValue(v, context)
+
+    // Common props per type. Numeric fields are coerced.
+    const out: any = { type }
+    const num = (v: any) => { const n = Number(r(v)); return Number.isFinite(n) ? n : undefined }
+    const color = (v: any) => {
+      const rv = r(v)
+      if (Array.isArray(rv)) return rv
+      if (typeof rv === 'string' && rv.trim().startsWith('[')) { try { return JSON.parse(rv) } catch { return undefined } }
+      return undefined
+    }
+
+    if (type === 'panel') {
+      if (p.title) out.title = r(p.title)
+      out.closeable = p.closeable !== false && p.closeable !== 'false'
+      if (p.gap != null) out.gap = num(p.gap)
+    } else if (type === 'col' || type === 'row') {
+      if (p.gap != null) out.gap = num(p.gap)
+    } else if (type === 'text') {
+      out.text = String(r(p.text) ?? '')
+      if (p.size != null) out.size = num(p.size)
+      const c = color(p.color); if (c) out.color = c
+      if (p.wrap_width != null) out.wrap_width = num(p.wrap_width)
+    } else if (type === 'icon') {
+      if (p.prefab) out.prefab = String(r(p.prefab))
+      if (p.atlas) out.atlas = r(p.atlas)
+      if (p.tex) out.tex = r(p.tex)
+      if (p.size != null) out.size = num(p.size)
+    } else if (type === 'image') {
+      out.atlas = r(p.atlas); out.tex = r(p.tex)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+    } else if (type === 'button') {
+      out.text = String(r(p.text) ?? 'OK')
+      out.callback = String(r(p.callback) ?? p.text ?? 'click')
+      if (p.width != null) out.width = num(p.width)
+      if (p.size != null) out.size = num(p.size)
+    } else if (type === 'bar') {
+      out.value = num(p.value) ?? 0
+      out.max = num(p.max) ?? 1
+      if (p.width != null) out.width = num(p.width)
+      const c = color(p.color); if (c) out.color = c
+    } else if (type === 'spacer') {
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+    }
+
+    // Children: edge targets, ordered by canvas position. col/panel stack
+    // top→down (ascending Y in screen terms = our nodes use descending Y for
+    // "lower on screen", but React Flow Y grows downward, so ascending Y = top
+    // first). row orders left→right (ascending X).
+    const childNodes = edges
+      .filter(e => e.source === node.id)
+      .map(e => nodes.find(n => n.id === e.target))
+      .filter((n): n is FlowNode => !!n && n.type.startsWith('ui_'))
+
+    const axis = type === 'row' ? 'x' : 'y'
+    childNodes.sort((a, b) =>
+      axis === 'x' ? a.position.x - b.position.x : a.position.y - b.position.y)
+
+    const children = childNodes
+      .map(c => this.buildUITree(c, nodes, edges, context, seen))
+      .filter(Boolean)
+    if (children.length) out.children = children
+
+    return out
   }
 
   // ─── Game action executor ──────────────────────────

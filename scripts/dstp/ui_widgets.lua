@@ -421,6 +421,214 @@ local function UpdateProgressBar(entry, cmd)
 end
 
 -------------------------------------------------
+-- Generic UI tree renderer (composed by flow nodes)
+-------------------------------------------------
+-- A UI is a tree of nodes: { type=, ...props, children={...} }. Each leaf/box
+-- reports its (w,h) so col/row containers can auto-layout (DST has no flex —
+-- we measure with Text:GetRegionSize / Image:GetSize and stack with gap).
+--
+-- RenderNode(node, parent, ctx) -> widget, w, h
+-- ctx carries the callback fn and a per-tree click-debounce table.
+
+local function ResolveItemAtlas(prefab)
+    -- DST scatters item icons across inventoryimages{1..4}.xml; the engine
+    -- helper resolves the right atlas for "<prefab>.tex".
+    local tex = tostring(prefab) .. ".tex"
+    if _G.GetInventoryItemAtlas then
+        local ok, atlas = _G.pcall(_G.GetInventoryItemAtlas, tex)
+        if ok and atlas then return atlas, tex end
+    end
+    return "images/inventoryimages.xml", tex
+end
+
+local RenderNode  -- forward decl (recursive)
+
+-- Render every child, then stack them along one axis with `gap`. `axis` is
+-- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
+local function LayoutChildren(node, container, ctx, axis)
+    local gap = node.gap or 8
+    local kids = {}
+    for _, childdef in ipairs(node.children or {}) do
+        local cw, ch
+        local cwidget
+        cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        if cwidget then
+            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0 })
+        end
+    end
+
+    -- Total extent along the layout axis + max cross extent.
+    local total, cross = 0, 0
+    for i, k in ipairs(kids) do
+        if axis == "y" then
+            total = total + k.height
+            if k.width > cross then cross = k.width end
+        else
+            total = total + k.width
+            if k.height > cross then cross = k.height end
+        end
+        if i < #kids then total = total + gap end
+    end
+
+    -- Place children centered on the cross axis, stacked on the main axis,
+    -- with the group centered around the container origin (0,0).
+    if axis == "y" then
+        local cursor = total / 2
+        for _, k in ipairs(kids) do
+            cursor = cursor - k.height / 2
+            k.w:SetPosition(0, cursor, 0)
+            cursor = cursor - k.height / 2 - gap
+        end
+        return cross, total
+    else
+        local cursor = -total / 2
+        for _, k in ipairs(kids) do
+            cursor = cursor + k.width / 2
+            k.w:SetPosition(cursor, 0, 0)
+            cursor = cursor + k.width / 2 + gap
+        end
+        return total, cross
+    end
+end
+
+RenderNode = function(node, parent, ctx)
+    if not node or not node.type then return nil, 0, 0 end
+    local Widget      = _G.require("widgets/widget")
+    local Text        = _G.require("widgets/text")
+    local Image       = _G.require("widgets/image")
+    local ImageButton = _G.require("widgets/imagebutton")
+    local t = node.type
+
+    if t == "col" or t == "row" then
+        local c = parent:AddChild(Widget("col_row"))
+        local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
+        return c, w, h
+
+    elseif t == "text" then
+        local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, node.text or ""))
+        local col = ResolveColor(node.color)
+        txt:SetColour(col[1], col[2], col[3], col[4])
+        if node.wrap_width then
+            txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
+            txt:EnableWordWrap(true)
+        end
+        local w, h = txt:GetRegionSize()
+        return txt, w or (#(node.text or "") * (node.size or 18) * 0.5), h or (node.size or 18)
+
+    elseif t == "icon" then
+        local atlas, tex
+        if node.atlas and node.tex then atlas, tex = node.atlas, node.tex
+        else atlas, tex = ResolveItemAtlas(node.prefab or "log") end
+        local size = node.size or 56
+        local img
+        local ok = _G.pcall(function() img = parent:AddChild(Image(atlas, tex)) end)
+        if ok and img then
+            img:SetSize(size, size)
+            return img, size, size
+        end
+        return parent:AddChild(Widget("noicon")), size, size
+
+    elseif t == "image" then
+        local size = node.size or 64
+        local img = parent:AddChild(Image(node.atlas or "images/global.xml", node.tex or "square.tex"))
+        img:SetSize(node.width or size, node.height or size)
+        if node.tint then local c = ResolveColor(node.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+        return img, node.width or size, node.height or size
+
+    elseif t == "button" then
+        local bw = node.width or 160
+        local bh = node.height or 44
+        local holder = parent:AddChild(Widget("btn"))
+        local btn = holder:AddChild(ImageButton(
+            "images/global_redux.xml",
+            "button_carny_long_normal.tex", "button_carny_long_hover.tex",
+            "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
+        btn:SetScale(bw / 340, bh / 70)
+        local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, node.text or "OK"))
+        local col = ResolveColor(node.color)
+        label:SetColour(col[1], col[2], col[3], col[4])
+        local last = -1
+        local cb = node.callback
+        btn:SetOnClick(function()
+            local now = _G.GetTime and _G.GetTime() or 0
+            if last >= 0 and (now - last) < 0.5 then return end
+            last = now
+            if cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+        end)
+        return holder, bw, bh
+
+    elseif t == "bar" then
+        local bw = node.width or 200
+        local bh = node.height or 16
+        local value = math.max(0, math.min(node.value or 0, node.max or 1))
+        local maxv = node.max or 1
+        local pct = maxv > 0 and (value / maxv) or 0
+        local holder = parent:AddChild(Widget("bar"))
+        local bgc = ResolveColor(node.bg_color or {0.2, 0.2, 0.2, 1})
+        local bg = holder:AddChild(Image("images/global.xml", "square.tex"))
+        bg:SetSize(bw, bh); bg:SetTint(bgc[1], bgc[2], bgc[3], bgc[4])
+        local fgc = ResolveColor(node.color or {0.2, 0.9, 0.2, 1})
+        local fg = holder:AddChild(Image("images/global.xml", "square.tex"))
+        local fillw = math.max(1, bw * pct)
+        fg:SetSize(fillw, bh - 2); fg:SetTint(fgc[1], fgc[2], fgc[3], fgc[4])
+        fg:SetPosition(-(bw - fillw) / 2, 0)
+        return holder, bw, bh
+
+    elseif t == "spacer" then
+        return parent:AddChild(Widget("spacer")), node.width or 0, node.height or 8
+
+    elseif t == "panel" then
+        -- Panel = framed background sized to fit its content (laid out as a col).
+        local holder = parent:AddChild(Widget("panel"))
+        local bg = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
+        local border = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
+        -- content container (column) holding title + children
+        local content = holder:AddChild(Widget("content"))
+        local cw, ch = LayoutChildren(node, content, ctx, "y")
+        local padX, padY = 28, 28
+        local pw = math.max(node.min_width or 160, cw + padX * 2)
+        local ph = math.max(node.min_height or 80, ch + padY * 2)
+        bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
+        border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
+        -- close button
+        if node.closeable ~= false then
+            local close_btn = holder:AddChild(ImageButton(
+                "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
+            close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
+            close_btn:SetScale(0.4)
+            close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
+        end
+        return holder, pw, ph
+    end
+
+    -- Unknown type: empty placeholder
+    return parent:AddChild(Widget("unknown")), 0, 0
+end
+
+--- Create a UI from a tree definition. cmd = { id, group, tree, anchor, x, y }
+local function CreateTree(cmd)
+    local root = GetRoot()
+    if not root or not cmd.tree then return nil end
+    local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
+    local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id }
+    RenderNode(cmd.tree, w, ctx)
+    local ax, ay = AnchorOffset(cmd.anchor or "center")
+    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
+    return { widget = w, type = "tree", group = cmd.group }
+end
+
+local function UpdateTree(entry, cmd)
+    -- Trees rebuild wholesale (they change on open/refresh, not per-frame).
+    if entry.widget and entry.widget.inst:IsValid() then
+        local group = entry.group
+        entry.widget:Kill()
+        local fresh = CreateTree(cmd)
+        if fresh then fresh.group = group end
+        return fresh
+    end
+end
+
+-------------------------------------------------
 -- Dispatch tables
 -------------------------------------------------
 
@@ -428,6 +636,7 @@ local CREATORS = {
     notification = CreateNotification,
     label        = CreateLabel,
     panel        = CreatePanel,
+    tree         = CreateTree,
     button       = CreateButton,
     progress_bar = CreateProgressBar,
 }
@@ -436,6 +645,7 @@ local UPDATERS = {
     notification = UpdateNotification,
     label        = UpdateLabel,
     panel        = UpdatePanel,
+    tree         = UpdateTree,
     button       = UpdateButton,
     progress_bar = UpdateProgressBar,
 }
