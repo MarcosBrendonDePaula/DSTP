@@ -200,6 +200,66 @@ dstp.Init(env, {
 })
 
 -------------------------------------------------
+-- Mob health replication (for HUD health bars)
+-------------------------------------------------
+-- DST does NOT replicate mob health to clients (only players). So, like the
+-- "Health Info" mod, we add our own netvar to every entity with a health
+-- component: the server mirrors current/max health into it, and the netvar
+-- syncs to clients automatically. The follow HUD then reads inst.dstp_hp /
+-- inst.dstp_hp_max client-side — real, smooth, no backend round-trip.
+local net_ushortint = GLOBAL.net_ushortint
+local net_uint = GLOBAL.net_uint
+
+AddPrefabPostInitAny(function(inst)
+    if inst == nil or inst.components == nil then
+        -- client entities have no components; only the server path sets up health
+    end
+
+    -- Both sides declare the netvar (same GUID/name) so it can sync.
+    -- Created lazily on the first entity that actually has health.
+    local function ensureNetvars()
+        if inst.dstp_net_hp ~= nil then return end
+        -- 32-bit for huge-HP bosses, 16-bit otherwise (max 65535).
+        inst.dstp_net_hp = net_uint(inst.GUID, "dstp_hp", "dstp_hp_dirty")
+        inst.dstp_net_hp_max = net_uint(inst.GUID, "dstp_hp_max", "dstp_hp_max_dirty")
+    end
+
+    -- SERVER: mirror health into the netvar whenever it changes.
+    if GLOBAL.TheWorld == nil or GLOBAL.TheWorld.ismastersim then
+        inst:DoTaskInTime(0, function()
+            local health = inst.components and inst.components.health
+            if not health or inst:HasTag("player") then return end
+            ensureNetvars()
+            local function push()
+                if inst.dstp_net_hp then
+                    inst.dstp_net_hp:set(math.floor(health.currenthealth or 0))
+                    inst.dstp_net_hp_max:set(math.floor(health.maxhealth or 0))
+                end
+            end
+            -- hook DoDelta (covers damage/heal) + initial push
+            local orig = health.DoDelta
+            health.DoDelta = function(self, ...)
+                local r = orig(self, ...)
+                push()
+                return r
+            end
+            push()
+        end)
+    end
+
+    -- CLIENT: cache the synced values on the entity for the HUD to read.
+    if GLOBAL.TheWorld ~= nil and not GLOBAL.TheWorld.ismastersim then
+        ensureNetvars()
+        inst:ListenForEvent("dstp_hp_dirty", function()
+            inst.dstp_hp = inst.dstp_net_hp:value()
+        end)
+        inst:ListenForEvent("dstp_hp_max_dirty", function()
+            inst.dstp_hp_max = inst.dstp_net_hp_max:value()
+        end)
+    end
+end)
+
+-------------------------------------------------
 -- Admin Panel Access
 -------------------------------------------------
 -- Panel access is via chat command `#panel` (admins only).

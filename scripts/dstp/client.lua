@@ -982,19 +982,31 @@ local function RegisterBuiltinCommands()
     -- Spawn prefab at player's position (or with offset)
     DSTP.RegisterCommand("spawn_at_player", function(data)
         local player = FindPlayer(data.userid)
-        if player and data.prefab then
-            local x, _, z = player.Transform:GetWorldPosition()
-            local ox, oz = tonumber(data.offset_x) or 0, tonumber(data.offset_z) or 0
-            local ent = _G.SpawnPrefab(data.prefab)
-            if ent then
-                ent.Transform:SetPosition(x + ox, 0, z + oz)
-                local count = tonumber(data.count) or 1
-                if count > 1 and ent.components.stackable then
-                    ent.components.stackable:SetStackSize(count)
+        if not (player and data.prefab) then return end
+        local x, _, z = player.Transform:GetWorldPosition()
+        local ox, oz = tonumber(data.offset_x) or 0, tonumber(data.offset_z) or 0
+        local count = math.max(1, math.min(tonumber(data.count) or 1, 20))
+
+        local first = _G.SpawnPrefab(data.prefab)
+        if not first then return end
+        first.Transform:SetPosition(x + ox, 0, z + oz)
+
+        if count > 1 and first.components.stackable then
+            -- Stackable items: one entity, set the stack size.
+            first.components.stackable:SetStackSize(count)
+        elseif count > 1 then
+            -- Non-stackable (mobs/structures): spawn N separate copies spread in
+            -- a small ring around the player so they don't stack on one tile.
+            for i = 2, count do
+                local ent = _G.SpawnPrefab(data.prefab)
+                if ent then
+                    local ang = (i / count) * 2 * math.pi
+                    local r = 2 + (i % 3)
+                    ent.Transform:SetPosition(x + ox + math.cos(ang) * r, 0, z + oz + math.sin(ang) * r)
                 end
-                if DSTP._DEBUG then Log("Spawned " .. data.prefab .. " at " .. player.name) end
             end
         end
+        if DSTP._DEBUG then Log("Spawned " .. count .. "x " .. data.prefab .. " at " .. player.name) end
     end)
 
     -- Remove entities near a player

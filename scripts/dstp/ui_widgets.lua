@@ -805,24 +805,27 @@ end
 local function FindFollowTarget(follow)
     local player = _G.ThePlayer
     if not player or not player.Transform then return nil end
-    -- Combat-target mode: follow whoever the player is currently fighting.
-    -- onhitother/onattackother are SERVER-only, but the client knows the live
-    -- combat target via the combat replica — this is what works client-side.
+    -- Combat-target mode: prefer whoever the player is fighting (combat replica),
+    -- but fall back to the nearest non-player entity so "I hit that tentacle"
+    -- still shows a bar even when no formal combat target is set.
     if follow.mode == "combat_target" then
         local cmb = player.replica and player.replica.combat
         local tgt = cmb and cmb.GetTarget and cmb:GetTarget()
         if tgt and tgt:IsValid() then return tgt end
-        return nil
+        -- fall through to nearest-entity search below
     end
     -- By explicit GUID first.
     if follow.guid then
         local ent = _G.Ents and _G.Ents[follow.guid]
         if ent and ent:IsValid() then return ent end
     end
-    -- Otherwise search around the player.
+    -- Otherwise search around the player. When no specific prefab is given, only
+    -- consider creatures (so trees/rocks/etc. don't grab the bar) by requiring
+    -- one of the combat-ish tags. With a prefab, match it directly.
     local px, py, pz = player.Transform:GetWorldPosition()
     local radius = (follow.max_dist and follow.max_dist > 0) and follow.max_dist or 40
-    local ents = _G.TheSim:FindEntities(px, py, pz, radius, nil, { "INLIMBO", "FX", "player" })
+    local mustoneof = (not follow.prefab) and { "_combat", "monster", "animal", "hostile", "epic" } or nil
+    local ents = _G.TheSim:FindEntities(px, py, pz, radius, nil, { "INLIMBO", "FX", "player", "playerghost" }, mustoneof)
     local best, bestd = nil, math.huge
     for _, ent in ipairs(ents) do
         if ent ~= player and ent:IsValid() and (not ent:HasTag("player")) then
@@ -882,12 +885,21 @@ local function CreateFollow(cmd)
     local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label }
     local lost = 0
     local task
+    local dbg = 0
     local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
     task = player:DoPeriodicTask(0, function()
         local ent = entry.target
         if dynamic or not (ent and ent:IsValid()) then
             ent = FindFollowTarget(follow)
             entry.target = ent
+        end
+        -- debug heartbeat (~every 1s) so the client log shows what the follow sees
+        dbg = dbg + 1
+        if dbg >= 30 then
+            dbg = 0
+            Log(("follow '%s' mode=%s target=%s"):format(
+                tostring(cmd.id), tostring(follow.mode or (follow.prefab and ("prefab:"..follow.prefab)) or "nearest"),
+                ent and ent.prefab or "nil"))
         end
         if not (ent and ent:IsValid()) then
             w:Hide()
@@ -900,11 +912,17 @@ local function CreateFollow(cmd)
         end
         lost = 0
         w:Show()
-        -- live health percent from the replica (GetPercent has a client fallback).
-        local h = ent.replica and ent.replica.health
-        if h and h.GetPercent then
-            local ok, pct = _G.pcall(function() return h:GetPercent() end)
-            if ok and type(pct) == "number" then setBarPct(pct) end
+        -- Live health. DST doesn't replicate mob HP, so DSTP injects its own
+        -- netvar (dstp_hp/dstp_hp_max, see modmain) that the client reads here.
+        -- Fall back to the player health replica (works for players).
+        if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then
+            setBarPct(ent.dstp_hp / ent.dstp_hp_max)
+        else
+            local h = ent.replica and ent.replica.health
+            if h and h.GetPercent then
+                local ok, pct = _G.pcall(function() return h:GetPercent() end)
+                if ok and type(pct) == "number" then setBarPct(pct) end
+            end
         end
         -- keep the label on the current target's name (dynamic modes)
         if label and label.inst:IsValid() and ent.GetDisplayName then
