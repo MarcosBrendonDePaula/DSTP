@@ -16,6 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `specs/dst-client-constraints.md` — what the DST client can/can't see (mob health is NOT replicated, `onhitother`/`onattackother` are server-only, `net_string` holds one value so per-frame UI commands must be coalesced, HUD coordinate space). The "why it didn't work" doc.
 - `specs/ui-by-nodes.md` — building in-game UI from flows: UI Builder, the generic renderer (`ui_set`/`callback`/tabs/follow-entity), shops, live HUDs. Principle: a new UI needing new Lua means a missing generic prop/action.
 - `specs/ui-system.md` — full UI tree contract (node types, props, actions, events).
+- `specs/dynamic-data-bindings.md` — the binding system that replicates server-only data (mob health, etc.) to the client. Gate netvars by `inst.prefab` ONLY (tags/replicas/components desync → crash).
+- `specs/data-catalog.md` — which data is worth replicating (implemented + candidates: player HP, mob combat state, structure timers, fuel). Rule: add a source only when a concrete UI consumes it.
 
 ## Architecture
 
