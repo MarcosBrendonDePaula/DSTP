@@ -30,22 +30,24 @@ const tree = got.find(c => c.type === 'ui_command' && c.data?.cmd?.type === 'tre
 ck(!!tree, `árvore emitida [tipos: ${[...new Set(got.map(c => c.type))].join(',') || 'nenhum'}]`)
 ck(tree?.type === 'panel' && tree?.title === 'Loja', 'raiz panel Loja')
 const col = tree?.children?.[0]
-const rows = (col?.children || []).filter((c: any) => c.type === 'row')
-ck(col?.type === 'col' && rows.length === 6, `col com 6 rows (3 buy + 3 sell) [got ${rows.length}]`)
-let okRows = true
+ck(col?.type === 'col', 'raiz tem uma col')
+// estrutura: col > [saldo(text), tabs]
+const tabs = (col?.children || []).find((c: any) => c.type === 'tabs')
+ck(!!tabs && Array.isArray(tabs.tabs) && tabs.tabs.length === 2, `tabs com 2 abas [got ${tabs?.tabs?.length}]`)
+ck(tabs?.tabs?.[0]?.label === 'Comprar' && tabs?.tabs?.[1]?.label === 'Vender', `rótulos das abas [${tabs?.tabs?.map((t: any) => t.label).join(',')}]`)
+const buyRows = (tabs?.tabs?.[0]?.child?.children || []).filter((c: any) => c.type === 'row')
+const sellRows = (tabs?.tabs?.[1]?.child?.children || []).filter((c: any) => c.type === 'row')
+ck(buyRows.length === 3 && sellRows.length === 3, `3 rows por aba [buy=${buyRows.length} sell=${sellRows.length}]`)
 const cbs: string[] = []
-for (const r of rows) {
-  const types = (r.children || []).map((c: any) => c.type)
-  if (!(types.includes('icon') && types.includes('text') && types.includes('button'))) okRows = false
+for (const r of [...buyRows, ...sellRows]) {
   const btn = (r.children || []).find((c: any) => c.type === 'button')
   if (btn) cbs.push(btn.callback)
 }
-ck(okRows, 'cada row tem icon+text+button')
-ck(cbs.includes('buy_log') && cbs.includes('buy_gears'), `callbacks de compra: ${cbs.filter(c => c.startsWith('buy')).join(',')}`)
-ck(cbs.includes('sell_log') && cbs.includes('sell_gears'), `callbacks de venda: ${cbs.filter(c => c.startsWith('sell')).join(',')}`)
-const firstIcon = rows[0]?.children?.find((c: any) => c.type === 'icon')
-ck(!!firstIcon?.prefab, `primeiro item tem prefab [${firstIcon?.prefab}]`)
-// saldo: primeiro filho da coluna deve ser o texto de moedas com o valor lido
+ck(cbs.includes('buy_log') && cbs.includes('buy_gears'), `callbacks compra: ${cbs.filter(c => c.startsWith('buy')).join(',')}`)
+ck(cbs.includes('sell_log') && cbs.includes('sell_gears'), `callbacks venda: ${cbs.filter(c => c.startsWith('sell')).join(',')}`)
+const firstIcon = buyRows[0]?.children?.find((c: any) => c.type === 'icon')
+ck(!!firstIcon?.prefab, `primeiro item compra tem prefab [${firstIcon?.prefab}]`)
+// saldo: filho text da col com o valor lido
 const saldoTxt = col?.children?.find((c: any) => c.type === 'text' && /moedas/i.test(c.text || ''))
 ck(saldoTxt?.text === 'Suas moedas: 73', `saldo exibido [got "${saldoTxt?.text}"]`)
 ck(saldoTxt?.id === 'saldo_txt', `saldo é endereçável (id=saldo_txt) [got ${saldoTxt?.id}]`)

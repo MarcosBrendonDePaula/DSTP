@@ -183,6 +183,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       ui_panel: { params: { userid: '{{trigger.userid}}', id: 'ui', title: '', gap: '8', anchor: 'center' } },
       ui_col: { params: { gap: '8' } },
       ui_row: { params: { gap: '8' } },
+      ui_tabs: { params: { active: '0' } },
       ui_text: { params: { text: 'Texto', size: '18' } },
       ui_icon: { params: { prefab: 'log', size: '56' } },
       ui_button: { params: { text: 'Comprar', callback: 'click' } },
@@ -273,7 +274,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </button>
         <span className="w-px h-5 bg-white/10 mx-0.5 self-center" title="Componentes de UI (compor por nodes)" />
         {([
-          ['ui_panel', '🪟'], ['ui_col', '↕'], ['ui_row', '↔'], ['ui_text', '🔤'],
+          ['ui_panel', '🪟'], ['ui_col', '↕'], ['ui_row', '↔'], ['ui_tabs', '🗂'], ['ui_text', '🔤'],
           ['ui_icon', '🖼'], ['ui_button', '🔘'], ['ui_bar', '📊'], ['ui_spacer', '␣'],
         ] as const).map(([t, ic]) => (
           <button key={t} onClick={() => addNode(t)} title={t.replace('ui_', 'UI ')}

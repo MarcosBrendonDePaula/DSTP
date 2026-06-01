@@ -731,7 +731,7 @@ export class FlowEngine {
     seen.add(node.id)
 
     const TYPE_MAP: Record<string, string> = {
-      ui_panel: 'panel', ui_col: 'col', ui_row: 'row',
+      ui_panel: 'panel', ui_col: 'col', ui_row: 'row', ui_tabs: 'tabs',
       ui_text: 'text', ui_icon: 'icon', ui_image: 'image',
       ui_button: 'button', ui_bar: 'bar', ui_spacer: 'spacer',
     }
@@ -801,6 +801,16 @@ export class FlowEngine {
     const axis = type === 'row' ? 'x' : 'y'
     childNodes.sort((a, b) =>
       axis === 'x' ? a.position.x - b.position.x : a.position.y - b.position.y)
+
+    if (type === 'tabs') {
+      // Each child is one tab; its tab_label (or title) is the tab button text.
+      out.active = num(p.active) ?? 0
+      out.tabs = childNodes.map((c, i) => {
+        const label = this.resolveValue(c.data.params?.tab_label ?? c.data.params?.title ?? `Aba ${i + 1}`, context)
+        return { label: String(label), child: this.buildUITree(c, nodes, edges, context, seen) }
+      }).filter(t => t.child)
+      return out
+    }
 
     const children = childNodes
       .map(c => this.buildUITree(c, nodes, edges, context, seen))

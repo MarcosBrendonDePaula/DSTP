@@ -74,11 +74,22 @@ export function UIPanelNode({ id, data, selected }: any) {
   )
 }
 
+export function UITabsNode({ id, data, selected }: any) {
+  const set = useParam(id, data)
+  return (
+    <UIBox id={id} data={data} selected={selected} icon="🗂" label="UI Abas" isContainer>
+      {field('Aba inicial (0)', String(data.params?.active ?? ''), v => set('active', v), '0')}
+      <div className="text-[8px] text-gray-500">Cada filho col/row é uma aba. Defina o rótulo no filho (Tab label). Troca client-side.</div>
+    </UIBox>
+  )
+}
+
 export function UIColNode({ id, data, selected }: any) {
   const set = useParam(id, data)
   return (
     <UIBox id={id} data={data} selected={selected} icon="↕" label="UI Coluna" isContainer>
       {field('Gap', String(data.params?.gap ?? ''), v => set('gap', v), '8')}
+      {field('Tab label (se aba)', data.params?.tab_label ?? '', v => set('tab_label', v), '')}
       <div className="text-[8px] text-gray-500">Empilha filhos na vertical (ordem = Y no canvas).</div>
     </UIBox>
   )
