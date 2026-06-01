@@ -69,11 +69,16 @@ ones with `components.health` — instant desync.
 
 The Health Info mod avoids this by adding the netvar only to a **curated prefab
 set** and creating it identically on both sides. Rules:
-- **Gate by `inst.prefab`, NOT by tag.** This is critical: tags may not be
-  set/replicated yet when `AddPrefabPostInitAny` runs, so a tag check can return
-  different results on server vs client → the netvar isn't created on one side →
-  the value never arrives (bar stays full) or the net stream desyncs.
-  `inst.prefab` is deterministic and present on both sides immediately.
+- **Gate by `inst.prefab` ONLY.** Critical. The gate must return the SAME answer
+  on server and client *at PostInit time*. Things that DON'T work as gates:
+  - **Tags** — may not be set/replicated yet at PostInit.
+  - **`inst.replica.<comp>`** — the replica is populated over the network AFTER
+    PostInit on the client, so the server sees it and the client doesn't.
+  - **`inst.components.*`** — server-only, never on the client.
+  Each of these makes server and client disagree → the netvar is created on one
+  side only → "Failed to read net var data" + crash (or the value never
+  arrives / bar stays full). `inst.prefab` is the ONLY thing identical and
+  available immediately on both sides. A curated prefab list is the price.
 - Declare the netvar in the SAME place/condition on server and client.
 - Use a curated prefab whitelist (common mobs + bosses), never "every entity".
 

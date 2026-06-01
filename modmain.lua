@@ -216,15 +216,37 @@ local _BIND = {
 }
 
 -- Whitelisted SOURCES. Each defines:
---  gate(inst): does this entity have the data? MUST be deterministic on BOTH
---    sides → use inst.replica.<comp> (present on client AND server, decided at
---    prefab build), NEVER tags (unsynced at PostInit) or components.* (server
---    only). This is what removes the need for a hardcoded prefab list.
+--  gate(inst): does this entity get this binding? MUST return the SAME answer on
+--    server and client AT PostInit TIME. The ONLY thing guaranteed identical and
+--    available that early is inst.prefab — so we gate by a curated prefab set.
+--    (We tried inst.replica.<comp>: the replica is populated over the network
+--    AFTER PostInit on the client, so server said yes / client said no → netvar
+--    desync + "Failed to read net var data" crash. Tags have the same problem.
+--    See specs/dst-client-constraints.md. Prefab gating is non-negotiable.)
 --  read(inst): server-side reader → cur, max.
 --  hook: component method to wrap so changes re-push.
+
+-- Curated prefab set for the health binding (mobs/bosses worth a HP bar).
+local HEALTH_PREFABS = {}
+for _, p in ipairs({
+    "spider","spider_warrior","spider_hider","spider_spitter","spider_dropper",
+    "hound","firehound","icehound","houndmound","killerbee","bee","mosquito",
+    "frog","tentacle","tentacle_pillar","merm","pigman","pigguard","bunnyman",
+    "perd","rabbit","crow","robin","robin_winter","butterfly","beefalo",
+    "babybeefalo","koalefant_summer","koalefant_winter","walrus","little_walrus",
+    "rocky","slurtle","snurtle","buzzard","catcoon","lightninggoat","monkey",
+    "tallbird","teenbird","smallbird","knight","bishop","rook","mole","batilisk",
+    "bat","worm","lureplant","eyeplant","krampus","spat","penguin",
+    "mandrake_active","deerclops","bearger","moose","dragonfly","antlion",
+    "minotaur","leif","leif_sparse","spiderqueen","warg","klaus","toadstool",
+    "stalker","stalker_forest","beequeen","crabking","malbatross",
+    "crawlinghorror","terrorbeak","nightmarebeak","crawlingnightmare",
+    "shadowtentacle","bishop_nightmare","rook_nightmare","knight_nightmare",
+}) do HEALTH_PREFABS[p] = true end
+
 local BIND_SOURCES = {
     health = {
-        gate = function(inst) return inst.replica and inst.replica.health ~= nil end,
+        gate = function(inst) return HEALTH_PREFABS[inst.prefab] == true end,
         read = function(inst)
             local h = inst.components and inst.components.health
             if not h then return nil end
@@ -235,8 +257,7 @@ local BIND_SOURCES = {
     -- add more here (temperature, hunger, sanity…) with zero changes elsewhere
 }
 
--- The active bindings. Mob-HP is now just the first binding — no prefab list:
--- any entity that HAS a health replica (i.e. has health) gets the netvar.
+-- The active bindings. Mob-HP is the first binding.
 -- Applied in a fixed id-sorted order so netvar declaration order matches.
 local BINDINGS = {
     { id = "hp", source = "health", as = "dstp_hp", net = "ushortint" },

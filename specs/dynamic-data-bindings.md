@@ -24,9 +24,12 @@ net). Instead the mod offers a **curated catalog of standard, useful data**
 replicating. A dev **chooses which to enable**, not invents new ones. Best of
 both: generic enough to compose, safe, and only meaningful data on the wire.
 
-Gating is automatic per source: `health` traffics only for entities that HAVE a
-health replica (`inst.replica.health ~= nil` — present and identical on both
-sides, decided at prefab build). No hardcoded prefab list, no waste.
+Gating is by a **curated prefab set** per source (e.g. health → known mobs/
+bosses). We tried gating by `inst.replica.health` to avoid the list, but the
+replica is populated over the network AFTER PostInit on the client — so the
+server created the netvar and the client didn't → desync + crash. `inst.prefab`
+is the ONLY thing identical and available on both sides at PostInit. So the list
+stays. (Tags fail the same way.) See `dst-client-constraints.md`.
 
 ## The core idea: a "binding" is data, not code
 
