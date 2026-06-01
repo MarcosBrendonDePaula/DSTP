@@ -215,10 +215,16 @@ local _BIND = {
     net = { ushortint = GLOBAL.net_ushortint, uint = GLOBAL.net_uint },
 }
 
--- Whitelisted SOURCES: how the server reads a datum (returns cur, max) and which
--- component method to hook so changes re-push. Data, not arbitrary code.
+-- Whitelisted SOURCES. Each defines:
+--  gate(inst): does this entity have the data? MUST be deterministic on BOTH
+--    sides → use inst.replica.<comp> (present on client AND server, decided at
+--    prefab build), NEVER tags (unsynced at PostInit) or components.* (server
+--    only). This is what removes the need for a hardcoded prefab list.
+--  read(inst): server-side reader → cur, max.
+--  hook: component method to wrap so changes re-push.
 local BIND_SOURCES = {
     health = {
+        gate = function(inst) return inst.replica and inst.replica.health ~= nil end,
         read = function(inst)
             local h = inst.components and inst.components.health
             if not h then return nil end
@@ -226,52 +232,32 @@ local BIND_SOURCES = {
         end,
         hook = { comp = "health", method = "DoDelta" },
     },
-    -- add more here (temperature, hunger, etc.) with zero changes elsewhere
+    -- add more here (temperature, hunger, sanity…) with zero changes elsewhere
 }
 
--- Curated prefab sets a binding applies to.
-local CREATURE_PREFABS = {
-    "spider", "spider_warrior", "spider_hider", "spider_spitter", "spider_dropper",
-    "hound", "firehound", "icehound", "houndmound",
-    "killerbee", "bee", "mosquito", "frog", "tentacle", "tentacle_pillar",
-    "merm", "pigman", "pigguard", "bunnyman", "perd", "rabbit", "crow", "robin",
-    "robin_winter", "butterfly", "beefalo", "babybeefalo", "koalefant_summer",
-    "koalefant_winter", "walrus", "little_walrus", "rocky", "slurtle", "snurtle",
-    "buzzard", "catcoon", "lightninggoat", "monkey", "tallbird", "teenbird",
-    "smallbird", "knight", "bishop", "rook", "mole", "batilisk", "bat",
-    "worm", "lureplant", "eyeplant", "krampus", "spat", "penguin", "mandrake_active",
-    "deerclops", "bearger", "moose", "dragonfly", "antlion", "minotaur",
-    "leif", "leif_sparse", "spiderqueen", "warg", "klaus", "toadstool",
-    "stalker", "stalker_forest", "beequeen", "crabking", "malbatross",
-    "crawlinghorror", "terrorbeak", "nightmarebeak", "crawlingnightmare",
-    "shadowtentacle", "bishop_nightmare", "rook_nightmare", "knight_nightmare",
-}
-
--- The active bindings. The mob-HP feature is now just the first binding.
--- Applied in a fixed order so netvar declaration order matches everywhere.
+-- The active bindings. Mob-HP is now just the first binding — no prefab list:
+-- any entity that HAS a health replica (i.e. has health) gets the netvar.
+-- Applied in a fixed id-sorted order so netvar declaration order matches.
 local BINDINGS = {
-    { id = "hp", source = "health", as = "dstp_hp", net = "ushortint", prefabs = CREATURE_PREFABS },
+    { id = "hp", source = "health", as = "dstp_hp", net = "ushortint" },
 }
 
--- Build a prefab->binding lookup (sorted by id for deterministic order).
 table.sort(BINDINGS, function(a, b) return a.id < b.id end)
 local function clamp16(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
 
 AddPrefabPostInitAny(function(inst)
-    if inst.prefab == nil then return end
+    if inst.prefab == nil or inst:HasTag("player") then return end
     local isServer = (not GLOBAL.TheWorld) or GLOBAL.TheWorld.ismastersim
 
     for _, b in ipairs(BINDINGS) do
-        local applies = false
-        for _, p in ipairs(b.prefabs) do if p == inst.prefab then applies = true break end end
-        if applies then
+        local src = BIND_SOURCES[b.source]
+        if src and src.gate(inst) then
             local ctor = _BIND.net[b.net] or GLOBAL.net_ushortint
             -- declare identically on both sides (cur + max)
             inst["_b_" .. b.as] = ctor(inst.GUID, b.as, b.as .. "_dirty")
             inst["_b_" .. b.as .. "_max"] = ctor(inst.GUID, b.as .. "_max", b.as .. "_max_dirty")
 
             if isServer then
-                local src = BIND_SOURCES[b.source]
                 local nv, nvmax = inst["_b_" .. b.as], inst["_b_" .. b.as .. "_max"]
                 local function push()
                     local cur, max = src.read(inst)

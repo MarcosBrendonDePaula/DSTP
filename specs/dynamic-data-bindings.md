@@ -15,6 +15,19 @@ declarative tree (`ui-by-nodes.md`), and client reactions went to the
 capture/replication**: the backend declares *what data it wants*, and a generic
 interpreter in the mod provides it — no new Lua, no recompile.
 
+## Design principle: standard data only (curated catalog)
+
+We do NOT let devs ship arbitrary data/readers (Lua from the panel running on
+the client is a crash/security hole, and trafficking random fields floods the
+net). Instead the mod offers a **curated catalog of standard, useful data**
+(`BIND_SOURCES`: health today; hunger/sanity/temperature next) — things worth
+replicating. A dev **chooses which to enable**, not invents new ones. Best of
+both: generic enough to compose, safe, and only meaningful data on the wire.
+
+Gating is automatic per source: `health` traffics only for entities that HAVE a
+health replica (`inst.replica.health ~= nil` — present and identical on both
+sides, decided at prefab build). No hardcoded prefab list, no waste.
+
 ## The core idea: a "binding" is data, not code
 
 A binding declares: a **source** of data, an optional **gate** (which entities),
