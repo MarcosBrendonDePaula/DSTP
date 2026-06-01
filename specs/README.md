@@ -9,6 +9,7 @@ techniques that cost real debugging time to discover.
 | [dst-client-constraints.md](dst-client-constraints.md) | Touching anything across the DST client/server boundary, HUD rendering, mob health, net_string, or coordinate space. The "why it didn't work" doc. |
 | [ui-by-nodes.md](ui-by-nodes.md) | Building in-game UI from flows — UI Builder, the generic renderer, tabs, follow-entity, shops, HUDs. |
 | [ui-system.md](ui-system.md) | The full UI tree contract: node types, props, actions, events. Reference for the renderer. |
+| [dynamic-data-bindings.md](dynamic-data-bindings.md) | **DRAFT proposal** — a generic way to capture/replicate client/server data (mob health, etc.) via declarative bindings instead of hardcoded Lua. Read before generalizing data capture. |
 
 Top-level docs (`/AUTOMATION.md`, `/WORKERS.md`, `/CLAUDE.md`) cover the
 automation engine, the per-server worker architecture, and project-wide rules.
