@@ -200,6 +200,61 @@ dstp.Init(env, {
 })
 
 -------------------------------------------------
+-- Mob health replication (for HUD health bars) — SURGICAL
+-------------------------------------------------
+-- DST doesn't replicate mob health to clients. Like the "Health Info" mod, we
+-- add our own netvar — but ONLY to creatures, gated by TAGS (which replicate,
+-- so the check returns the SAME result on server and client → no desync). The
+-- earlier "every entity" version corrupted the net stream and crashed; see
+-- specs/dst-client-constraints.md. The gate MUST be identical on both sides and
+-- the netvar created synchronously (no DoTaskInTime).
+local net_ushortint = GLOBAL.net_ushortint
+
+local function dstp_wants_healthbar(inst)
+    -- creature-ish tags only; never players/structures/items/fx
+    if inst:HasTag("player") or inst:HasTag("FX") or inst:HasTag("INLIMBO") then return false end
+    return inst:HasTag("monster") or inst:HasTag("animal")
+        or inst:HasTag("smallcreature") or inst:HasTag("largecreature")
+        or inst:HasTag("epic")
+end
+
+AddPrefabPostInitAny(function(inst)
+    if not dstp_wants_healthbar(inst) then return end
+
+    -- Declared identically on BOTH sides (tags are replicated, so the gate
+    -- above matches). ushortint covers up to 65535 HP (enough for our use).
+    inst.dstp_net_hp = net_ushortint(inst.GUID, "dstp_hp", "dstp_hp_dirty")
+    inst.dstp_net_hp_max = net_ushortint(inst.GUID, "dstp_hp_max", "dstp_hp_max_dirty")
+
+    if not GLOBAL.TheWorld or not GLOBAL.TheWorld.ismastersim then
+        -- CLIENT: cache synced values for the HUD to read.
+        inst:ListenForEvent("dstp_hp_dirty", function()
+            inst.dstp_hp = inst.dstp_net_hp:value()
+        end)
+        inst:ListenForEvent("dstp_hp_max_dirty", function()
+            inst.dstp_hp_max = inst.dstp_net_hp_max:value()
+        end)
+        return
+    end
+
+    -- SERVER: mirror real health into the netvar (clamped to 0..65535).
+    local function push()
+        local h = inst.components and inst.components.health
+        if not h then return end
+        local function clamp(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
+        inst.dstp_net_hp:set(clamp(h.currenthealth))
+        inst.dstp_net_hp_max:set(clamp(h.maxhealth))
+    end
+    inst:DoTaskInTime(0, function()
+        local h = inst.components and inst.components.health
+        if not h then return end
+        local orig = h.DoDelta
+        h.DoDelta = function(self, ...) local r = orig(self, ...); push(); return r end
+        push()
+    end)
+end)
+
+-------------------------------------------------
 -- Admin Panel Access
 -------------------------------------------------
 -- Panel access is via chat command `#panel` (admins only).
