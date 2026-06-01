@@ -951,6 +951,7 @@ export class FlowEngine {
           id: actionData.id || `track_${Date.now()}`,
           type: actionData.widget || 'progress_bar',
           follow: {
+            mode: actionData.mode || undefined,  // 'combat_target' = segue quem você ataca
             prefab: actionData.prefab || undefined,
             guid: actionData.guid ? Number(actionData.guid) : undefined,
             nearest: actionData.nearest === true || actionData.nearest === 'true',

@@ -805,6 +805,15 @@ end
 local function FindFollowTarget(follow)
     local player = _G.ThePlayer
     if not player or not player.Transform then return nil end
+    -- Combat-target mode: follow whoever the player is currently fighting.
+    -- onhitother/onattackother are SERVER-only, but the client knows the live
+    -- combat target via the combat replica — this is what works client-side.
+    if follow.mode == "combat_target" then
+        local cmb = player.replica and player.replica.combat
+        local tgt = cmb and cmb.GetTarget and cmb:GetTarget()
+        if tgt and tgt:IsValid() then return tgt end
+        return nil
+    end
     -- By explicit GUID first.
     if follow.guid then
         local ent = _G.Ents and _G.Ents[follow.guid]
@@ -871,9 +880,10 @@ local function CreateFollow(cmd)
     local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label, setBar = setBar }
     local lost = 0
     local task
+    local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
     task = player:DoPeriodicTask(0, function()
         local ent = entry.target
-        if not (ent and ent:IsValid()) then
+        if dynamic or not (ent and ent:IsValid()) then
             ent = FindFollowTarget(follow)
             entry.target = ent
         end
@@ -893,6 +903,11 @@ local function CreateFollow(cmd)
         if h and h.GetCurrent then
             maxv = (h.Max and h:Max()) or maxv
             setBar(h:GetCurrent() or maxv)
+        end
+        -- keep the label on the current target's name (dynamic modes)
+        if label and label.inst:IsValid() and ent.GetDisplayName then
+            local nm = ent:GetDisplayName()
+            if nm and nm ~= entry._lastname then label:SetString(nm); entry._lastname = nm end
         end
         local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
         w:SetPosition(sx, sy + offset_y, 0)
