@@ -512,6 +512,9 @@ RenderNode = function(node, parent, ctx)
             txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
             txt:EnableWordWrap(true)
         end
+        -- Register addressable text nodes so a later ui_set can patch them
+        -- in place (e.g. live balance) without rebuilding the whole tree.
+        if node.id and ctx.texts then ctx.texts[node.id] = txt end
         local w, h = txt:GetRegionSize()
         return txt, w or (#(node.text or "") * (node.size or 18) * 0.5), h or (node.size or 18)
 
@@ -610,15 +613,32 @@ local function CreateTree(cmd)
     local root = GetRoot()
     if not root or not cmd.tree then return nil end
     local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
-    local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id }
+    local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id, texts = {} }
     RenderNode(cmd.tree, w, ctx)
     local ax, ay = AnchorOffset(cmd.anchor or "center")
     w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    return { widget = w, type = "tree", group = cmd.group }
+    return { widget = w, type = "tree", group = cmd.group, texts = ctx.texts }
+end
+
+--- Patch a single addressable text node inside an existing tree, in place.
+--- cmd = { id = <tree/widget id>, node = <text node id>, text = <new string> }
+function UIWidgets.SetText(cmd)
+    local entry = active_widgets[cmd.id]
+    if not entry or not entry.texts then return end
+    local txt = entry.texts[cmd.node]
+    if txt and txt.inst:IsValid() and cmd.text ~= nil then
+        txt:SetString(tostring(cmd.text))
+    end
 end
 
 local function UpdateTree(entry, cmd)
-    -- Trees rebuild wholesale (they change on open/refresh, not per-frame).
+    -- If only a text patch is requested, do it in place (no rebuild, no flicker).
+    if cmd.set_text and entry.texts then
+        local txt = entry.texts[cmd.set_text.node]
+        if txt and txt.inst:IsValid() then txt:SetString(tostring(cmd.set_text.text)) end
+        return entry
+    end
+    -- Otherwise rebuild wholesale (tree changed on open/refresh).
     if entry.widget and entry.widget.inst:IsValid() then
         local group = entry.group
         entry.widget:Kill()
@@ -777,6 +797,9 @@ function UIWidgets.ProcessCommand(cmd)
         UIWidgets.DestroyWidget(cmd)
     elseif cmd.action == "destroy_group" then
         UIWidgets.DestroyGroup(cmd.group)
+    elseif cmd.action == "set_text" then
+        -- Patch one addressable text node in a tree, in place (no rebuild).
+        UIWidgets.SetText({ id = cmd.id, node = cmd.node, text = cmd.text })
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
     elseif cmd.action == "batch" then

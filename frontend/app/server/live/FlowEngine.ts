@@ -309,7 +309,9 @@ export class FlowEngine {
 
       } else if (node.type === 'memory') {
         const memRepo = new FlowMemoryRepository(serverId)
-        const flowId = context._flowId || ''
+        // `flow` param overrides the namespace, so flows can share memory
+        // (e.g. a shop-open flow reading the balance written by shop-buy).
+        const flowId = (node.data.params?.flow && String(node.data.params.flow)) || context._flowId || ''
         const action = node.data.action || 'read' // 'read', 'write', 'delete', 'read_all'
         const key = this.resolveValue(node.data.params?.key || '', context)
 
@@ -758,6 +760,8 @@ export class FlowEngine {
       if (p.size != null) out.size = num(p.size)
       const c = color(p.color); if (c) out.color = c
       if (p.wrap_width != null) out.wrap_width = num(p.wrap_width)
+      // An explicit id makes this text addressable for in-place ui_set_text.
+      if (p.node_id) out.id = String(p.node_id)
     } else if (type === 'icon') {
       if (p.prefab) out.prefab = String(r(p.prefab))
       if (p.atlas) out.atlas = r(p.atlas)
@@ -826,6 +830,10 @@ export class FlowEngine {
         cmd = { action: 'create', id: actionData.id || `label_${Date.now()}`, type: 'label', text: actionData.text, x: Number(actionData.x) || 0, y: Number(actionData.y) || 0, anchor: actionData.anchor || 'top' }
       } else if (actionType === 'ui_panel') {
         cmd = { action: 'create', id: actionData.id || `panel_${Date.now()}`, type: 'panel', title: actionData.title, body: actionData.body, width: Number(actionData.width) || 400, height: Number(actionData.height) || 300 }
+      } else if (actionType === 'ui_set_text') {
+        // Patch one addressable text node inside an open tree, in place.
+        // id = tree/group id (e.g. 'loja'), node = the text node_id, text = new value.
+        cmd = { action: 'set_text', id: actionData.id, node: actionData.node, text: String(actionData.text ?? '') }
       } else if (actionType === 'ui_progress_bar') {
         const val = Number(actionData.value) || 0
         const max = Number(actionData.max) || 1
