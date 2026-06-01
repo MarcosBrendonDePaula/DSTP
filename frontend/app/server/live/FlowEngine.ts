@@ -343,6 +343,32 @@ export class FlowEngine {
           }
         }
 
+      } else if (node.type === 'ui_builder') {
+        // A ui_builder carries the whole UI tree as data (built in its own
+        // in-node editor), instead of as a subgraph of ui_* nodes. We resolve
+        // {{templates}} throughout the tree and push it. Unlike ui_panel, this
+        // continues the action chain afterwards (it's a normal action node).
+        const rawTree = node.data.tree || {}
+        const tree = this.resolveTree(rawTree, context)
+        const uiId = node.data.params?.id || node.data.id || `ui_${node.id}`
+        const userid = this.resolveValue(node.data.params?.userid ?? node.data.userid ?? '', context)
+        if (userid) {
+          this.host.pushCommand(serverId, 'ui_command', { userid, cmd: {
+            action: 'create', type: 'tree', id: uiId, group: uiId, tree,
+            anchor: node.data.params?.anchor || node.data.anchor || 'center', seq: Date.now(),
+          }})
+        }
+        setContext(node.id, { rendered: true })
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        const outEdges = edges.filter(e => e.source === node.id)
+        for (const edge of outEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
+
       } else if (node.type === 'ui_panel') {
         // A ui_panel is the ROOT of a UI composed from connected ui_* nodes.
         // Its outgoing edges mean "child of", not "next action": we walk the
@@ -817,6 +843,26 @@ export class FlowEngine {
       .filter(Boolean)
     if (children.length) out.children = children
 
+    return out
+  }
+
+  // Resolve {{templates}} throughout a literal UI tree (from a ui_builder node),
+  // returning a new tree. Strings are resolved; children/tabs recursed; numbers
+  // and arrays (e.g. color) pass through. Coerces numeric-ish props by key.
+  private resolveTree(node: any, context: Record<string, any>): any {
+    if (node == null || typeof node !== 'object') return node
+    const out: any = {}
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'children' && Array.isArray(v)) {
+        out.children = v.map(c => this.resolveTree(c, context))
+      } else if (k === 'tabs' && Array.isArray(v)) {
+        out.tabs = v.map((t: any) => ({ label: this.resolveValue(t.label, context), child: this.resolveTree(t.child, context) }))
+      } else if (typeof v === 'string') {
+        out[k] = this.resolveValue(v, context)
+      } else {
+        out[k] = v
+      }
+    }
     return out
   }
 
