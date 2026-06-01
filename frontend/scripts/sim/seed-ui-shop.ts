@@ -71,7 +71,7 @@ export function seedUIShop(serverId: string) {
 }
 
 // Flows de venda: clique sell_<prefab> → remove_item; item_removed(success) → credita.
-function seedSellFlows(serverId: string) {
+export function seedSellFlows(serverId: string) {
   const repo = new FlowRepository(serverId)
 
   const SELL_CODE = `async function run(context) {
@@ -117,6 +117,8 @@ function seedSellFlows(serverId: string) {
       { id: 'msg', type: 'action', position: { x: 800, y: 20 }, data: { action_type: 'ui_notification', params: { userid: '{{rem.userid}}', text: 'Vendeu {{rem.removed}}x {{rem.prefab}} (+{{calc.add}})! Saldo: {{calc.newBalance}}', duration: '5' } } },
       // atualiza o saldo na loja aberta
       { id: 'setbal', type: 'action', position: { x: 800, y: 100 }, data: { action_type: 'ui_set_text', params: { userid: '{{rem.userid}}', id: 'loja', node: 'saldo_txt', text: 'Suas moedas: {{calc.newBalance}}' } } },
+      // re-consulta inventário p/ atualizar os "tem: N" após a venda
+      { id: 'dump', type: 'action', position: { x: 800, y: 180 }, data: { action_type: 'dump_inventory', params: { userid: '{{rem.userid}}' } } },
     ],
     edges: [
       { id: 'e1', source: 'trg', target: 'bal' },
@@ -125,6 +127,7 @@ function seedSellFlows(serverId: string) {
       { id: 'e4', source: 'cond', target: 'save', sourceHandle: 'true' },
       { id: 'e5', source: 'cond', target: 'msg', sourceHandle: 'true' },
       { id: 'e6', source: 'cond', target: 'setbal', sourceHandle: 'true' },
+      { id: 'e7', source: 'cond', target: 'dump', sourceHandle: 'true' },
     ],
   })
 }

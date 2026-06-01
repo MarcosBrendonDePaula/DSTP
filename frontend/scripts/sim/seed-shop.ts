@@ -86,6 +86,8 @@ export function seedShop(serverId: string) {
       { id: 'okmsg', type: 'action', position: { x: 1020, y: 80 }, data: { action_type: 'ui_notification', params: { userid: '{{click.userid}}', text: 'Comprou {{item.nome}}! Saldo: {{afford.newBalance}}', duration: '5' } } },
       // Atualiza o saldo na loja aberta, em loco (no-op se a loja não estiver aberta).
       { id: 'setbal', type: 'action', position: { x: 1020, y: 280 }, data: { action_type: 'ui_set_text', params: { userid: '{{click.userid}}', id: 'loja', node: 'saldo_txt', text: 'Suas moedas: {{afford.newBalance}}' } } },
+      // re-consulta o inventário p/ atualizar os "tem: N" após a compra
+      { id: 'dump', type: 'action', position: { x: 1020, y: 360 }, data: { action_type: 'dump_inventory', params: { userid: '{{click.userid}}' } } },
       { id: 'nomsg', type: 'action', position: { x: 1020, y: 180 }, data: { action_type: 'ui_notification', params: { userid: '{{click.userid}}', text: 'Saldo insuficiente para {{item.nome}} (tem {{afford.balance}}, custa {{item.price}})', duration: '5' } } },
     ],
     edges: [
@@ -98,6 +100,7 @@ export function seedShop(serverId: string) {
       { id: 'e6', source: 'cond', target: 'give', sourceHandle: 'true' },
       { id: 'e7', source: 'cond', target: 'okmsg', sourceHandle: 'true' },
       { id: 'e9', source: 'cond', target: 'setbal', sourceHandle: 'true' },
+      { id: 'ed', source: 'cond', target: 'dump', sourceHandle: 'true' },
       { id: 'e8', source: 'cond', target: 'nomsg', sourceHandle: 'false' },
     ],
   })
