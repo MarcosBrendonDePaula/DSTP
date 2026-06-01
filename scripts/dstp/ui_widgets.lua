@@ -861,14 +861,15 @@ local function CreateFollow(cmd)
     bg:SetSize(bw, bh); bg:SetTint(bgc[1], bgc[2], bgc[3], bgc[4])
     local fgc = ResolveColor(cmd.color or {0.9, 0.2, 0.2, 1})
     local fg = w:AddChild(Image("images/global.xml", "square.tex"))
-    local maxv = cmd.max or 1
-    local function setBar(v)
-        local pct = maxv > 0 and math.max(0, math.min(v / maxv, 1)) or 0
+    -- setBarPct receives a 0..1 fraction directly (mob health is only available
+    -- client-side as a percent for entities that replicate it).
+    local function setBarPct(pct)
+        pct = math.max(0, math.min(pct or 1, 1))
         local fw = math.max(1, bw * pct)
         fg:SetSize(fw, bh - 2); fg:SetPosition(-(bw - fw) / 2, 0)
     end
     fg:SetTint(fgc[1], fgc[2], fgc[3], fgc[4])
-    setBar(cmd.value or maxv)
+    setBarPct(1)
 
     local label = nil
     if cmd.label or cmd.text then
@@ -876,8 +877,9 @@ local function CreateFollow(cmd)
         label:SetPosition(0, bh + 6)
     end
 
-    -- Per-frame reposition + auto-track the entity's health if it has a replica.
-    local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label, setBar = setBar }
+    -- Per-frame reposition + track the entity's health PERCENT (the only thing
+    -- the client reliably knows for replicated mobs).
+    local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label }
     local lost = 0
     local task
     local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
@@ -898,11 +900,11 @@ local function CreateFollow(cmd)
         end
         lost = 0
         w:Show()
-        -- live health from the entity's replica/components, if present
+        -- live health percent from the replica (GetPercent has a client fallback).
         local h = ent.replica and ent.replica.health
-        if h and h.GetCurrent then
-            maxv = (h.Max and h:Max()) or maxv
-            setBar(h:GetCurrent() or maxv)
+        if h and h.GetPercent then
+            local ok, pct = _G.pcall(function() return h:GetPercent() end)
+            if ok and type(pct) == "number" then setBarPct(pct) end
         end
         -- keep the label on the current target's name (dynamic modes)
         if label and label.inst:IsValid() and ent.GetDisplayName then
