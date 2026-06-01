@@ -43,6 +43,16 @@ export const ACTION_TYPES = [
   { value: 'clear_inventory', label: '🧹 Limpar Inventário', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Só este prefab (vazio=tudo)', placeholder: '' }] },
   { value: 'transfer_item', label: '🔄 Transferir Item', params: [{ key: 'from_userid', label: 'De (User ID)', placeholder: '{{trigger.userid}}' }, { key: 'to_userid', label: 'Para (User ID)', placeholder: '{{alvo.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'log' }, { key: 'count', label: 'Qtd', placeholder: '1' }, { key: 'token', label: 'Token', placeholder: '' }] },
   { value: 'dump_inventory', label: '📋 Listar Inventário', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'token', label: 'Token', placeholder: '' }] },
+  { value: 'ui_track', label: '🎯 HUD sobre Entidade', params: [
+    { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },
+    { key: 'id', label: 'ID do widget', placeholder: 'boss_hp' },
+    { key: 'prefab', label: 'Prefab alvo (vazio=mais próx.)', placeholder: 'deerclops' },
+    { key: 'label', label: 'Texto', placeholder: 'Boss' },
+    { key: 'max_dist', label: 'Distância máx.', placeholder: '40' },
+    { key: 'offset_y', label: 'Offset Y (acima)', placeholder: '60' },
+    { key: 'width', label: 'Largura', placeholder: '80' },
+    { key: 'color', label: 'Cor [r,g,b,a]', placeholder: '[0.9,0.2,0.2,1]' },
+  ] },
   // Spawn/Remove
   { value: 'spawn_at_player', label: '🏗 Spawn at Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'count', label: 'Qtd', placeholder: '1' }, { key: 'offset_x', label: 'Offset X', placeholder: '0' }, { key: 'offset_z', label: 'Offset Z', placeholder: '0' }] },
   { value: 'spawn_prefab', label: '🏗 Spawn (coords)', params: [{ key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'count', label: 'Qtd', placeholder: '1' }] },

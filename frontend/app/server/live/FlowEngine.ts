@@ -965,6 +965,12 @@ export class FlowEngine {
           max: Number(actionData.max) || 1,
           text: actionData.text,
         }
+        // optional color [r,g,b,a] as JSON string
+        if (typeof actionData.color === 'string' && actionData.color.trim().startsWith('[')) {
+          try { cmd.color = JSON.parse(actionData.color) } catch { /* ignore */ }
+        } else if (Array.isArray(actionData.color)) {
+          cmd.color = actionData.color
+        }
       } else if (actionType === 'ui_destroy') {
         cmd = { action: 'destroy', id: actionData.id }
       } else if (actionType === 'ui_clear') {

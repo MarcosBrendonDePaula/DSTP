@@ -795,6 +795,113 @@ local function UpdateTree(entry, cmd)
 end
 
 -------------------------------------------------
+-- FOLLOW — a widget that tracks a world entity (e.g. boss HP bar)
+-------------------------------------------------
+-- Resolves an entity on the client (by guid, by nearest prefab within max_dist,
+-- or just nearest non-player) and repositions a progress_bar + label over it
+-- every frame via TheSim:GetScreenPos (world→screen). The widget attaches to the
+-- HUD directly (not the centered _root) so screen coords map 1:1.
+
+local function FindFollowTarget(follow)
+    local player = _G.ThePlayer
+    if not player or not player.Transform then return nil end
+    -- By explicit GUID first.
+    if follow.guid then
+        local ent = _G.Ents and _G.Ents[follow.guid]
+        if ent and ent:IsValid() then return ent end
+    end
+    -- Otherwise search around the player.
+    local px, py, pz = player.Transform:GetWorldPosition()
+    local radius = (follow.max_dist and follow.max_dist > 0) and follow.max_dist or 40
+    local ents = _G.TheSim:FindEntities(px, py, pz, radius, nil, { "INLIMBO", "FX", "player" })
+    local best, bestd = nil, math.huge
+    for _, ent in ipairs(ents) do
+        if ent ~= player and ent:IsValid() and (not ent:HasTag("player")) then
+            if (not follow.prefab) or ent.prefab == follow.prefab then
+                local ex, ey, ez = ent.Transform:GetWorldPosition()
+                local d = (ex - px) * (ex - px) + (ez - pz) * (ez - pz)
+                if d < bestd then best, bestd = ent, d end
+            end
+        end
+    end
+    return best
+end
+
+local function CreateFollow(cmd)
+    local player = _G.ThePlayer
+    if not player or not player.HUD or not player.HUD.controls then return nil end
+
+    local Widget = _G.require("widgets/widget")
+    local Image  = _G.require("widgets/image")
+    local Text   = _G.require("widgets/text")
+
+    local follow = cmd.follow or {}
+    local bw = cmd.width or 80
+    local bh = cmd.height or 10
+    local offset_y = follow.offset_y or 60
+
+    -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
+    local w = player.HUD.controls:AddChild(Widget("dstp_follow_" .. cmd.id))
+    w:SetScaleMode(_G.SCALEMODE_PROPORTIONAL)
+    w:SetMaxPropUpscale(_G.MAX_HUD_SCALE or 1)
+    w:MoveToFront()
+
+    -- progress bar
+    local bgc = ResolveColor(cmd.bg_color or {0.1, 0.1, 0.1, 0.8})
+    local bg = w:AddChild(Image("images/global.xml", "square.tex"))
+    bg:SetSize(bw, bh); bg:SetTint(bgc[1], bgc[2], bgc[3], bgc[4])
+    local fgc = ResolveColor(cmd.color or {0.9, 0.2, 0.2, 1})
+    local fg = w:AddChild(Image("images/global.xml", "square.tex"))
+    local maxv = cmd.max or 1
+    local function setBar(v)
+        local pct = maxv > 0 and math.max(0, math.min(v / maxv, 1)) or 0
+        local fw = math.max(1, bw * pct)
+        fg:SetSize(fw, bh - 2); fg:SetPosition(-(bw - fw) / 2, 0)
+    end
+    fg:SetTint(fgc[1], fgc[2], fgc[3], fgc[4])
+    setBar(cmd.value or maxv)
+
+    local label = nil
+    if cmd.label or cmd.text then
+        label = w:AddChild(Text(_G.NEWFONT_OUTLINE, 16, cmd.label or cmd.text or ""))
+        label:SetPosition(0, bh + 6)
+    end
+
+    -- Per-frame reposition + auto-track the entity's health if it has a replica.
+    local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label, setBar = setBar }
+    local lost = 0
+    local task
+    task = player:DoPeriodicTask(0, function()
+        local ent = entry.target
+        if not (ent and ent:IsValid()) then
+            ent = FindFollowTarget(follow)
+            entry.target = ent
+        end
+        if not (ent and ent:IsValid()) then
+            w:Hide()
+            lost = lost + 1
+            if lost > 600 then  -- ~5s of nothing → give up
+                if task then task:Cancel() end
+                UIWidgets.DestroyWidget({ id = cmd.id })
+            end
+            return
+        end
+        lost = 0
+        w:Show()
+        -- live health from the entity's replica/components, if present
+        local h = ent.replica and ent.replica.health
+        if h and h.GetCurrent then
+            maxv = (h.Max and h:Max()) or maxv
+            setBar(h:GetCurrent() or maxv)
+        end
+        local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
+        w:SetPosition(sx, sy + offset_y, 0)
+    end)
+    entry.task = task
+    return entry
+end
+
+-------------------------------------------------
 -- Dispatch tables
 -------------------------------------------------
 
@@ -805,6 +912,7 @@ local CREATORS = {
     tree         = CreateTree,
     button       = CreateButton,
     progress_bar = CreateProgressBar,
+    follow       = CreateFollow,
 }
 
 local UPDATERS = {
@@ -843,7 +951,8 @@ function UIWidgets.CreateWidget(cmd)
         UIWidgets.DestroyWidget({ id = cmd.id })
     end
 
-    local creator = CREATORS[cmd.type]
+    -- A `follow` block means "track a world entity" regardless of widget type.
+    local creator = cmd.follow and CREATORS.follow or CREATORS[cmd.type]
     if not creator then
         Log("create: unknown widget type '" .. tostring(cmd.type) .. "'")
         return
