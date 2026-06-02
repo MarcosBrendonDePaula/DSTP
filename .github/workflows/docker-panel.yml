@@ -1,0 +1,114 @@
+# Build & publish the DSTP panel (FluxStack app) as a Docker image.
+#
+# Manual-only (workflow_dispatch). The image name is intentionally opaque
+# (see IMAGE_NAME) so it doesn't advertise what it is on Docker Hub. NOTE:
+# an obscure name does NOT make the repo private — if you want it hidden,
+# mark the repository as Private in Docker Hub settings.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME  — your Docker Hub login
+#   DOCKERHUB_TOKEN     — a Docker Hub access token (not your password)
+#
+# The build reuses the Dockerfile that FluxStack generates inside dist/ at
+# the end of `bun run build`. We only inject bun.lock into dist/ because the
+# generated Dockerfile runs `bun install --frozen-lockfile` and the lockfile
+# lives at the repo root, not in dist/.
+
+name: Build & Publish Panel (Docker)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (e.g. v1.0.1). Leave blank to use the short commit SHA."
+        required: false
+        type: string
+      latest:
+        description: "Also tag and push :latest"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  # Opaque image name — change here to rename/relocate the image.
+  IMAGE_NAME: marcosbrendon/mbp-svc
+  BUN_VERSION: "1.3.12"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun ${{ env.BUN_VERSION }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build panel (generates ./dist + Dockerfile)
+        run: bun run build
+
+      - name: Stage lockfile for the image build
+        # The FluxStack-generated Dockerfile does `bun install --frozen-lockfile`,
+        # but dist/ ships only package.json. Copy the root lockfile so the image
+        # build is reproducible and the --frozen flag is satisfied.
+        run: cp bun.lock dist/bun.lock
+
+      - name: Strip secrets and data from the image context
+        # FluxStack copies .env into dist/ and the generated Dockerfile does
+        # `COPY . .`, which would BAKE secrets (admin keys, swagger password)
+        # into a public image. Config must be provided at runtime via env vars
+        # (docker run -e / compose), never embedded. Also harden .dockerignore.
+        run: |
+          rm -f dist/.env dist/.env.* dist/*.sqlite
+          rm -rf dist/data
+          {
+            echo ".env"
+            echo ".env.*"
+            echo "data/"
+            echo "*.sqlite"
+          } >> dist/.dockerignore
+
+      - name: Compute tags
+        id: meta
+        run: |
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          INPUT_TAG="${{ inputs.tag }}"
+          PRIMARY_TAG="${INPUT_TAG:-$SHA_TAG}"
+
+          TAGS="${IMAGE_NAME}:${PRIMARY_TAG}"
+          TAGS="${TAGS},${IMAGE_NAME}:${SHA_TAG}"
+          if [ "${{ inputs.latest }}" = "true" ]; then
+            TAGS="${TAGS},${IMAGE_NAME}:latest"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Publishing tags:"
+          echo "${TAGS}" | tr ',' '\n' | sed 's/^/  - /'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dist
+          file: ./dist/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

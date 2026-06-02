@@ -1,0 +1,37 @@
+# Production compose for the DSTP panel.
+# Pulls the published image and persists the per-server SQLite databases.
+#
+# Usage:
+#   docker compose pull && docker compose up -d
+#
+# Config is passed as env vars at runtime (NEVER baked into the image).
+# Copy .env.example to .env and fill what you need, or set vars inline here.
+
+services:
+  panel:
+    image: marcosbrendon/mbp-svc:latest
+    container_name: dstp-panel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      # Admin keys for the crypto-auth provider (comma-separated public keys).
+      # Leave empty to disable. Set this in your shell/.env, not in the image.
+      CRYPTO_AUTH_ADMIN_KEYS: "${CRYPTO_AUTH_ADMIN_KEYS:-}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+    volumes:
+      # Per-server SQLite DBs (one file per DST server + panel-sessions.sqlite).
+      # Persisted on the host so they survive container recreation.
+      - dstp-data:/app/data
+    healthcheck:
+      test: ["CMD", "bun", "run", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  dstp-data:
