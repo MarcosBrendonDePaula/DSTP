@@ -78,10 +78,11 @@ jobs:
         run: cp -r app/server/db/migrations dist/migrations
 
       - name: Bundle the ServerCore worker into the image
-        # ServerCoreManager spawns ServerCore.worker.ts via new Worker(new URL(...)).
-        # The main bundle doesn't include this separate entry point, so the worker
-        # fails with ModuleNotFound at runtime. Bundle it standalone next to
-        # index.js (resolveWorkerUrl looks for dist/ServerCore.worker.js).
+        # ServerCoreManager spawns a per-server worker. Bun's bundler doesn't
+        # follow new Worker(new URL(...)) under --target bun, so the main bundle
+        # omits this entry point and the worker crash-loops with ModuleNotFound.
+        # Bundle it standalone next to index.js; the manager picks up
+        # dist/ServerCore.worker.js in production (the .ts in dev).
         working-directory: ${{ env.WORK_DIR }}
         run: bun build app/server/live/ServerCore.worker.ts --target=bun --outfile=dist/ServerCore.worker.js
 

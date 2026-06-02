@@ -14,19 +14,16 @@ import { dstStateStore } from '../services/DSTStateStore'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 
-// Resolve the worker entry point. In dev it's the .ts next to this file. In the
-// production bundle the server is a single dist/index.js and the worker is
-// bundled separately (CI: `bun build ServerCore.worker.ts` -> dist/ServerCore.worker.js).
-// Probe both so the same code works in dev and in the container.
-function resolveWorkerUrl(): string {
-  const devUrl = new URL('./ServerCore.worker.ts', import.meta.url).href
-  // In production, look next to the running index.js.
-  const prodPath = join(dirname(Bun.main || process.cwd()), 'ServerCore.worker.js')
-  if (existsSync(prodPath)) return prodPath
-  return devUrl
-}
-
-const WORKER_URL = resolveWorkerUrl()
+// Worker entry point. Bun's bundler doesn't follow new Worker(new URL(...)) with
+// --target bun, so we ship the worker as a separate file and pick it per env:
+//   - production: CI bundles it to dist/ServerCore.worker.js next to index.js
+//   - dev:        the .ts source next to this module
+// We probe the prod path first and fall back to the dev URL.
+const WORKER_URL: string = (() => {
+  const prod = join(dirname(Bun.main || process.cwd()), 'ServerCore.worker.js')
+  if (existsSync(prod)) return prod
+  return new URL('./ServerCore.worker.ts', import.meta.url).href
+})()
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000   // tear down a core after 10min idle
 const SWEEP_INTERVAL_MS = 60 * 1000
