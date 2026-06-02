@@ -37,6 +37,7 @@ local hooked_players = {}
 local SendPrivateMessage
 local SendUrlToAdmin
 local SendUrlToAdmins
+local MaybeNotifyOwnerSetup
 local HookChat
 local HotToggleEvents
 local RegisterPerPlayerEvents
@@ -1697,6 +1698,9 @@ RegisterPlayerEvents = function(inst)
         inst:DoTaskInTime(0, function()
             if not player:IsValid() then return end
             RegisterPerPlayerEvents(player)
+            -- First-run: nudge the owner to set up the panel (once). Small delay
+            -- so the client table (admin flag) is populated.
+            inst:DoTaskInTime(2, function() MaybeNotifyOwnerSetup(player) end)
             if not evt_config.players then return end
             DSTP.PushEvent("player_spawn", {
                 userid = player.userid,
@@ -1963,16 +1967,9 @@ local function FetchPanelUrlWithToken(cb)
     local link_url = config.backend_url .. "/api/panel-auth/issue-link/" .. config.server_id
     if DSTP._DEBUG then Log("FetchPanelUrl: GET " .. link_url) end
     _G.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
-        Log(string.format("FetchPanelUrl response: is_ok=%s http_code=%s result_len=%s",
-            tostring(is_ok), tostring(http_code), tostring(result and #result or 0)))
-        if result and #result > 0 and #result < 500 then
-            if DSTP._DEBUG then Log("FetchPanelUrl body: " .. tostring(result)) end
-        end
         local final_url = config.panel_url
         if is_ok and http_code == 200 and result then
             local ok, parsed = _G.pcall(_G.json.decode, result)
-            Log(string.format("FetchPanelUrl parse: ok=%s has_token=%s",
-                tostring(ok), tostring(parsed and parsed.token ~= nil)))
             if ok and parsed and parsed.token then
                 final_url = config.panel_url .. "&access=" .. tostring(parsed.token)
             end
@@ -2013,6 +2010,41 @@ SendUrlToAdmins = function()
             end
         end
     end
+end
+
+-- First-run nudge: when an admin spawns and the server has no panel password
+-- yet, send them the setup link automatically (once per server boot) so the
+-- owner doesn't have to know about #panel. Checks /status via the relay; only
+-- fires when setup == false (no password). Once configured, this goes quiet.
+local owner_notified = false
+MaybeNotifyOwnerSetup = function(player)
+    if owner_notified or not player or not player:IsValid() then return end
+    -- Only for admins.
+    local is_admin = false
+    for _, client in pairs(_G.TheNet:GetClientTable() or {}) do
+        if client.userid == player.userid and client.admin then is_admin = true; break end
+    end
+    if not is_admin then return end
+
+    local status_url = config.backend_url .. "/api/panel-auth/status/" .. config.server_id
+    _G.TheSim:QueryServer(status_url, function(result, is_ok, http_code)
+        if not (is_ok and http_code == 200 and result) then return end
+        local ok, parsed = _G.pcall(_G.json.decode, result)
+        if not (ok and parsed) then return end
+        -- setup == false means no password set yet → first run, notify owner.
+        if parsed.setup == false then
+            owner_notified = true
+            local captured = player
+            FetchPanelUrlWithToken(function(url)
+                if captured:IsValid() then
+                    SendPrivateMessage(captured, "Configure seu painel DSTP (defina uma senha): " .. url)
+                end
+            end)
+        else
+            -- Already configured; don't nag again this session.
+            owner_notified = true
+        end
+    end, "GET")
 end
 
 -- Hook chat via network message handler
