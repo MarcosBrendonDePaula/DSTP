@@ -68,44 +68,12 @@ AddModRPCHandler(modname, "RequestPanel", function(player)
     if not (is_admin and player.player_classified) then return end
 
     local dstp_mod = require("dstp/client")
-    local server_id = dstp_mod.GetServerId() or ""
-    local pc = player.player_classified
-
-    -- The panel's public address is NOT hardcoded in the mod. We ask the relay
-    -- (which knows the upstream it forwards to) via /relay-status. If the relay
-    -- is offline or doesn't answer, we fall back to BACKEND_URL itself
-    -- (http://127.0.0.1:47834) so the #panel link still works locally and never
-    -- breaks. Two requests, both to 127.0.0.1 (allowed by the DST sandbox):
-    --   1. /relay-status      -> the public panel domain
-    --   2. /panel-auth/issue-link -> a one-shot magic token
-
-    local function build_and_send(panel_base)
-        local link_url = BACKEND_URL .. "/api/panel-auth/issue-link/" .. server_id
-        GLOBAL.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
-            if not pc:IsValid() then return end
-            local token = nil
-            if is_ok and http_code == 200 and result then
-                local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, result)
-                if ok and parsed and parsed.token then token = tostring(parsed.token) end
-            end
-            local final_url = panel_base .. "/?server=" .. server_id
-            if token then final_url = final_url .. "&access=" .. token end
-            pc._dstp_pm:set("Panel: " .. final_url)
-        end, "GET")
-    end
-
-    -- Step 1: ask the relay where it points. Fall back to localhost on failure.
-    GLOBAL.TheSim:QueryServer(BACKEND_URL .. "/relay-status", function(result, is_ok, http_code)
-        if not pc:IsValid() then return end
-        local panel_base = BACKEND_URL  -- localhost fallback (no relay / no answer)
-        if is_ok and http_code == 200 and result then
-            local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, result)
-            if ok and parsed and type(parsed.upstream) == "string" and parsed.upstream ~= "" then
-                panel_base = parsed.upstream
-            end
-        end
-        build_and_send(panel_base)
-    end, "GET")
+    -- Delegate to the client module's canonical path: it already resolved the
+    -- panel domain from the relay's upstream on boot (cached in config.panel_url,
+    -- with a localhost fallback) and issues the one-shot token in a SINGLE
+    -- QueryServer call. Doing two nested QueryServer calls here previously
+    -- dropped the token (DST has limited concurrent QueryServer slots).
+    dstp_mod.SendUrlToAdmin(player)
 end)
 
 -------------------------------------------------

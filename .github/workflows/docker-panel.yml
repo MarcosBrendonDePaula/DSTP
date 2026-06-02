@@ -77,6 +77,14 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}
         run: cp -r app/server/db/migrations dist/migrations
 
+      - name: Bundle the ServerCore worker into the image
+        # ServerCoreManager spawns ServerCore.worker.ts via new Worker(new URL(...)).
+        # The main bundle doesn't include this separate entry point, so the worker
+        # fails with ModuleNotFound at runtime. Bundle it standalone next to
+        # index.js (resolveWorkerUrl looks for dist/ServerCore.worker.js).
+        working-directory: ${{ env.WORK_DIR }}
+        run: bun build app/server/live/ServerCore.worker.ts --target=bun --outfile=dist/ServerCore.worker.js
+
       - name: Strip secrets and data from the image context
         # FluxStack copies .env into dist/ and the generated Dockerfile does
         # `COPY . .`, which would BAKE secrets (admin keys, swagger password)

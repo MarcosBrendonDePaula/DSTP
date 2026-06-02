@@ -2209,5 +2209,9 @@ end
 
 DSTP.IsConnected = function() return state.connected end
 DSTP.GetServerId = function() return config.server_id end
+-- Issue a magic link and PM it to the given admin player. Uses the cached
+-- panel_url (already resolved from the relay's upstream) + a one-shot token,
+-- in a single QueryServer call. This is the canonical #panel path.
+DSTP.SendUrlToAdmin = function(player) return SendUrlToAdmin(player) end
 
 return DSTP
