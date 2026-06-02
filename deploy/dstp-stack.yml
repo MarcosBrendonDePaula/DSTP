@@ -14,10 +14,15 @@ services:
       - dstp-data:/app/data
     labels:
       - "traefik.enable=true"
+      # HTTPS router (direct access + Cloudflare Full mode)
       - "traefik.http.routers.dstp.rule=Host(`dstp.marcosbrendon.com`)"
       - "traefik.http.routers.dstp.entrypoints=websecure"
       - "traefik.http.routers.dstp.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dstp.service=dstp"
+      # HTTP router (Cloudflare proxied with Flexible SSL connects on :80)
+      - "traefik.http.routers.dstp-web.rule=Host(`dstp.marcosbrendon.com`)"
+      - "traefik.http.routers.dstp-web.entrypoints=web"
+      - "traefik.http.routers.dstp-web.service=dstp"
       - "traefik.http.services.dstp.loadbalancer.server.port=3000"
     networks:
       - traefik-network

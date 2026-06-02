@@ -17,11 +17,11 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
     }
   })
   .get("/health", () => ({
-    status: "🚀 Hot Reload ativo!",
+    status: "ok",
     timestamp: new Date().toISOString(),
     uptime: `${Math.floor(process.uptime())}s`,
     version: "1.4.0",
-    environment: "development"
+    environment: process.env.NODE_ENV || "development"
   }), {
     response: t.Object({
       status: t.String(),
