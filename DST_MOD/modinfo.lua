@@ -1,6 +1,6 @@
 name = "DSTP - Admin Panel"
 description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser."
-author = "marcos"
+author = "MarcosBrendonDePaula"
 version = "0.2.0"
 
 -- Mod icon (converted from sources_raw/icon.png with Klei's Mod Tools).
