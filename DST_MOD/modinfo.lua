@@ -1,5 +1,5 @@
 name = "DSTP - Admin Panel"
-description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser."
+description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser.\n\nGitHub: https://github.com/MarcosBrendonDePaula/DSTP"
 author = "MarcosBrendonDePaula"
 version = "0.2.0"
 
