@@ -4,6 +4,9 @@ services:
     pull_policy: always
     container_name: dstp-panel
     restart: always
+    # Run as root so the SQLite data volume (owned by root) is writable.
+    # Matches the pattern used by the other panels on this host.
+    user: "0:0"
     environment:
       NODE_ENV: production
       PORT: "3000"

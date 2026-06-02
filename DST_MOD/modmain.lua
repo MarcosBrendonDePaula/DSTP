@@ -7,9 +7,12 @@ local SERVER_ID = GetModConfigData("SERVER_ID") or ""
 -- Port 47834 is chosen from the unassigned IANA range to avoid conflicts
 -- with common dev services (3000 is typical of Node, 8080 of Tomcat, etc).
 local BACKEND_URL = "http://127.0.0.1:47834"
--- PANEL_URL is the public address of the web panel (baked into the mod).
--- Used only to build the link admins receive from #panel.
-local PANEL_URL = "https://local.marcosbrendon.com"
+-- PANEL_URL is the public address of the web panel. It is NOT meant to be
+-- authoritative: the mod asks the relay (/relay-status -> upstream) for the
+-- live address and caches it here. This baked value is only the fallback used
+-- before the relay has answered (or if it's offline). Keeping it pointed at
+-- the current default avoids a broken first link.
+local PANEL_URL = "https://dstp.marcosbrendon.com"
 local DEBUG_LOGS = GetModConfigData("DEBUG_LOGS") == true
 
 local function DebugLog(...)
@@ -66,23 +69,42 @@ AddModRPCHandler(modname, "RequestPanel", function(player)
 
     local dstp_mod = require("dstp/client")
     local server_id = dstp_mod.GetServerId() or ""
-    -- BACKEND_URL: internal (LAN) URL used by QueryServer. Must be LAN/localhost — DST sandbox blocks public domains.
-    -- PANEL_URL:   public URL the admin's browser will open. Can be any https domain.
-    local base_url = PANEL_URL .. "/?server=" .. server_id
-
-    -- Ask backend for a one-shot magic link (expires in 2 min, consumed on first open).
     local pc = player.player_classified
-    local link_url = BACKEND_URL .. "/api/panel-auth/issue-link/" .. server_id
-    GLOBAL.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
+
+    -- The panel's public address is NOT hardcoded in the mod. We ask the relay
+    -- (which knows the upstream it forwards to) via /relay-status. If the relay
+    -- is offline or doesn't answer, we fall back to BACKEND_URL itself
+    -- (http://127.0.0.1:47834) so the #panel link still works locally and never
+    -- breaks. Two requests, both to 127.0.0.1 (allowed by the DST sandbox):
+    --   1. /relay-status      -> the public panel domain
+    --   2. /panel-auth/issue-link -> a one-shot magic token
+
+    local function build_and_send(panel_base)
+        local link_url = BACKEND_URL .. "/api/panel-auth/issue-link/" .. server_id
+        GLOBAL.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
+            if not pc:IsValid() then return end
+            local token = nil
+            if is_ok and http_code == 200 and result then
+                local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, result)
+                if ok and parsed and parsed.token then token = tostring(parsed.token) end
+            end
+            local final_url = panel_base .. "/?server=" .. server_id
+            if token then final_url = final_url .. "&access=" .. token end
+            pc._dstp_pm:set("Panel: " .. final_url)
+        end, "GET")
+    end
+
+    -- Step 1: ask the relay where it points. Fall back to localhost on failure.
+    GLOBAL.TheSim:QueryServer(BACKEND_URL .. "/relay-status", function(result, is_ok, http_code)
         if not pc:IsValid() then return end
-        local final_url = base_url
+        local panel_base = BACKEND_URL  -- localhost fallback (no relay / no answer)
         if is_ok and http_code == 200 and result then
             local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, result)
-            if ok and parsed and parsed.token then
-                final_url = base_url .. "&access=" .. tostring(parsed.token)
+            if ok and parsed and type(parsed.upstream) == "string" and parsed.upstream ~= "" then
+                panel_base = parsed.upstream
             end
         end
-        pc._dstp_pm:set("Panel: " .. final_url)
+        build_and_send(panel_base)
     end, "GET")
 end)
 
@@ -104,9 +126,12 @@ AddPrefabPostInit("player_classified", function(inst)
             if not msg or msg == "" then return end
 
             -- Panel links: open the URL silently, do NOT echo to chat.
+            -- The link is built server-side from the backend's reported panel_url
+            -- (or the baked PANEL_URL fallback), so we accept the relay/backend
+            -- address or any https URL — never plain http to an arbitrary host.
             if msg:sub(1, 7) == "Panel: " then
                 local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
-                if url and (url:find(BACKEND_URL, 1, true) == 1 or url:find(PANEL_URL, 1, true) == 1) then
+                if url and (url:find(BACKEND_URL, 1, true) == 1 or url:find("https://", 1, true) == 1) then
                     GLOBAL.VisitURL(url)
                 end
                 return

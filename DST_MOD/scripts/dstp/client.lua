@@ -2158,11 +2158,27 @@ function DSTP.Init(mod_env, mod_config)
             LogInfo("Poll: " .. config.poll_interval .. "s")
             LogInfo("Debug logs: " .. (config.debug_logs and "ON" or "OFF"))
 
-            -- Build panel URL
+            -- Build panel URL (provisional; refined once the relay answers).
             config.panel_url = config.panel_url_base .. "/?server=" .. config.server_id
             LogInfo("============================================")
             LogInfo("  DSTP Panel: " .. config.panel_url)
             LogInfo("============================================")
+
+            -- Ask the relay where it points (/relay-status -> upstream) and use
+            -- that as the public panel address. The relay is the source of truth
+            -- for the domain — nothing is hardcoded. If the relay is offline or
+            -- doesn't answer, we keep the provisional URL above (which already
+            -- falls back to backend_url/localhost), so this never breaks.
+            _G.TheSim:QueryServer(config.backend_url .. "/relay-status", function(result, is_ok, http_code)
+                if is_ok and http_code == 200 and result then
+                    local ok, parsed = _G.pcall(_G.json.decode, result)
+                    if ok and parsed and type(parsed.upstream) == "string" and parsed.upstream ~= "" then
+                        config.panel_url_base = parsed.upstream
+                        config.panel_url = parsed.upstream .. "/?server=" .. config.server_id
+                        LogInfo("  DSTP Panel (via relay): " .. config.panel_url)
+                    end
+                end
+            end, "GET")
 
 
             -- Panel URL is NOT auto-sent on boot or spawn anymore.
