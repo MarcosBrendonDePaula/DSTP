@@ -107,6 +107,12 @@ Klei's official **Don't Starve Mod Tools** are installed at:
 panel, DST gothic style). Converted to `DST_MOD/modicon.tex` (+ `modicon.xml` atlas)
 and wired in `modinfo.lua` via `icon`/`icon_atlas`.
 
+**Steam Workshop:** published as ID `3737234840`
+(https://steamcommunity.com/sharedfiles/filedetails/?id=3737234840). DST does NOT
+store the id in `modinfo.lua` — the mod↔Workshop link lives in the ModUploader.
+To update the Workshop entry, re-select DSTP in `ModUploader.exe` and re-upload;
+bump `version` in `modinfo.lua` and add a `DST_MOD/CHANGELOG.md` entry first.
+
 ## Node Types (11)
 
 | Node | Purpose |

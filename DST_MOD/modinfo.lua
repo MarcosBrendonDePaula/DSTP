@@ -3,6 +3,10 @@ description = "Web-based admin panel for Don't Starve Together servers. Manage p
 author = "MarcosBrendonDePaula"
 version = "0.2.0"
 
+-- Steam Workshop ID (published 2026): 3737234840
+-- https://steamcommunity.com/sharedfiles/filedetails/?id=3737234840
+-- Re-uploads via Klei's ModUploader update this same Workshop entry.
+
 -- Mod icon (converted from sources_raw/icon.png with Klei's Mod Tools).
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
