@@ -3,6 +3,10 @@ description = "Web-based admin panel for Don't Starve Together servers. Manage p
 author = "marcos"
 version = "0.2.0"
 
+-- Mod icon (converted from sources_raw/icon.png with Klei's Mod Tools).
+icon_atlas = "modicon.xml"
+icon = "modicon.tex"
+
 forumthread = ""
 api_version = 10
 

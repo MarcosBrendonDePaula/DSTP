@@ -92,6 +92,21 @@ cp DST_MOD/scripts/dstp/*.lua "E:/SteamLibrary/steamapps/common/Don't Starve Tog
 cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/"
 ```
 
+## DST Modding Tools (Klei)
+
+Klei's official **Don't Starve Mod Tools** are installed at:
+`C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Mod Tools`
+
+- `ModUploader.exe` — uploads the mod to the Steam Workshop.
+- `mod_tools/autocompiler.exe` — auto-compiles assets (PNG → KTEX `.tex`, anims, etc).
+- `mod_tools/compiler_scripts/image_build.py` — the PNG→`.tex` converter (uses the
+  bundled Python 2.7 + `klei.textureconverter`). Image dimensions must be multiples of 4.
+- `mods/ktech/` (in the DST install) — ktech source, an alternative PNG↔TEX converter.
+
+**Mod icon:** source art in `sources_raw/icon.png` (book + automation flow + control
+panel, DST gothic style). Converted to `DST_MOD/modicon.tex` (+ `modicon.xml` atlas)
+and wired in `modinfo.lua` via `icon`/`icon_atlas`.
+
 ## Node Types (11)
 
 | Node | Purpose |
