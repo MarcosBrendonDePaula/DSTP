@@ -1,7 +1,7 @@
 name = "DSTP - Admin Panel"
 description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser.\n\nGitHub: https://github.com/MarcosBrendonDePaula/DSTP"
 author = "MarcosBrendonDePaula"
-version = "0.2.0"
+version = "0.3.0"
 
 -- Steam Workshop ID (published 2026): 3737234840
 -- https://steamcommunity.com/sharedfiles/filedetails/?id=3737234840
@@ -18,7 +18,10 @@ dst_compatible = true
 dont_starve_compatible = false
 reign_of_giants_compatible = false
 
-all_clients_require_mod = false
+-- true: every client that joins downloads the mod (from the Workshop) so the
+-- in-game UI from flows (notifications, panels, buttons, shops, HUDs) and the
+-- client-side rules engine reach all players — not just admins.
+all_clients_require_mod = true
 client_only_mod = false
 
 server_filter_tags = {"admin panel", "web admin", "dstp"}

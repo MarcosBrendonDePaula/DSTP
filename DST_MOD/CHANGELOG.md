@@ -6,6 +6,14 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [0.3.0]
+
+### Changed
+- `all_clients_require_mod = true` — every player joining the server now
+  downloads the mod from the Workshop, so the in-game UI built by flows
+  (notifications, panels, buttons, shops, HUDs) and the client-side rules
+  engine reach all players, not just admins.
+
 ## [0.2.0] — Initial release
 
 First public (hidden) release.
