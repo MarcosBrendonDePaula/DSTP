@@ -12,12 +12,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Specs — READ BEFORE working on UI or client/server code
 
-`specs/` holds hard-won technical knowledge that is NOT obvious from the code and cost real debugging time to discover. **Check the relevant spec first** — re-discovering these is expensive:
-- `specs/dst-client-constraints.md` — what the DST client can/can't see (mob health is NOT replicated, `onhitother`/`onattackother` are server-only, `net_string` holds one value so per-frame UI commands must be coalesced, HUD coordinate space). The "why it didn't work" doc.
-- `specs/ui-by-nodes.md` — building in-game UI from flows: UI Builder, the generic renderer (`ui_set`/`callback`/tabs/follow-entity), shops, live HUDs. Principle: a new UI needing new Lua means a missing generic prop/action.
-- `specs/ui-system.md` — full UI tree contract (node types, props, actions, events).
-- `specs/dynamic-data-bindings.md` — the binding system that replicates server-only data (mob health, etc.) to the client. Gate netvars by `inst.prefab` ONLY (tags/replicas/components desync → crash).
-- `specs/data-catalog.md` — which data is worth replicating (implemented + candidates: player HP, mob combat state, structure timers, fuel). Rule: add a source only when a concrete UI consumes it.
+`DST_MOD/specs/` holds hard-won technical knowledge that is NOT obvious from the code and cost real debugging time to discover. **Check the relevant spec first** — re-discovering these is expensive:
+- `DST_MOD/specs/dst-client-constraints.md` — what the DST client can/can't see (mob health is NOT replicated, `onhitother`/`onattackother` are server-only, `net_string` holds one value so per-frame UI commands must be coalesced, HUD coordinate space). The "why it didn't work" doc.
+- `DST_MOD/specs/ui-by-nodes.md` — building in-game UI from flows: UI Builder, the generic renderer (`ui_set`/`callback`/tabs/follow-entity), shops, live HUDs. Principle: a new UI needing new Lua means a missing generic prop/action.
+- `DST_MOD/specs/ui-system.md` — full UI tree contract (node types, props, actions, events).
+- `DST_MOD/specs/dynamic-data-bindings.md` — the binding system that replicates server-only data (mob health, etc.) to the client. Gate netvars by `inst.prefab` ONLY (tags/replicas/components desync → crash).
+- `DST_MOD/specs/data-catalog.md` — which data is worth replicating (implemented + candidates: player HP, mob combat state, structure timers, fuel). Rule: add a source only when a concrete UI consumes it.
 
 ## Architecture
 
@@ -37,11 +37,13 @@ DST Client          DST Server (Cluster)      Backend (Bun)      Admin Panel (Re
 
 Two separate codebases in one repo:
 
-### DST Mod (Lua)
-- `modinfo.lua` — mod config with event categories + server settings
-- `modmain.lua` — entry point, `net_string` channels on `player_classified` (_dstp_pm, _dstp_ui), Tab scoreboard button, lazy-loading UIWidgets
-- `scripts/dstp/client.lua` — HTTP bridge (~1400 lines). Polling, 40+ commands, event listeners, debounce
-- `scripts/dstp/ui_widgets.lua` — client-side widget renderer (notification/label/panel/button/progress_bar)
+### DST Mod (Lua) — lives in `DST_MOD/`
+- `DST_MOD/modinfo.lua` — mod config with event categories + server settings
+- `DST_MOD/modmain.lua` — entry point, `net_string` channels on `player_classified` (_dstp_pm, _dstp_ui), Tab scoreboard button, lazy-loading UIWidgets
+- `DST_MOD/scripts/dstp/client.lua` — HTTP bridge (~1400 lines). Polling, 40+ commands, event listeners, debounce
+- `DST_MOD/scripts/dstp/ui_widgets.lua` — client-side widget renderer (notification/label/panel/button/progress_bar)
+- `DST_MOD/scripts/dstp/rules_engine.lua` — client-side interpreter for declarative `when/do` rules pushed from the backend
+- `DST_MOD/scripts_extracted/` — vanilla DST scripts extracted for reference (git-ignored, not part of the mod)
 
 Key constraints:
 - DST Lua sandbox: no sockets, no FFI, no threads. Only HTTP via `TheSim:QueryServer(url, callback, method, body)`
@@ -81,11 +83,11 @@ cd frontend && bun run db:generate  # Generate migration from schema changes
 cd frontend && bun run db:studio    # Open Drizzle Studio
 
 # Lua syntax check
-bun -e "require('luaparse').parse(require('fs').readFileSync('scripts/dstp/client.lua','utf8'),{luaVersion:'5.1'})"
+bun -e "require('luaparse').parse(require('fs').readFileSync('DST_MOD/scripts/dstp/client.lua','utf8'),{luaVersion:'5.1'})"
 
 # Copy mod to DST (do this after any Lua change)
-cp scripts/dstp/client.lua scripts/dstp/ui_widgets.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/scripts/dstp/"
-cp modinfo.lua modmain.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/"
+cp DST_MOD/scripts/dstp/*.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/scripts/dstp/"
+cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/"
 ```
 
 ## Node Types (11)

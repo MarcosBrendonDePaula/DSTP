@@ -1,4 +1,6 @@
+# Data (per-server SQLite DBs)
 data/
+frontend/data/
 
 # Dependencies
 node_modules/
@@ -8,8 +10,7 @@ node_modules/
 
 # Build artifacts
 *.bun-build
+*.exe
+dist/
 relay/dist/dstp-relay.exe
 relay/dist/dstp-relay
-dist/
-*.exe
-scripts_extracted/

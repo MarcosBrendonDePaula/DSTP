@@ -87,8 +87,8 @@ cd frontend && bun run db:generate   # gera migration do schema
 cd frontend && bun run db:studio     # GUI do banco
 
 # copiar o mod pra pasta do DST (após mudar Lua)
-cp scripts/dstp/*.lua "<DST>/mods/DSTP/scripts/dstp/"
-cp modinfo.lua modmain.lua "<DST>/mods/DSTP/"
+cp DST_MOD/scripts/dstp/*.lua "<DST>/mods/DSTP/scripts/dstp/"
+cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "<DST>/mods/DSTP/"
 ```
 
 Habilite no `modoverrides.lua`:
@@ -108,17 +108,20 @@ Abra `http://localhost:3000/?server=<SERVER_ID>` — o painel conecta sozinho qu
 ## 📦 Estrutura
 
 ```
-modinfo.lua, modmain.lua          # mod DST: config, entrypoint, netvars, bindings
-scripts/dstp/
-  client.lua                      # bridge HTTP, ~40 comandos, listeners (server-side)
-  ui_widgets.lua                  # renderer de UI client-side (árvore + auto-layout + follow)
-  rules_engine.lua                # regras declarativas when/do (reativo no cliente)
+DST_MOD/                          # mod DST (Lua)
+  modinfo.lua, modmain.lua        #   config, entrypoint, netvars, bindings
+  scripts/dstp/
+    client.lua                    #   bridge HTTP, ~40 comandos, listeners (server-side)
+    ui_widgets.lua                #   renderer de UI client-side (árvore + auto-layout + follow)
+    rules_engine.lua              #   regras declarativas when/do (reativo no cliente)
+  specs/                          #   conhecimento técnico não-óbvio — LER antes de mexer
 frontend/                         # app FluxStack (Bun + Elysia + React 19)
-  app/server/live/                # LiveDSTP, LiveAutomation, FlowEngine, ServerCoreManager
-  app/server/db/                  # Drizzle schema, repositories, migrations (1 db/servidor)
-  app/client/src/automation/      # editor React Flow, nós, UI Builder
+  app/server/live/                #   LiveDSTP, LiveAutomation, FlowEngine, ServerCoreManager
+  app/server/db/                  #   Drizzle schema, repositories, migrations (1 db/servidor)
+  app/client/src/automation/      #   editor React Flow, nós, UI Builder
 relay/                            # forwarder Bun (bypass do sandbox)
-specs/                            # conhecimento técnico não-óbvio — LER antes de mexer
+examples/flows/                   # fluxos .dstp.json de exemplo
+docs/                             # AUTOMATION.md, WORKERS.md, IDEAS.md
 ```
 
 ## 🧰 Stack
@@ -136,11 +139,11 @@ specs/                            # conhecimento técnico não-óbvio — LER an
 | Doc | Conteúdo |
 |-----|----------|
 | `CLAUDE.md` | Visão geral, arquitetura, regras do projeto |
-| `AUTOMATION.md` · `WORKERS.md` | Motor de automação · workers por servidor |
-| `IDEAS.md` | Lista completa de ideias futuras |
-| `specs/dst-client-constraints.md` | **Ler antes de mexer em UI/rede** — o que o cliente DST vê/não vê, armadilhas de netvar |
-| `specs/ui-by-nodes.md` · `ui-system.md` | UI por fluxos e contrato da árvore de widgets |
-| `specs/dynamic-data-bindings.md` · `data-catalog.md` | Sistema de bindings e quais dados vale replicar |
+| `docs/AUTOMATION.md` · `docs/WORKERS.md` | Motor de automação · workers por servidor |
+| `docs/IDEAS.md` | Lista completa de ideias futuras |
+| `DST_MOD/specs/dst-client-constraints.md` | **Ler antes de mexer em UI/rede** — o que o cliente DST vê/não vê, armadilhas de netvar |
+| `DST_MOD/specs/ui-by-nodes.md` · `ui-system.md` | UI por fluxos e contrato da árvore de widgets |
+| `DST_MOD/specs/dynamic-data-bindings.md` · `data-catalog.md` | Sistema de bindings e quais dados vale replicar |
 
 ---
 
