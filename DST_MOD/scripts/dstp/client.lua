@@ -2031,18 +2031,14 @@ MaybeNotifyOwnerSetup = function(player)
         if not (is_ok and http_code == 200 and result) then return end
         local ok, parsed = _G.pcall(_G.json.decode, result)
         if not (ok and parsed) then return end
-        -- setup == false means no password set yet → first run, notify owner.
+        owner_notified = true
+        -- setup == false means no password set yet → first run. Tell the admin
+        -- to run #panel to start configuring (don't push a link unprompted).
         if parsed.setup == false then
-            owner_notified = true
             local captured = player
-            FetchPanelUrlWithToken(function(url)
-                if captured:IsValid() then
-                    SendPrivateMessage(captured, "Configure seu painel DSTP (defina uma senha): " .. url)
-                end
-            end)
-        else
-            -- Already configured; don't nag again this session.
-            owner_notified = true
+            if captured:IsValid() then
+                SendPrivateMessage(captured, "Painel DSTP ainda nao configurado. Digite #panel no chat para iniciar a configuracao do cluster.")
+            end
         end
     end, "GET")
 end
