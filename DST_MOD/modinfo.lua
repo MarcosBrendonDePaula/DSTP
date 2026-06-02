@@ -1,7 +1,7 @@
 name = "DSTP - Admin Panel"
 description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser.\n\nGitHub: https://github.com/MarcosBrendonDePaula/DSTP"
 author = "MarcosBrendonDePaula"
-version = "0.3.0"
+version = "0.3.1"
 
 -- Steam Workshop ID (published 2026): 3737234840
 -- https://steamcommunity.com/sharedfiles/filedetails/?id=3737234840

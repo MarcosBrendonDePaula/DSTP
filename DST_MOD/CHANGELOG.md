@@ -6,6 +6,14 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [0.3.1]
+
+### Fixed
+- Drastically smaller Workshop download: the published mod no longer ships
+  `scripts_extracted/` (269MB of vanilla Klei reference scripts) or `specs/`
+  (internal dev docs). The mod is now ~265KB. Use `build-mod.sh` to assemble a
+  clean publish folder (the ModUploader ignores .gitignore).
+
 ## [0.3.0]
 
 ### Changed
