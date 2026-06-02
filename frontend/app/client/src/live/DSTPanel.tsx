@@ -781,6 +781,9 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
         />
       </section>
 
+      {/* Relay download (live from GitHub) */}
+      <RelayDownload />
+
       {/* How it works */}
       <section className="max-w-3xl mx-auto px-6 py-12">
         <h2 className="text-2xl font-semibold text-center mb-8">Como funciona</h2>
@@ -821,6 +824,123 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
         <p className="text-xs text-gray-500">{body}</p>
       </div>
     </div>
+  )
+}
+
+// ─── Relay download (fetched live from GitHub Releases) ──────────────────
+
+const GITHUB_REPO = 'MarcosBrendonDePaula/dstp-relay'
+
+interface RelayAsset {
+  os: 'Windows' | 'Linux' | 'macOS'
+  icon: string
+  name: string
+  url: string
+  size: number
+}
+
+interface RelayRelease {
+  version: string
+  htmlUrl: string
+  assets: RelayAsset[]
+}
+
+// Map a release asset filename to a platform. Returns null for non-relay assets.
+function classifyRelayAsset(name: string): Pick<RelayAsset, 'os' | 'icon'> | null {
+  if (name === 'dstp-relay.exe') return { os: 'Windows', icon: '🪟' }
+  if (name === 'dstp-relay-linux') return { os: 'Linux', icon: '🐧' }
+  if (name === 'dstp-relay-mac') return { os: 'macOS', icon: '🍎' }
+  return null
+}
+
+function useRelayReleases() {
+  const [release, setRelease] = useState<RelayRelease | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+        if (!res.ok) throw new Error(`GitHub ${res.status}`)
+        const data = await res.json()
+        const assets: RelayAsset[] = (data.assets || [])
+          .map((a: any) => {
+            const cls = classifyRelayAsset(a.name)
+            return cls ? { ...cls, name: a.name, url: a.browser_download_url, size: a.size } : null
+          })
+          .filter(Boolean)
+        // Stable order: Windows, Linux, macOS
+        const order = { Windows: 0, Linux: 1, macOS: 2 } as const
+        assets.sort((a, b) => order[a.os] - order[b.os])
+        if (!cancelled) {
+          setRelease({ version: data.tag_name, htmlUrl: data.html_url, assets })
+          setStatus('ready')
+        }
+      } catch {
+        if (!cancelled) setStatus('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  return { release, status }
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`
+  if (n >= 1e3) return `${Math.round(n / 1e3)} KB`
+  return `${n} B`
+}
+
+function RelayDownload() {
+  const { release, status } = useRelayReleases()
+
+  // Don't render the section at all if there's nothing to show.
+  if (status === 'error') return null
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-12">
+      <h2 className="text-2xl font-semibold text-center mb-2">Baixar o Relay</h2>
+      <p className="text-sm text-gray-500 text-center max-w-xl mx-auto mb-8">
+        Para hospedar o painel centralmente, cada host de DST roda o relay — um binário nativo
+        de ~2&nbsp;MB, sem dependências. Ele escuta em 127.0.0.1 (exigência do sandbox do DST) e
+        repassa para este backend.
+      </p>
+
+      {status === 'loading' && (
+        <div className="text-center text-xs text-gray-600">Buscando releases no GitHub…</div>
+      )}
+
+      {status === 'ready' && release && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {release.assets.map((a) => (
+              <a
+                key={a.os}
+                href={a.url}
+                className="group flex flex-col items-center gap-1 bg-white/[0.02] border border-white/5 rounded-xl p-5 hover:bg-white/[0.04] hover:border-blue-500/30 transition-colors"
+              >
+                <div className="text-3xl mb-1">{a.icon}</div>
+                <div className="text-sm font-medium text-white">{a.os}</div>
+                <div className="text-[11px] text-gray-500 font-mono">{a.name}</div>
+                <div className="mt-2 px-3 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs group-hover:bg-blue-500/20 transition-colors">
+                  Baixar · {formatBytes(a.size)}
+                </div>
+              </a>
+            ))}
+          </div>
+          <p className="text-center text-[11px] text-gray-600 mt-4">
+            Versão {release.version} ·{' '}
+            <a href={release.htmlUrl} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-gray-200 underline">
+              todas as releases
+            </a>
+          </p>
+        </>
+      )}
+    </section>
   )
 }
 

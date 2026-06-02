@@ -12,6 +12,3 @@ node_modules/
 *.bun-build
 *.exe
 dist/
-
-# Rust (relay)
-relay/target/

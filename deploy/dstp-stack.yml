@@ -1,0 +1,30 @@
+services:
+  dstp:
+    image: marcosbrendon/mbp-svc:latest
+    pull_policy: always
+    container_name: dstp-panel
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      CORS_ORIGINS: "https://dstp.marcosbrendon.com"
+      CORS_CREDENTIALS: "true"
+    volumes:
+      - dstp-data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dstp.rule=Host(`dstp.marcosbrendon.com`)"
+      - "traefik.http.routers.dstp.entrypoints=websecure"
+      - "traefik.http.routers.dstp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dstp.service=dstp"
+      - "traefik.http.services.dstp.loadbalancer.server.port=3000"
+    networks:
+      - traefik-network
+
+networks:
+  traefik-network:
+    external: true
+
+volumes:
+  dstp-data:
