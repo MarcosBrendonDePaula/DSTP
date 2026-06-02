@@ -9,6 +9,7 @@ import { FlowRepository, AutomationLogRepository, FlowMemoryRepository, type Flo
 import { getAnalysis, type FlowAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { resolveValue, evaluateCondition as evalCondition, stripCommandPrefix } from './expressions'
+import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -29,6 +30,11 @@ export interface EngineHost {
 const MAX_STORE_KEYS = 500
 // Capture mode — when active, execution traces are collected and emitted at the end
 const MAX_CAPTURE_TRACE = 200
+
+// Loop protection — see loop-guard.ts. The guard is stashed on the context
+// under this key so it rides along the recursion without changing 11 call
+// signatures. The __ prefix keeps it from colliding with user data paths.
+const LOOP_GUARD_KEY = '__loopGuard'
 
 // Editor inputs are always strings (React text fields), but the mod's commands
 // expect numbers for certain fields (heal amount, count, coords...). DoDelta("100")
@@ -198,6 +204,31 @@ export class FlowEngine {
     setContext: (nodeId: string, value: any) => void,
     stopAtWait: boolean = false,
   ): Promise<FlowNode | null> {
+    // ── Loop protection ── (see loop-guard.ts)
+    // DSTP has no loop node, so a node repeating within one execution means the
+    // graph has an accidental cycle. The guard rides on the context so every
+    // recursive branch shares one counter.
+    let guard: LoopGuard = (context as any)[LOOP_GUARD_KEY]
+    if (!guard) {
+      guard = createLoopGuard()
+      ;(context as any)[LOOP_GUARD_KEY] = guard
+    }
+    const guardResult = recordVisit(guard, node.id)
+    if (!guardResult.ok) {
+      if (guardResult.tripped) {
+        const { reason, visits, steps } = guardResult.tripped
+        console.error(`[FlowEngine] Loop guard tripped (server ${serverId}): ${reason}. Aborting execution.`)
+        this.safeLog(serverId, {
+          flowId: (context as any)._flowId || 'unknown',
+          flowName: (context as any)._flowName || 'unknown',
+          eventType: (context as any).trigger?._event_type || 'unknown',
+          actions: [`loop_guard_abort: ${reason}`],
+          context: { reason, nodeId: node.id, visits, steps },
+        })
+      }
+      return null
+    }
+
     // If this is a wait node and we should stop, return it
     if (node.type === 'wait' && stopAtWait) return node
 
@@ -447,6 +478,7 @@ export class FlowEngine {
     const context: Record<string, any> = {
       trigger: triggerData,
       _flowId: flow.id,
+      _flowName: flow.name,
       _serverId: serverId,
     }
     if (trigger.data.alias) {
@@ -522,6 +554,7 @@ export class FlowEngine {
     const context: Record<string, any> = {
       trigger: triggerData,
       _flowId: flow.id,
+      _flowName: flow.name,
       _serverId: serverId,
     }
     if (trigger.data.alias) {
