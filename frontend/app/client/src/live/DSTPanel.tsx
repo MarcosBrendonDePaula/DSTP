@@ -699,7 +699,7 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
   if (notFound) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
-        <div className="w-full max-w-md text-center">
+        <div className="w-full max-w-2xl text-center">
           <div className="text-5xl mb-4">🔍</div>
           <h1 className="text-xl font-bold text-white mb-2">Servidor não encontrado</h1>
           <p className="text-sm text-gray-400 mb-1">
@@ -708,7 +708,19 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
           <p className="text-xs text-gray-600 mb-6">
             Verifique o link ou peça ao admin do servidor um novo acesso via <span className="font-mono text-blue-400">#panel</span>.
           </p>
-          <Link to="/" className="inline-block text-xs px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">
+
+          {/* Provável causa: o host não está rodando o relay. Ofereça o download. */}
+          <div className="text-left bg-amber-500/[0.06] border border-amber-500/20 rounded-xl p-4 mb-2 max-w-md mx-auto">
+            <p className="text-xs text-amber-200/90 mb-1 font-medium">O relay está rodando nesse servidor?</p>
+            <p className="text-xs text-gray-500">
+              O servidor só aparece aqui depois que o relay sincroniza com o painel. Se ainda não
+              instalou, baixe o relay para a máquina do servidor, rode-o, e inicie o mundo no DST.
+            </p>
+          </div>
+
+          <RelayDownload compact />
+
+          <Link to="/" className="inline-block mt-6 text-xs px-4 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors">
             ← Voltar para a página inicial
           </Link>
         </div>
@@ -895,25 +907,17 @@ function formatBytes(n: number): string {
   return `${n} B`
 }
 
-function RelayDownload() {
+function RelayDownload({ compact = false }: { compact?: boolean }) {
   const { release, status } = useRelayReleases()
 
   // Don't render the section at all if there's nothing to show.
   if (status === 'error') return null
 
-  return (
-    <section className="max-w-3xl mx-auto px-6 py-12">
-      <h2 className="text-2xl font-semibold text-center mb-2">Baixar o Relay</h2>
-      <p className="text-sm text-gray-500 text-center max-w-xl mx-auto mb-8">
-        Para hospedar o painel centralmente, cada host de DST roda o relay — um binário nativo
-        de ~2&nbsp;MB, sem dependências. Ele escuta em 127.0.0.1 (exigência do sandbox do DST) e
-        repassa para este backend.
-      </p>
-
+  const grid = (
+    <>
       {status === 'loading' && (
         <div className="text-center text-xs text-gray-600">Buscando releases no GitHub…</div>
       )}
-
       {status === 'ready' && release && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -940,6 +944,23 @@ function RelayDownload() {
           </p>
         </>
       )}
+    </>
+  )
+
+  // Compact variant: just the grid, no section heading/description.
+  if (compact) {
+    return <div className="max-w-md mx-auto">{grid}</div>
+  }
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-12">
+      <h2 className="text-2xl font-semibold text-center mb-2">Baixar o Relay</h2>
+      <p className="text-sm text-gray-500 text-center max-w-xl mx-auto mb-8">
+        Para hospedar o painel centralmente, cada host de DST roda o relay — um binário nativo
+        de ~2&nbsp;MB, sem dependências. Ele escuta em 127.0.0.1 (exigência do sandbox do DST) e
+        repassa para este backend.
+      </p>
+      {grid}
     </section>
   )
 }
