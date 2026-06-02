@@ -759,6 +759,9 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
         </div>
       </section>
 
+      {/* Relay download (live from GitHub) — the primary call to action */}
+      <RelayDownload />
+
       {/* Features */}
       <section className="max-w-5xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-3 gap-4">
         <Feature
@@ -792,9 +795,6 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
           body="Só HTTP polling do mod. Sem sockets, sem FFI, sem hacks no DST — só Lua sandbox e TheSim:QueryServer."
         />
       </section>
-
-      {/* Relay download (live from GitHub) */}
-      <RelayDownload />
 
       {/* How it works */}
       <section className="max-w-3xl mx-auto px-6 py-12">
