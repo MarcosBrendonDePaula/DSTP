@@ -1,0 +1,36 @@
+# Changelog — DSTP (Don't Starve Together Admin Panel)
+
+All notable changes to the mod. For each Workshop update, copy the relevant
+version's notes into the Steam "Change Notes" field.
+
+The mod talks to the DSTP backend through the relay
+(https://github.com/MarcosBrendonDePaula/dstp-relay).
+
+## [0.2.0] — Initial release
+
+First public (hidden) release.
+
+### Features
+- **Real-time admin** — live players (health/hunger/sanity, position, inventory)
+  and actions (kick, ban, heal, teleport, spawn) driven from the web panel.
+- **Visual automation** — flow editor with 11 node types reacting to 40+ game
+  events across 11 categories (players, chat, combat, crafting, world, bosses…).
+- **In-game UI from flows** — notifications, panels, progress bars and clickable
+  buttons rendered inside DST and triggered by backend flows.
+- **Declarative rules engine** — client-side `when/do` rules for local reactions
+  without a backend round-trip.
+- **Native multi-shard** — master/caves grouped per server, commands routed to
+  the right shard.
+- **Per-server auth** — isolated password per server; in-game `#panel` magic
+  link for one-click admin login.
+
+### In-game flow
+- `#panel` (admin only) returns a one-click login link. The panel address is
+  taken live from the relay's upstream — nothing is hardcoded; falls back to
+  localhost if the relay is offline.
+- First-run nudge: when an admin spawns and the server has no panel password
+  yet, the mod tells them to type `#panel` to configure the cluster.
+
+### Notes
+- Requires the DSTP backend + relay to function. This is a control panel, not a
+  standalone gameplay mod.
