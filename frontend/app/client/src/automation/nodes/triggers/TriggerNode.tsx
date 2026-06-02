@@ -104,8 +104,10 @@ export function TriggerNode({ id, data, selected }: any) {
 
   const selectedEvent = TRIGGER_EVENTS.find(e => e.value === data.event_type)
 
+  const nodeLabel = selectedEvent?.label || 'Trigger'
+
   return (
-    <BaseNode type="trigger" icon="⚡" label="Trigger" selected={selected} hasInput={false} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
+    <BaseNode type="trigger" icon="⚡" label={nodeLabel} selected={selected} hasInput={false} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       <NodeField label="Quando acontecer">
         <NodeSelect
           value={data.event_type || ''}

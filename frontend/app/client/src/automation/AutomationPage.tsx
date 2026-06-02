@@ -20,6 +20,7 @@ export function AutomationPage() {
   const [editorNodes, setEditorNodes] = useState<Node[]>([])
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
   const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
+  const [flowEnabled, setFlowEnabled] = useState(true)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -76,6 +77,7 @@ export function AutomationPage() {
     setEditorNodes([])
     setEditorEdges([])
     setOriginalCreatedAt(null)
+    setFlowEnabled(true)
   }
 
   const editFlow = (flow: any) => {
@@ -84,6 +86,7 @@ export function AutomationPage() {
     setEditorNodes(flow.nodes || [])
     setEditorEdges(flow.edges || [])
     setOriginalCreatedAt(flow.created_at || null)
+    setFlowEnabled(flow.enabled ?? true)
   }
 
   // When URL has ?flow=ID and flows list loads, hydrate the editor with that flow's data
@@ -97,6 +100,7 @@ export function AutomationPage() {
       setEditorNodes(flow.nodes || [])
       setEditorEdges(flow.edges || [])
       setOriginalCreatedAt(flow.created_at || null)
+      setFlowEnabled(flow.enabled ?? true)
       setHydrated(editingFlow) // triggers re-render AFTER state updates are applied
     }
   }, [editingFlow, flows, hydrated])
@@ -104,11 +108,16 @@ export function AutomationPage() {
   const saveFlow = async (nodes: Node[], edges: Edge[], closeAfter = false) => {
     if (!editingFlow || !urlServer) return
     try {
+      // Use the flow's current enabled state from the live list when available,
+      // so an autosave can't silently re-enable a flow that was disabled
+      // elsewhere while the editor was open. Fall back to the editor state.
+      const currentFlow = flows.find((f: any) => f.id === editingFlow)
+      const enabled = currentFlow ? (currentFlow.enabled ?? flowEnabled) : flowEnabled
       const result = await auto.saveFlow({
         flow: {
           id: editingFlow,
           name: flowName || 'Sem nome',
-          enabled: true,
+          enabled,
           server_id: urlServer,
           nodes: nodes.map(n => ({ id: n.id, type: n.type as any, data: n.data, position: n.position })),
           edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || undefined, targetHandle: e.targetHandle || undefined })),
@@ -275,29 +284,20 @@ export function AutomationPage() {
     }
 
     return (
-      <div className="h-screen flex flex-col bg-[#0a0a0a]">
-        {/* Back bar */}
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-white/5">
-          <button
-            onClick={() => setEditingFlow(null)}
-            className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
-          >← Voltar</button>
-          <span className="text-xs text-gray-500">Editando: {flowName}</span>
-        </div>
-        <div className="flex-1">
-          <FlowEditor
-            key={editingFlow || 'new'}
-            initialNodes={editorNodes}
-            initialEdges={editorEdges}
-            onSave={saveFlow}
-            flowName={flowName}
-            onNameChange={setFlowName}
-            executionContext={latestExecutionContext}
-            captureData={editingFlow ? (captureData?.flowId === editingFlow ? captureData : captureData?.active ? captureData : null) : null}
-            onStartCapture={() => auto.startCapture({ server_id: urlServer })}
-            onStopCapture={() => auto.stopCapture({ server_id: urlServer })}
-          />
-        </div>
+      <div className="h-screen bg-[#0a0a0a]">
+        <FlowEditor
+          key={editingFlow || 'new'}
+          initialNodes={editorNodes}
+          initialEdges={editorEdges}
+          onSave={saveFlow}
+          flowName={flowName}
+          onNameChange={setFlowName}
+          onBack={() => setEditingFlow(null)}
+          executionContext={latestExecutionContext}
+          captureData={editingFlow ? (captureData?.flowId === editingFlow ? captureData : captureData?.active ? captureData : null) : null}
+          onStartCapture={() => auto.startCapture({ server_id: urlServer })}
+          onStopCapture={() => auto.stopCapture({ server_id: urlServer })}
+        />
       </div>
     )
   }

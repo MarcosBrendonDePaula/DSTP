@@ -7,6 +7,7 @@ import {
   type NodeOutputSchema,
 } from '../nodeOutputSchemas'
 import { TRIGGER_EVENTS } from '../nodes'
+import { ACTION_TYPES } from '../nodes/actions/actionTypes'
 import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -70,8 +71,8 @@ const nodeTypeMeta: Record<string, { icon: string; label: string; color: string 
   condition:    { icon: '❓', label: 'Condição',  color: '#eab308' },
   action:       { icon: '🎯', label: 'Ação',      color: '#3b82f6' },
   delay:        { icon: '⏱', label: 'Delay',     color: '#a855f7' },
-  http_request: { icon: '🌐', label: 'HTTP',      color: '#06b6d4' },
-  set_variable: { icon: '📝', label: 'Variável',  color: '#a855f7' },
+  http_request: { icon: '🌐', label: 'HTTP',      color: '#06b6d4' },
+  set_variable: { icon: '📝', label: 'Variável',  color: '#a855f7' },
   script:       { icon: '🧩', label: 'Script',    color: '#f97316' },
   memory:       { icon: '💾', label: 'Memory',     color: '#f59e0b' },
   wait:         { icon: '🔀', label: 'Wait/Merge', color: '#ec4899' },
@@ -98,6 +99,7 @@ export interface CaptureTraceEntry {
 interface NodeDetailPanelProps {
   node: Node
   onClose: () => void
+  onUpdateData?: (nodeId: string, data: Record<string, any>) => void
   captureTrace?: CaptureTraceEntry[] | null
   captureContext?: Record<string, any> | null
   allNodes?: Node[]
@@ -133,9 +135,13 @@ function getInputData(
   context: Record<string, any> | null
 ): Record<string, any> {
   const input: Record<string, any> = {}
+  const nodeData = node.data as Record<string, any>
+  const triggerMatchesNode = node.type !== 'trigger'
+    || !nodeData?.event_type
+    || context?.trigger?._event_type === nodeData.event_type
 
   // Always include trigger data if available
-  if (context?.trigger) {
+  if (context?.trigger && triggerMatchesNode) {
     input['trigger'] = context.trigger
   }
 
@@ -174,16 +180,296 @@ function getOutputData(
   const alias = (node.data as any)?.alias
   if (alias && context?.[alias]) return context[alias]
   if (context?.[node.id]) return context[node.id]
-  if (node.type === 'trigger' && context?.trigger) return context.trigger
+  if (node.type === 'trigger' && context?.trigger) {
+    const eventType = (node.data as any)?.event_type
+    if (!eventType || context.trigger._event_type === eventType) return context.trigger
+  }
 
   return null
 }
 
+function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[9px] text-gray-500 block mb-1">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function ConfigInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder?: string }) {
+  return (
+    <input
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-[11px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+    />
+  )
+}
+
+function ConfigSelect({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <select
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-[11px] text-white focus:border-blue-500/30 focus:outline-none [&>option]:bg-[#1a1a1a] [&>option]:text-white"
+    >
+      <option value="">Selecionar...</option>
+      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+  )
+}
+
+function ConfigTextarea({ value, onChange, placeholder, rows = 6 }: { value: string; onChange: (value: string) => void; placeholder?: string; rows?: number }) {
+  return (
+    <textarea
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      spellCheck={false}
+      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-[11px] text-white font-mono leading-relaxed resize-y focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+    />
+  )
+}
+
+const CONDITION_OPERATORS = [
+  { value: 'equals', label: '== Igual' },
+  { value: 'not_equals', label: '!= Diferente' },
+  { value: 'greater_than', label: '> Maior que' },
+  { value: 'less_than', label: '< Menor que' },
+  { value: 'contains', label: 'Contem' },
+  { value: 'exists', label: 'Existe' },
+]
+
+const HTTP_METHODS = [
+  { value: 'GET', label: 'GET' },
+  { value: 'POST', label: 'POST' },
+  { value: 'PUT', label: 'PUT' },
+  { value: 'DELETE', label: 'DELETE' },
+]
+
+function NodeConfigEditor({ type, data, updateData }: { type: string; data: Record<string, any>; updateData: (patch: Record<string, any>) => void }) {
+  const updateParam = (key: string, value: string) => {
+    updateData({ params: { ...(data.params || {}), [key]: value } })
+  }
+
+  if (type === 'trigger') {
+    return (
+      <ConfigField label="Evento">
+        <ConfigSelect value={data.event_type || ''} onChange={event_type => updateData({ event_type })} options={TRIGGER_EVENTS} />
+      </ConfigField>
+    )
+  }
+
+  if (type === 'condition') {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <ConfigField label="Campo">
+          <ConfigInput value={data.field || ''} onChange={field => updateData({ field })} placeholder="userid ou {{alias.campo}}" />
+        </ConfigField>
+        <ConfigField label="Operador">
+          <ConfigSelect value={data.operator || ''} onChange={operator => updateData({ operator })} options={CONDITION_OPERATORS} />
+        </ConfigField>
+        {data.operator !== 'exists' && (
+          <ConfigField label="Valor">
+            <ConfigInput value={data.value || ''} onChange={value => updateData({ value })} placeholder="valor esperado" />
+          </ConfigField>
+        )}
+      </div>
+    )
+  }
+
+  if (type === 'action') {
+    const actionDef = ACTION_TYPES.find(action => action.value === data.action_type)
+    return (
+      <div className="space-y-2">
+        <ConfigField label="Acao">
+          <ConfigSelect
+            value={data.action_type || ''}
+            onChange={action_type => {
+              const next = ACTION_TYPES.find(action => action.value === action_type)
+              // Keep any already-entered values for params the new action still
+              // has; start new params empty (NOT the placeholder, which is only
+              // a hint and would otherwise be saved as literal data).
+              const prev = data.params || {}
+              const params = Object.fromEntries(
+                (next?.params || []).map(param => [param.key, prev[param.key] ?? ''])
+              )
+              updateData({ action_type, params })
+            }}
+            options={ACTION_TYPES.map(action => ({ value: action.value, label: action.label }))}
+          />
+        </ConfigField>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(actionDef?.params || []).map(param => (
+            <ConfigField key={param.key} label={param.label}>
+              <ConfigInput value={data.params?.[param.key] || ''} onChange={value => updateParam(param.key, value)} placeholder={param.placeholder} />
+            </ConfigField>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (type === 'delay') {
+    return (
+      <ConfigField label="Delay (ms)">
+        <ConfigInput value={data.delay_ms || '3000'} onChange={delay_ms => updateData({ delay_ms })} placeholder="3000" />
+      </ConfigField>
+    )
+  }
+
+  if (type === 'http_request') {
+    const method = data.params?.method || 'GET'
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <ConfigField label="URL">
+          <ConfigInput value={data.params?.url || ''} onChange={value => updateParam('url', value)} placeholder="https://api.example.com/webhook" />
+        </ConfigField>
+        <ConfigField label="Metodo">
+          <ConfigSelect value={method} onChange={value => updateParam('method', value)} options={HTTP_METHODS} />
+        </ConfigField>
+        <ConfigField label="Headers JSON">
+          <ConfigInput value={data.params?.headers || ''} onChange={value => updateParam('headers', value)} placeholder='{"Authorization":"Bearer ..."}' />
+        </ConfigField>
+        {method !== 'GET' && (
+          <ConfigField label="Body">
+            <ConfigInput value={data.params?.body || ''} onChange={value => updateParam('body', value)} placeholder='{"text":"{{trigger.name}}"}' />
+          </ConfigField>
+        )}
+      </div>
+    )
+  }
+
+  if (type === 'wait') {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <ConfigField label="Modo">
+          <ConfigSelect value={data.mode || 'all'} onChange={mode => updateData({ mode })} options={[{ value: 'all', label: 'Esperar todos' }, { value: 'any', label: 'Qualquer um' }]} />
+        </ConfigField>
+        <ConfigField label="Correlacao">
+          <ConfigSelect value={data.correlation || 'broadcast'} onChange={correlation => updateData({ correlation })} options={[{ value: 'broadcast', label: 'Broadcast' }, { value: 'correlation_key', label: 'Por campo' }, { value: 'all_to_one', label: 'Todos de uma vez' }]} />
+        </ConfigField>
+        {data.correlation === 'correlation_key' && (
+          <ConfigField label="Chave">
+            <ConfigInput value={data.correlationExpression || ''} onChange={correlationExpression => updateData({ correlationExpression })} placeholder="{{trigger.userid}}" />
+          </ConfigField>
+        )}
+        <ConfigField label="Timeout (ms)">
+          <ConfigInput value={data.timeoutMs || '300000'} onChange={timeoutMs => updateData({ timeoutMs })} placeholder="300000" />
+        </ConfigField>
+        <ConfigField label="Ao expirar">
+          <ConfigSelect
+            value={data.timeoutAction || 'discard'}
+            onChange={timeoutAction => updateData({ timeoutAction })}
+            options={[{ value: 'discard', label: 'Descartar' }, { value: 'timeout_branch', label: 'Seguir saida de timeout' }]}
+          />
+        </ConfigField>
+      </div>
+    )
+  }
+
+  if (type === 'get_player') {
+    return (
+      <ConfigField label="User ID">
+        <ConfigInput value={data.params?.userid || ''} onChange={value => updateParam('userid', value)} placeholder="{{trigger.userid}}" />
+      </ConfigField>
+    )
+  }
+
+  if (type === 'find_player') {
+    return (
+      <ConfigField label="Nome do player">
+        <ConfigInput value={data.params?.name || ''} onChange={value => updateParam('name', value)} placeholder="{{trigger.name}} ou nick" />
+      </ConfigField>
+    )
+  }
+
+  if (type === 'memory') {
+    const action = data.action || 'read'
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <ConfigField label="Acao">
+          <ConfigSelect
+            value={action}
+            onChange={value => updateData({ action: value, params: { ...(data.params || {}), action: value } })}
+            options={[{ value: 'read', label: 'Ler' }, { value: 'write', label: 'Gravar' }, { value: 'delete', label: 'Apagar' }]}
+          />
+        </ConfigField>
+        <ConfigField label="Chave">
+          <ConfigInput value={data.params?.key || ''} onChange={value => updateParam('key', value)} placeholder="nome_da_chave" />
+        </ConfigField>
+        {action === 'write' && (
+          <ConfigField label="Valor">
+            <ConfigInput value={data.params?.value || ''} onChange={value => updateParam('value', value)} placeholder="{{trigger.userid}} ou texto" />
+          </ConfigField>
+        )}
+      </div>
+    )
+  }
+
+  if (type === 'script') {
+    return (
+      <ConfigField label="Codigo JavaScript">
+        <ConfigTextarea value={data.params?.code || ''} onChange={value => updateParam('code', value)} placeholder="// retorne um objeto\nreturn { ok: true }" rows={10} />
+      </ConfigField>
+    )
+  }
+
+  if (type === 'set_variable') {
+    const entries = Object.entries(data.params || {})
+    const setKey = (oldKey: string, newKey: string) => {
+      const next: Record<string, any> = {}
+      for (const [k, v] of Object.entries(data.params || {})) next[k === oldKey ? newKey : k] = v
+      updateData({ params: next })
+    }
+    const removeKey = (key: string) => {
+      const next = { ...(data.params || {}) }
+      delete next[key]
+      updateData({ params: next })
+    }
+    return (
+      <div className="space-y-2">
+        {entries.length === 0 && (
+          <div className="text-[10px] text-gray-500">Nenhuma variavel. Adicione abaixo.</div>
+        )}
+        {entries.map(([key, value]) => (
+          <div key={key} className="flex items-center gap-2">
+            <ConfigInput value={key} onChange={newKey => setKey(key, newKey.replace(/[^a-zA-Z0-9_]/g, ''))} placeholder="nome" />
+            <span className="text-gray-500 text-[11px]">=</span>
+            <ConfigInput value={String(value ?? '')} onChange={v => updateParam(key, v)} placeholder="valor ou {{ref}}" />
+            <button onClick={() => removeKey(key)} className="shrink-0 px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] hover:bg-red-500/20">remover</button>
+          </div>
+        ))}
+        <button
+          onClick={() => updateParam(`var_${entries.length + 1}`, '')}
+          className="px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] hover:bg-blue-500/20"
+        >
+          + Adicionar variavel
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {Object.entries(data.params || {}).map(([key, value]) => (
+        <ConfigField key={key} label={key}>
+          <ConfigInput value={String(value ?? '')} onChange={next => updateParam(key, next)} />
+        </ConfigField>
+      ))}
+      <ConfigField label="Alias">
+        <ConfigInput value={data.alias || ''} onChange={alias => updateData({ alias: alias.replace(/[^a-zA-Z0-9_]/g, '') })} placeholder="apelido" />
+      </ConfigField>
+    </div>
+  )
+}
+
 // ─── Modal ────────────────────────────────────────────
 
-export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, allNodes = [], allEdges = [], onUpdateTree }: NodeDetailPanelProps) {
-  const [showConfig, setShowConfig] = useState(true)
-
+export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, captureContext, allNodes = [], allEdges = [], onUpdateTree }: NodeDetailPanelProps) {
   const type = node.type || 'unknown'
   const meta = nodeTypeMeta[type] || { icon: '?', label: type, color: '#888' }
   const data = node.data as Record<string, any>
@@ -217,62 +503,31 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
   const inputData = getInputData(node, allNodes, allEdges, trace, context)
   const outputData = getOutputData(node, trace, context)
 
-  // Get trigger event label
-  const triggerEvent = type === 'trigger'
-    ? TRIGGER_EVENTS.find(e => e.value === data?.event_type)
-    : null
-
-  // Build config entries
-  const configEntries: Array<{ label: string; value: string }> = []
-  if (type === 'trigger' && data?.event_type) {
-    configEntries.push({ label: 'Evento', value: triggerEvent?.label || data.event_type })
-    if (triggerEvent?.category) configEntries.push({ label: 'Categoria', value: triggerEvent.category })
-  }
-  if (type === 'condition') {
-    if (data?.field) configEntries.push({ label: 'Campo', value: String(data.field) })
-    if (data?.operator) configEntries.push({ label: 'Operador', value: String(data.operator) })
-    if (data?.value !== undefined) configEntries.push({ label: 'Valor', value: String(data.value) })
-  }
-  if (type === 'delay') {
-    const ms = Number(data?.delay_ms || 3000)
-    configEntries.push({ label: 'Delay', value: `${ms}ms (${ms / 1000}s)` })
-  }
-  if (data?.alias) {
-    configEntries.push({ label: 'Alias', value: data.alias })
-  }
-  if (data?.action_type) {
-    configEntries.push({ label: 'Tipo de acao', value: data.action_type })
-  }
-  if (data?.params && typeof data.params === 'object') {
-    for (const [k, v] of Object.entries(data.params)) {
-      if (v !== '' && v !== undefined && v !== null) {
-        const display = typeof v === 'string' && v.length > 60 ? v.slice(0, 60) + '...' : String(v)
-        configEntries.push({ label: k, value: display })
-      }
-    }
-  }
-
   const hasInput = Object.keys(inputData).length > 0
   const hasOutput = outputData !== null
+  const updateData = (patch: Record<string, any>) => {
+    onUpdateData?.(node.id, { ...data, ...patch })
+  }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="bg-[#111] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: 'min(900px, 90vw)', minWidth: 700, maxHeight: '70vh' }}
+        className="bg-[#0b0b0b] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ width: 'min(1180px, calc(100vw - 32px))', height: 'min(780px, calc(100vh - 32px))' }}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 shrink-0">
-          <span className="text-base">{meta.icon}</span>
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0 bg-[#0f0f0f]">
+          <span className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-base">{meta.icon}</span>
           <div className="flex-1 min-w-0">
-            <span className="text-sm font-semibold text-white">{meta.label}</span>
-            <span className="text-xs text-gray-500 ml-2">
+            <div className="text-sm font-semibold text-white">{meta.label}</div>
+            <div className="text-xs text-gray-500">
               {getNodeCategory(type)}
               {alias && <> · <span className="text-purple-400">{alias}</span></>}
-            </span>
+              <span className="font-mono ml-2">{node.id}</span>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -284,15 +539,19 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
 
         {/* UI Builder: visual tree editor (replaces input/output body) */}
         {type === 'ui_builder' ? (
-          <div className="flex-1 overflow-y-auto p-4 min-h-0">
-            <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
+          <div className="flex min-h-0 flex-1">
+            <aside className="w-[360px] shrink-0 border-r border-white/10 bg-[#0f0f0f] p-4 overflow-y-auto">
+              <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Configuracao</h3>
+              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+            </aside>
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
+            </div>
           </div>
         ) : (
-        /* Two-column body */
-        <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* Left: Input */}
-          <div className="flex-1 bg-[#0d0d0d] border-r border-white/5 overflow-y-auto p-4">
-            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Entrada (Input)</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px_1fr] flex-1 overflow-hidden min-h-0 bg-[#0a0a0a]">
+          <section className="border-b lg:border-b-0 lg:border-r border-white/5 overflow-y-auto p-4 min-h-0">
+            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Entrada</h3>
 
             {hasInput ? (
               <div className="space-y-3">
@@ -311,36 +570,20 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
                 {!captureTrace?.length && <><br />Inicie uma captura para ver os dados.</>}
               </p>
             )}
+          </section>
 
-            {/* Configuration */}
-            {configEntries.length > 0 && (
-              <div className="mt-5 pt-4 border-t border-white/5">
-                <button
-                  onClick={() => setShowConfig(!showConfig)}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-300 uppercase tracking-wider mb-3"
-                >
-                  <span className="text-[8px]">{showConfig ? '▾' : '▸'}</span>
-                  Configuracao
-                </button>
-                {showConfig && (
-                  <div className="space-y-1.5">
-                    {configEntries.map((entry, i) => (
-                      <div key={i}>
-                        <div className="text-[9px] text-gray-500">{entry.label}</div>
-                        <div className="text-[10px] text-white font-mono bg-white/5 rounded px-2 py-1 break-all">
-                          {entry.value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <section className="border-b lg:border-b-0 lg:border-r border-white/10 bg-[#0f0f0f] overflow-y-auto p-4 min-h-0">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Configuracao</h3>
+              <span className="text-[9px] text-gray-600">auto-save</span>
+            </div>
+            <div className="space-y-3">
+              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+            </div>
+          </section>
 
-          {/* Right: Output */}
-          <div className="flex-1 bg-[#0a0a0a] overflow-y-auto p-4">
-            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Saida (Output)</h3>
+          <section className="overflow-y-auto p-4 min-h-0">
+            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Saida</h3>
 
             {hasOutput ? (
               <div className="font-mono text-[10px] leading-relaxed">
@@ -353,7 +596,6 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
               </p>
             )}
 
-            {/* Output Schema */}
             {schema && (
               <div className="mt-5 pt-4 border-t border-white/5">
                 <h4 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider mb-3">Schema</h4>
@@ -371,7 +613,7 @@ export function NodeDetailPanel({ node, onClose, captureTrace, captureContext, a
                 )}
               </div>
             )}
-          </div>
+          </section>
         </div>
         )}
       </div>
@@ -392,7 +634,16 @@ const typeColors: Record<string, string> = {
 function SchemaField({ field, contextKey }: { field: OutputField; contextKey: string }) {
   const ref = `{{${contextKey}.${field.name}}}`
   return (
-    <div className="group rounded-md bg-white/[0.03] px-2 py-1.5 hover:bg-white/[0.06] transition-colors">
+    <div
+      className="group rounded-md bg-white/[0.03] px-2 py-1.5 hover:bg-white/[0.06] transition-colors cursor-grab active:cursor-grabbing"
+      draggable
+      onDragStart={event => {
+        event.dataTransfer.setData('application/dstp-expression', ref)
+        event.dataTransfer.setData('text/plain', ref)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
+      title="Arraste para um campo de parametro para inserir esta expressao"
+    >
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-white font-mono">{field.name}</span>
         <span className={`text-[9px] ${typeColors[field.type] || 'text-gray-400'}`}>{field.type}</span>

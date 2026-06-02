@@ -12,9 +12,12 @@ import {
   type Edge,
   BackgroundVariant,
   type NodeMouseHandler,
+  type ReactFlowInstance,
+  type XYPosition,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { nodeTypes } from './nodes'
+import { nodeTypes, TRIGGER_EVENTS } from './nodes'
+import { ACTION_TYPES } from './nodes/actions/actionTypes'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 
 export interface CaptureData {
@@ -30,6 +33,7 @@ interface FlowEditorProps {
   onSave: (nodes: Node[], edges: Edge[], closeAfter?: boolean) => void
   flowName: string
   onNameChange: (name: string) => void
+  onBack?: () => void
   executionContext?: Record<string, any> | null
   captureData?: CaptureData | null
   onStartCapture?: () => void
@@ -39,10 +43,74 @@ interface FlowEditorProps {
 let nodeIdCounter = 0
 const genId = () => `node_${Date.now()}_${nodeIdCounter++}`
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
+type NodeCatalogItem = {
+  type: string
+  label: string
+  description: string
+  category: string
+  icon: string
+  accent: string
+  data?: Record<string, any>
+}
+
+const TRIGGER_CATALOG: NodeCatalogItem[] = TRIGGER_EVENTS.map(event => ({
+  type: 'trigger',
+  label: event.label,
+  description: `Evento de ${event.category}`,
+  category: 'Eventos do jogo',
+  icon: '⚡',
+  accent: 'text-green-400',
+  data: { event_type: event.value },
+}))
+
+const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
+  type: 'action',
+  label: action.label,
+  description: action.params.length > 0
+    ? `${action.params.length} parametro(s)`
+    : 'Sem parametros',
+  category: 'Acoes DSTP',
+  icon: '◎',
+  accent: 'text-blue-400',
+  data: {
+    action_type: action.value,
+    params: Object.fromEntries(action.params.map(param => [param.key, param.placeholder || ''])),
+  },
+}))
+
+const NODE_CATALOG: NodeCatalogItem[] = [
+  { type: 'condition', label: 'Condition', description: 'Divide o fluxo em verdadeiro/falso.', category: 'Logica', icon: '?', accent: 'text-yellow-400' },
+  { type: 'wait', label: 'Wait / Merge', description: 'Espera outros eventos ou junta caminhos.', category: 'Logica', icon: '↔', accent: 'text-pink-400' },
+  { type: 'delay', label: 'Delay', description: 'Pausa a execucao por um tempo.', category: 'Logica', icon: '⏱', accent: 'text-gray-400' },
+  { type: 'http_request', label: 'HTTP', description: 'Chama uma API externa.', category: 'Acoes', icon: '🌐', accent: 'text-cyan-400' },
+  { type: 'script', label: 'Script', description: 'Executa codigo customizado.', category: 'Acoes', icon: '{}', accent: 'text-orange-400' },
+  { type: 'get_player', label: 'Get Player', description: 'Busca dados de um jogador por userid.', category: 'Dados', icon: '👤', accent: 'text-teal-400' },
+  { type: 'find_player', label: 'Find Player', description: 'Localiza jogador por nome.', category: 'Dados', icon: '⌕', accent: 'text-teal-400' },
+  { type: 'set_variable', label: 'Variable', description: 'Grava valor no contexto do fluxo.', category: 'Dados', icon: 'x=', accent: 'text-purple-400' },
+  { type: 'memory', label: 'Memory', description: 'Le ou escreve memoria persistente.', category: 'Dados', icon: '▣', accent: 'text-amber-400' },
+  { type: 'ui_menu', label: 'Menu', description: 'Abre menu interativo para jogador.', category: 'UI', icon: '▤', accent: 'text-indigo-300' },
+  { type: 'ui_rule', label: 'HUD Rule', description: 'Instala regra dinamica de HUD.', category: 'UI', icon: '▥', accent: 'text-indigo-300' },
+  { type: 'ui_builder', label: 'UI Builder', description: 'Monta uma UI por arvore visual.', category: 'UI', icon: '✦', accent: 'text-violet-300' },
+  { type: 'ui_panel', label: 'Panel', description: 'Container visual de UI.', category: 'UI Primitivos', icon: '▢', accent: 'text-violet-300' },
+  { type: 'ui_col', label: 'Column', description: 'Agrupa filhos na vertical.', category: 'UI Primitivos', icon: '↕', accent: 'text-violet-300' },
+  { type: 'ui_row', label: 'Row', description: 'Agrupa filhos na horizontal.', category: 'UI Primitivos', icon: '↔', accent: 'text-violet-300' },
+  { type: 'ui_tabs', label: 'Tabs', description: 'Cria abas de UI.', category: 'UI Primitivos', icon: '▦', accent: 'text-violet-300' },
+  { type: 'ui_text', label: 'Text', description: 'Texto dinamico.', category: 'UI Primitivos', icon: 'T', accent: 'text-violet-300' },
+  { type: 'ui_icon', label: 'Icon', description: 'Icone por prefab.', category: 'UI Primitivos', icon: '◈', accent: 'text-violet-300' },
+  { type: 'ui_button', label: 'Button', description: 'Botao com callback.', category: 'UI Primitivos', icon: '●', accent: 'text-violet-300' },
+  { type: 'ui_bar', label: 'Bar', description: 'Barra de progresso.', category: 'UI Primitivos', icon: '▰', accent: 'text-violet-300' },
+  { type: 'ui_spacer', label: 'Spacer', description: 'Espacamento fixo.', category: 'UI Primitivos', icon: '␣', accent: 'text-violet-300' },
+]
+
+export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
+  const [nodeSearch, setNodeSearch] = useState('')
+  const [catalogFilter, setCatalogFilter] = useState<'all' | 'events' | 'nodes'>('all')
+  const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const reactFlowRef = useRef<ReactFlowInstance | null>(null)
 
   // Undo/Redo history
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([{ nodes: initialNodes, edges: initialEdges }])
@@ -89,6 +157,13 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           setEdges(state.edges)
         }
       }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'n') {
+        const target = e.target as HTMLElement | null
+        const tagName = target?.tagName?.toLowerCase()
+        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target?.isContentEditable) return
+        e.preventDefault()
+        setNodeDrawerOpen(true)
+      }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
@@ -124,28 +199,65 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     return nodes.find(n => n.id === detailNodeId) || null
   }, [nodes, detailNodeId])
 
+  const selectedNode = useMemo(() => nodes.find(n => n.selected) || null, [nodes])
+
+  // Open the inspector when the SELECTION changes (by id), not on every nodes
+  // mutation — depending on the node object reopened it on any drag/edit and
+  // made it impossible to close while a node stayed selected.
+  const selectedNodeId = selectedNode?.id ?? null
+  useEffect(() => {
+    if (selectedNodeId) setInspectorOpen(true)
+  }, [selectedNodeId])
+
+  const catalogGroups = useMemo(() => {
+    const query = nodeSearch.trim().toLowerCase()
+    const contextItems = catalogFilter === 'events'
+      ? TRIGGER_CATALOG
+      : catalogFilter === 'nodes'
+        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG]
+        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG]
+    const visible = contextItems.filter(item => {
+      if (!query) return true
+      return `${item.label} ${item.description} ${item.category} ${item.type}`.toLowerCase().includes(query)
+    })
+    return visible.reduce<Record<string, NodeCatalogItem[]>>((acc, item) => {
+      ;(acc[item.category] ||= []).push(item)
+      return acc
+    }, {})
+  }, [nodeSearch, catalogFilter])
+
   // Inject execution status + capture indicator into node data
   const nodesWithExecution = useMemo(() => {
     const traceNodeIds = new Set((captureData?.trace || []).map(t => t.nodeId))
     const hasStatuses = Object.keys(nodeStatuses).length > 0
     const hasTrace = traceNodeIds.size > 0
+    const capturedTrigger = captureData?.context?.trigger
 
-    if (!hasStatuses && !hasTrace) return nodes
+    if (!hasStatuses && !hasTrace && !capturedTrigger) return nodes
 
     return nodes.map(node => {
       const execStatus = nodeStatuses[node.id]
       const hasCaptureData = traceNodeIds.has(node.id)
-      if (!execStatus && !hasCaptureData) return node
+      // A trigger only matches the captured event when its event_type actually
+      // equals the captured one. A blank trigger (no event_type) must NOT match,
+      // otherwise unconfigured triggers get falsely marked as "completed".
+      const isMatchingCapturedTrigger = node.type === 'trigger'
+        && !!capturedTrigger
+        && !!node.data?.event_type
+        && capturedTrigger._event_type === node.data.event_type
+
+      if (!execStatus && !hasCaptureData && !isMatchingCapturedTrigger) return node
       return {
         ...node,
         data: {
           ...node.data,
           ...(execStatus ? { _executionStatus: execStatus.status, _executionOutput: execStatus.output, _executionError: execStatus.error } : {}),
-          ...(hasCaptureData ? { _hasCaptureData: true } : {}),
+          ...(isMatchingCapturedTrigger && !execStatus ? { _executionStatus: 'completed', _executionOutput: capturedTrigger } : {}),
+          ...(hasCaptureData || isMatchingCapturedTrigger ? { _hasCaptureData: true } : {}),
         },
       }
     })
-  }, [nodes, nodeStatuses, captureData?.trace])
+  }, [nodes, nodeStatuses, captureData?.trace, captureData?.context])
 
   // Double-click opens the detail modal
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
@@ -165,7 +277,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     }, eds))
   }, [setEdges])
 
-  const addNode = useCallback((type: string) => {
+  const createNode = useCallback((type: string, position?: XYPosition, dataOverride?: Record<string, any>): Node => {
     const defaults: Record<string, any> = {
       trigger: {},
       condition: {},
@@ -191,19 +303,61 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       ui_bar: { params: { value: '1', max: '1' } },
       ui_spacer: { params: { height: '8' } },
     }
-    const newNode: Node = {
+    return {
       id: genId(),
       type,
-      position: { x: 250 + Math.random() * 100, y: 100 + nodes.length * 120 },
-      data: defaults[type] || {},
+      position: position || { x: 250 + Math.random() * 100, y: 100 + nodes.length * 120 },
+      data: { ...(defaults[type] || {}), ...(dataOverride || {}) },
     }
+  }, [nodes.length])
+
+  const addCatalogItem = useCallback((item: NodeCatalogItem) => {
+    const newNode = createNode(item.type, undefined, item.data)
     setNodes(nds => [...nds, newNode])
-  }, [nodes.length, setNodes])
+    setNodeDrawerOpen(false)
+  }, [createNode, setNodes])
+
+  const addCatalogItemAt = useCallback((item: NodeCatalogItem, position: XYPosition) => {
+    const newNode = createNode(item.type, position, item.data)
+    setNodes(nds => [...nds, newNode])
+    setNodeDrawerOpen(false)
+  }, [createNode, setNodes])
+
+  const onNodeDragStart = useCallback((event: React.DragEvent, item: NodeCatalogItem) => {
+    event.dataTransfer.setData('application/dstp-node-item', JSON.stringify({ type: item.type, data: item.data || {} }))
+    event.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const onCanvasDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onCanvasDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    const raw = event.dataTransfer.getData('application/dstp-node-item')
+    if (!raw || !reactFlowRef.current) return
+
+    const position = reactFlowRef.current.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    })
+    try {
+      const item = JSON.parse(raw) as NodeCatalogItem
+      addCatalogItemAt(item, position)
+    } catch {
+      return
+    }
+  }, [addCatalogItemAt])
 
   // Update a ui_builder node's tree from the detail-panel editor. Passed down
   // because the modal renders outside <ReactFlow>, so it can't use useReactFlow.
   const updateNodeTree = useCallback((nodeId: string, tree: any) => {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, tree } } : n))
+  }, [setNodes])
+
+  const updateNodeDataFromModal = useCallback((nodeId: string, data: Record<string, any>) => {
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data } : n))
   }, [setNodes])
 
   const handleSave = () => onSave(nodes, edges, true)
@@ -230,89 +384,46 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   }, [nodes, edges, flowName])
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#0a0a0a]">
-        <input
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white flex-1 max-w-[250px] focus:border-blue-500/30 focus:outline-none"
-          placeholder="Nome do fluxo..."
-          value={flowName}
-          onChange={e => onNameChange(e.target.value)}
-        />
-        <div className="h-4 w-px bg-white/10" />
-        <button onClick={() => addNode('trigger')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-green-500/15 text-green-400 border border-green-500/20 hover:bg-green-500/25 transition-colors">
-          ⚡ Trigger
-        </button>
-        <button onClick={() => addNode('condition')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/25 transition-colors">
-          ❓ Condition
-        </button>
-        <button onClick={() => addNode('action')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors">
-          🎯 Action
-        </button>
-        <button onClick={() => addNode('http_request')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/25 transition-colors">
-          🌐 HTTP
-        </button>
-        <button onClick={() => addNode('set_variable')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/20 hover:bg-purple-500/25 transition-colors">
-          📝 Variable
-        </button>
-        <button onClick={() => addNode('get_player')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20 hover:bg-teal-500/25 transition-colors">
-          👤 Player
-        </button>
-        <button onClick={() => addNode('find_player')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20 hover:bg-teal-500/25 transition-colors">
-          🔍 Find
-        </button>
-        <button onClick={() => addNode('delay')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-gray-500/15 text-gray-400 border border-gray-500/20 hover:bg-gray-500/25 transition-colors">
-          ⏱ Delay
-        </button>
-        <button onClick={() => addNode('memory')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/20 hover:bg-amber-500/25 transition-colors">
-          💾 Memory
-        </button>
-        <button onClick={() => addNode('wait')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-pink-500/15 text-pink-400 border border-pink-500/20 hover:bg-pink-500/25 transition-colors">
-          🔀 Wait
-        </button>
-        <button onClick={() => addNode('script')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors">
-          🧩 Script
-        </button>
-        <button onClick={() => addNode('ui_menu')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
-          📋 Menu
-        </button>
-        <button onClick={() => addNode('ui_rule')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition-colors">
-          🖥️ HUD
-        </button>
-        <span className="w-px h-5 bg-white/10 mx-0.5 self-center" title="UI" />
-        <button onClick={() => addNode('ui_builder')} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-violet-500/20 text-violet-200 border border-violet-500/30 hover:bg-violet-500/30 transition-colors font-medium">
-          🎨 UI Builder
-        </button>
-        {([
-          ['ui_panel', '🪟'], ['ui_col', '↕'], ['ui_row', '↔'], ['ui_tabs', '🗂'], ['ui_text', '🔤'],
-          ['ui_icon', '🖼'], ['ui_button', '🔘'], ['ui_bar', '📊'], ['ui_spacer', '␣'],
-        ] as const).map(([t, ic]) => (
-          <button key={t} onClick={() => addNode(t)} title={t.replace('ui_', 'UI ')}
-            className="text-[10px] px-1.5 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 transition-colors">
-            {ic}
-          </button>
-        ))}
-        <div className="flex-1" />
-        {captureData?.active ? (
-          <button onClick={onStopCapture} className="text-[10px] px-4 py-1.5 rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 font-medium transition-colors flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-            Parar Captura
-          </button>
-        ) : (
-          <button onClick={onStartCapture} className="text-[10px] px-4 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 font-medium transition-colors">
-            Iniciar Captura
-          </button>
-        )}
-        <button onClick={handleSave} className="text-[10px] px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors">
-          Salvar
-        </button>
-        <span className={`text-[9px] text-green-400 transition-opacity ${autoSaveStatus === 'saved' ? 'opacity-100' : 'opacity-0'}`}>
-          ✓ Salvo
-        </span>
-      </div>
+    <div className="relative h-full overflow-hidden bg-[#0a0a0a] text-white">
+      {/* Top bar */}
+      <header className="absolute left-0 right-0 top-0 z-20 h-[68px] bg-[#0a0a0a] border-b border-white/5 flex items-center px-6">
+        <div className="flex items-center gap-2 min-w-0">
+          {onBack && (
+            <>
+              <button onClick={onBack} className="text-xs text-gray-300 hover:text-white transition-colors">← Voltar</button>
+              <span className="text-gray-500">/</span>
+            </>
+          )}
+          <span className="text-gray-300 text-xs">DSTP</span>
+          <span className="text-gray-500">/</span>
+          <input
+            className="bg-transparent text-sm font-semibold text-white w-[260px] focus:outline-none border-b border-transparent focus:border-white/20"
+            placeholder="Nome do fluxo..."
+            value={flowName}
+            onChange={e => onNameChange(e.target.value)}
+          />
+          <span className="text-[11px] text-gray-500">automação do servidor</span>
+        </div>
 
-      {/* Flow Canvas (full width, no side panel) */}
-      <div className="flex-1">
+        <div className="flex-1" />
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-gray-400">{nodes.length} nodes · {edges.length} conexões</span>
+          <button onClick={() => setNodeDrawerOpen(true)} className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors">Adicionar etapa</button>
+          <button
+            onClick={captureData?.active ? onStopCapture : onStartCapture}
+            className={`text-xs px-4 py-2 rounded-lg border transition-colors ${captureData?.active ? 'bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/25 hover:bg-amber-500/25'}`}
+          >
+            {captureData?.active ? 'Parar captura' : 'Testar'}
+          </button>
+          <span className={`text-xs transition-opacity ${autoSaveStatus === 'saved' ? 'text-green-300 opacity-100' : 'text-gray-300 opacity-100'}`}>
+            {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvo'}
+          </span>
+          <button onClick={handleSave} className="text-xs px-3 py-2 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30 transition-colors">Salvar</button>
+        </div>
+      </header>
+
+      {/* Canvas */}
+      <main className="absolute left-0 right-0 top-[68px] bottom-9" onDragOver={onCanvasDragOver} onDrop={onCanvasDrop}>
         <ReactFlow
           nodes={nodesWithExecution}
           edges={edges}
@@ -321,6 +432,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           onConnect={onConnect}
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
+          onInit={instance => { reactFlowRef.current = instance }}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
@@ -330,6 +442,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#252525" />
           <Controls
             showInteractive={false}
+            position="bottom-left"
             className="!bg-[#111] !border-white/10 !rounded-lg !shadow-none [&>button]:!bg-transparent [&>button]:!border-white/5 [&>button]:!text-gray-400 [&>button:hover]:!bg-white/5"
           />
           <MiniMap
@@ -346,13 +459,131 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             maskColor="#0a0a0a90"
           />
         </ReactFlow>
-      </div>
+
+        <button
+          onClick={() => setNodeDrawerOpen(true)}
+          className="absolute right-4 top-5 w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-2xl text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+          title="Adicionar node"
+        >
+          +
+        </button>
+
+        {nodes.length === 0 && (
+          <button
+            onClick={() => setNodeDrawerOpen(true)}
+            className="absolute left-1/2 -translate-x-1/2 bottom-8 rounded-lg px-5 py-3 text-sm font-semibold shadow-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
+          >
+            Adicionar primeiro evento
+          </button>
+        )}
+      </main>
+
+      {/* Bottom logs bar */}
+      <footer className="absolute left-0 right-0 bottom-0 z-20 h-9 bg-[#0a0a0a] border-t border-white/5 flex items-center px-4">
+        <button className="text-xs font-semibold text-white">Eventos e logs</button>
+        <span className="ml-3 text-[10px] text-gray-500">{edges.length} conexoes · {nodes.length} nodes</span>
+      </footer>
+
+      {/* Node drawer */}
+      {nodeDrawerOpen && (
+        <div className="absolute inset-0 z-30 pointer-events-none">
+          <button
+            className="absolute inset-0 bg-black/10 pointer-events-auto"
+            onClick={() => setNodeDrawerOpen(false)}
+            aria-label="Fechar biblioteca de nodes"
+          />
+          <aside className="absolute right-0 top-[68px] bottom-9 w-[396px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
+            <div className="px-4 py-4 border-b border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Adicionar etapa</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Eventos, ações e UI ficam juntos aqui. Use busca ou filtros para achar rápido.
+                  </p>
+                </div>
+                <button onClick={() => setNodeDrawerOpen(false)} className="text-gray-400 hover:text-white text-lg">×</button>
+              </div>
+              <div className="grid grid-cols-3 gap-1 mb-3 rounded-lg bg-white/[0.03] p-1 border border-white/5">
+                {([
+                  ['all', 'Todos'],
+                  ['events', 'Eventos'],
+                  ['nodes', 'Nodes'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setCatalogFilter(value)}
+                    className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${catalogFilter === value ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-gray-500 hover:text-gray-300'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={nodeSearch}
+                onChange={e => setNodeSearch(e.target.value)}
+                placeholder={catalogFilter === 'events' ? 'Buscar evento...' : catalogFilter === 'nodes' ? 'Buscar node...' : 'Buscar evento ou node...'}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500/40 focus:outline-none placeholder:text-gray-500"
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto py-3">
+              {Object.entries(catalogGroups).map(([category, items]) => (
+                <div key={category} className="mb-2">
+                  <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400">{category}</div>
+                  {items.map(item => (
+                    <button
+                      key={`${item.type}:${item.data?.event_type || item.label}`}
+                      draggable
+                      onDragStart={event => onNodeDragStart(event, item)}
+                      onClick={() => addCatalogItem(item)}
+                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60"
+                      title="Arraste para o canvas ou clique para adicionar"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`w-8 h-8 flex items-center justify-center text-base ${item.accent}`}>{item.icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-white">{item.label}</div>
+                          <div className="text-xs text-gray-300 leading-snug">{item.description}</div>
+                        </div>
+                        <span className="text-gray-500 group-hover:text-white">›</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {Object.keys(catalogGroups).length === 0 && (
+                <div className="text-sm text-gray-400 text-center py-10">Nenhum node encontrado.</div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Compact inspector */}
+      {inspectorOpen && selectedNode && !detailNode && (
+        <aside className="absolute right-4 top-[84px] z-20 w-[320px] rounded-xl bg-[#111] border border-white/10 shadow-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Node selecionado</div>
+              <div className="text-sm font-semibold text-white truncate">{selectedNode.type}</div>
+            </div>
+            <button onClick={() => setDetailNodeId(selectedNode.id)} className="text-xs px-3 py-1.5 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30">
+              Abrir
+            </button>
+            <button onClick={() => setInspectorOpen(false)} className="text-gray-400 hover:text-white">×</button>
+          </div>
+          <pre className="m-0 p-3 text-[10px] text-gray-300 whitespace-pre-wrap break-all max-h-[260px] overflow-auto bg-black/20">
+            {JSON.stringify(selectedNode.data || {}, null, 2)}
+          </pre>
+        </aside>
+      )}
 
       {/* Node Detail Modal (overlay) */}
       {detailNode && (
         <NodeDetailPanel
           node={detailNode}
           onClose={() => setDetailNodeId(null)}
+          onUpdateData={updateNodeDataFromModal}
           onUpdateTree={updateNodeTree}
           captureTrace={captureData?.trace || null}
           captureContext={captureData?.context || executionContext || null}

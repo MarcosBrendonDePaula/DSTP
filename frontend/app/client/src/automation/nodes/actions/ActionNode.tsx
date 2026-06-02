@@ -26,9 +26,10 @@ export function ActionNode({ id, data, selected }: any) {
   }, [id, data, updateNodeData])
 
   const actionDef = ACTION_TYPES.find(a => a.value === data.action_type)
+  const nodeLabel = actionDef?.label || 'Ação'
 
   return (
-    <BaseNode type="action" icon="🎯" label="Ação" selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
+    <BaseNode type="action" icon="🎯" label={nodeLabel} selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       <NodeField label="Executar">
         <NodeSelect
           value={data.action_type || ''}

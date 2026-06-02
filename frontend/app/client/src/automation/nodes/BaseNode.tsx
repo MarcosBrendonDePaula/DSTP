@@ -33,6 +33,28 @@ function summarizeOutput(output: any): string {
   return json.length > 50 ? json.slice(0, 50) + '...' : json
 }
 
+function outputPreviewEntries(output: any): Array<[string, string]> {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return []
+  const preferred = ['userid', 'name', 'item', 'prefab', 'message', 'phase', 'day', 'season', 'cause', 'amount']
+  const entries: Array<[string, string]> = []
+
+  for (const key of preferred) {
+    const value = output[key]
+    if (value !== undefined && value !== null && value !== '') {
+      entries.push([key, String(value)])
+    }
+    if (entries.length >= 4) return entries
+  }
+
+  for (const [key, value] of Object.entries(output)) {
+    if (key.startsWith('_') || value === undefined || value === null || value === '') continue
+    entries.push([key, typeof value === 'object' ? JSON.stringify(value) : String(value)])
+    if (entries.length >= 4) break
+  }
+
+  return entries
+}
+
 export function BaseNode({ type, icon, label, selected, children, hasInput = true, hasOutput = true, outputLabels, executionStatus, executionOutput, executionError, hasCaptureData, alias, onAliasChange }: BaseNodeProps) {
   const colors = typeColors[type]
 
@@ -45,6 +67,7 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
     : executionStatus === 'completed' ? '0 0 15px #22c55e50'
     : executionStatus === 'error' ? '0 0 15px #ef444450'
     : null
+  const previewEntries = outputPreviewEntries(executionOutput)
 
   return (
     <div className="relative">
@@ -78,10 +101,26 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
         )}
       </div>
 
-      {/* Body */}
-      {children && (
-        <div className="px-3 py-2 space-y-1.5">
-          {children}
+      {/* Config lives in NodeDetailPanel; keep cards compact on the canvas. */}
+      {children && previewEntries.length === 0 && (
+        <div className="px-3 py-2">
+          <div className="rounded-md bg-white/[0.03] border border-white/5 px-2 py-1 text-[9px] text-gray-500">
+            Duplo clique para configurar
+          </div>
+        </div>
+      )}
+
+      {previewEntries.length > 0 && (
+        <div className="mx-3 mb-3 rounded-md border border-green-500/15 bg-green-500/[0.06] px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wide text-green-400/70 mb-1">Retorno</div>
+          <div className="space-y-0.5">
+            {previewEntries.map(([key, value]) => (
+              <div key={key} className="flex gap-1 text-[9px] font-mono leading-tight">
+                <span className="text-green-400/80 shrink-0">{key}:</span>
+                <span className="text-gray-300 truncate">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -184,12 +223,37 @@ export function NodeSelect({ value, onChange, options }: { value: string; onChan
 }
 
 export function NodeInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const insertExpression = (input: HTMLInputElement, expression: string) => {
+    const start = input.selectionStart ?? value.length
+    const end = input.selectionEnd ?? value.length
+    const next = `${value.slice(0, start)}${expression}${value.slice(end)}`
+    onChange(next)
+    requestAnimationFrame(() => {
+      const cursor = start + expression.length
+      input.focus()
+      input.setSelectionRange(cursor, cursor)
+    })
+  }
+
   return (
     <input
       value={value}
       onChange={e => onChange(e.target.value)}
+      onDragOver={e => {
+        if (e.dataTransfer.types.includes('application/dstp-expression') || e.dataTransfer.types.includes('text/plain')) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }
+      }}
+      onDrop={e => {
+        const expression = e.dataTransfer.getData('application/dstp-expression') || e.dataTransfer.getData('text/plain')
+        if (!expression) return
+        e.preventDefault()
+        insertExpression(e.currentTarget, expression)
+      }}
       placeholder={placeholder}
       className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+      title="Aceita drop de expressoes {{...}} vindas do schema"
     />
   )
 }
