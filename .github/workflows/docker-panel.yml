@@ -33,6 +33,9 @@ env:
   # Opaque image name — change here to rename/relocate the image.
   IMAGE_NAME: marcosbrendon/mbp-svc
   BUN_VERSION: "1.3.12"
+  # The FluxStack panel lives in frontend/ on the remote. All build steps
+  # run from there; the image build context is frontend/dist.
+  WORK_DIR: frontend
 
 jobs:
   build-and-push:
@@ -50,15 +53,18 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies
+        working-directory: ${{ env.WORK_DIR }}
         run: bun install --frozen-lockfile
 
       - name: Build panel (generates ./dist + Dockerfile)
+        working-directory: ${{ env.WORK_DIR }}
         run: bun run build
 
       - name: Stage lockfile for the image build
         # The FluxStack-generated Dockerfile does `bun install --frozen-lockfile`,
-        # but dist/ ships only package.json. Copy the root lockfile so the image
+        # but dist/ ships only package.json. Copy the lockfile so the image
         # build is reproducible and the --frozen flag is satisfied.
+        working-directory: ${{ env.WORK_DIR }}
         run: cp bun.lock dist/bun.lock
 
       - name: Strip secrets and data from the image context
@@ -66,6 +72,7 @@ jobs:
         # `COPY . .`, which would BAKE secrets (admin keys, swagger password)
         # into a public image. Config must be provided at runtime via env vars
         # (docker run -e / compose), never embedded. Also harden .dockerignore.
+        working-directory: ${{ env.WORK_DIR }}
         run: |
           rm -f dist/.env dist/.env.* dist/*.sqlite
           rm -rf dist/data
@@ -105,8 +112,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./dist
-          file: ./dist/Dockerfile
+          context: ./${{ env.WORK_DIR }}/dist
+          file: ./${{ env.WORK_DIR }}/dist/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
