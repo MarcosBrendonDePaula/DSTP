@@ -70,6 +70,13 @@ jobs:
         working-directory: ${{ env.WORK_DIR }}
         run: cp bun.lock dist/bun.lock
 
+      - name: Stage Drizzle migrations into the image
+        # The bundler doesn't copy the migrations folder into dist/, but the
+        # server runs drizzle migrate() at runtime. Ship them at dist/migrations
+        # (resolveMigrationsDir in connection.ts looks there in production).
+        working-directory: ${{ env.WORK_DIR }}
+        run: cp -r app/server/db/migrations dist/migrations
+
       - name: Strip secrets and data from the image context
         # FluxStack copies .env into dist/ and the generated Dockerfile does
         # `COPY . .`, which would BAKE secrets (admin keys, swagger password)

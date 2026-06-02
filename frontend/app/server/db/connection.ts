@@ -1,14 +1,30 @@
 import { Database } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
-import { mkdirSync } from 'fs'
-import { join } from 'path'
+import { mkdirSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
 import * as schema from './schema'
 
 const DATA_DIR = join(process.cwd(), 'data')
 mkdirSync(DATA_DIR, { recursive: true })
 
-const MIGRATIONS_DIR = join(process.cwd(), 'app', 'server', 'db', 'migrations')
+// Migrations folder. In dev it lives under app/server/db/migrations relative to
+// the project root (cwd). In the production bundle the server is a single
+// dist/index.js, so the CI copies migrations next to it (dist/migrations).
+// Probe the known locations and use the first that exists.
+function resolveMigrationsDir(): string | null {
+  const candidates = [
+    join(process.cwd(), 'app', 'server', 'db', 'migrations'), // dev
+    join(process.cwd(), 'migrations'),                         // prod (dist/migrations)
+    join(dirname(Bun.main || ''), 'migrations'),              // next to index.js
+  ]
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'meta', '_journal.json'))) return dir
+  }
+  return null
+}
+
+const MIGRATIONS_DIR = resolveMigrationsDir()
 
 // Cache of drizzle instances per server, with last access tracking
 const dbCache = new Map<string, { db: ReturnType<typeof drizzle>; sqlite: Database; lastAccess: number }>()
@@ -47,8 +63,12 @@ export function getDb(serverId: string) {
 
   const db = drizzle(sqlite, { schema })
 
-  // Run migrations
-  migrate(db, { migrationsFolder: MIGRATIONS_DIR })
+  // Run migrations (only if the folder was found — see resolveMigrationsDir).
+  if (MIGRATIONS_DIR) {
+    migrate(db, { migrationsFolder: MIGRATIONS_DIR })
+  } else {
+    console.error('[db] migrations folder not found — skipping migrate(). DB schema may be stale.')
+  }
 
   dbCache.set(serverId, { db, sqlite, lastAccess: Date.now() })
   return db
