@@ -8,7 +8,7 @@
 import { FlowRepository, AutomationLogRepository, FlowMemoryRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
 import { getAnalysis, type FlowAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
-import { resolveValue } from './expressions'
+import { resolveValue, evaluateCondition as evalCondition, stripCommandPrefix } from './expressions'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -280,7 +280,7 @@ export class FlowEngine {
 
       } else if (node.type === 'find_player') {
         let searchName = String(this.resolveValue(node.data.params?.name || node.data.name, context) || '')
-        searchName = searchName.replace(/^[\/\\#!\.]\w+\s+/, '').trim()
+        searchName = stripCommandPrefix(searchName)
         if (searchName) {
           const groups = this.host.getServerGroups()
           let playerData: any = null
@@ -681,38 +681,9 @@ export class FlowEngine {
   }
 
   // ─── Condition evaluator ───────────────────────────
-
+  // Delegates to the pure, unit-tested evaluator in expressions.ts.
   private evaluateCondition(node: FlowNode, context: Record<string, any>): boolean {
-    const { field, operator, value } = node.data
-    if (!field || !operator) return true
-
-    // The field may be written several ways — be forgiving:
-    //   "{{tm.message}}"  (full template, as other fields use)
-    //   "tm.message"      (raw context path)
-    //   "message"         (plain key → tries trigger first)
-    let actual: any
-    const fieldStr = String(field).trim()
-    if (fieldStr.includes('{{')) {
-      // Already a template — resolve as-is.
-      actual = this.resolveValue(fieldStr, context)
-    } else if (fieldStr.includes('.')) {
-      actual = this.resolveValue(`{{${fieldStr}}}`, context)
-    } else {
-      // Plain key: try trigger data first, then full context.
-      actual = context.trigger?.[fieldStr] ?? this.resolveValue(`{{${fieldStr}}}`, context)
-    }
-
-    const resolvedValue = this.resolveValue(value, context)
-
-    switch (operator) {
-      case 'equals': return String(actual) === String(resolvedValue)
-      case 'not_equals': return String(actual) !== String(resolvedValue)
-      case 'greater_than': return Number(actual) > Number(resolvedValue)
-      case 'less_than': return Number(actual) < Number(resolvedValue)
-      case 'contains': return String(actual).includes(String(resolvedValue))
-      case 'exists': return actual != null
-      default: return true
-    }
+    return evalCondition(node.data, context)
   }
 
   // ─── UI tree builder (compose UI from connected ui_* nodes) ───

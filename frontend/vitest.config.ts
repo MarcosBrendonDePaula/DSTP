@@ -8,9 +8,20 @@ import { resolve } from 'path'
 export default defineConfig({
   plugins: [tsconfigPaths()],
   root: resolve(import.meta.dirname),
+  resolve: {
+    alias: {
+      // bun:sqlite isn't resolvable under the node/vitest runner. Pure-logic
+      // tests that transitively import @server/db don't touch the DB, so we
+      // alias it to a no-op stub to keep the module graph loadable.
+      'bun:sqlite': resolve(import.meta.dirname, 'test-stubs/bun-sqlite.ts'),
+    },
+  },
   test: {
     environment: 'node',
     globals: false,
     include: ['app/server/**/*.{test,spec}.ts'],
+    // PanelAuthStore.test.ts imports bun:sqlite (via @server/db) and bun:test;
+    // it runs under `bun test`, not vitest. See the test:unit script.
+    exclude: ['app/server/services/PanelAuthStore.test.ts', '**/node_modules/**'],
   },
 })
