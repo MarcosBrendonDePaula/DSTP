@@ -20,21 +20,24 @@ https://your-backend.example.com  (your central DSTP)
 
 ## Install & run
 
-1. Download the ZIP from releases. It contains:
-   - `dstp-relay.exe` (or `dstp-relay-linux` / `dstp-relay-mac`)
-   - `dstp-relay.config.json` — pre-filled with sensible defaults
-   - `start.bat` (Windows) or `start.sh` (Linux/Mac)
-2. Extract to any folder.
-3. Edit `dstp-relay.config.json` if you want a different upstream panel. The
-   shipped default points to the public DSTP instance. If you self-host, put
-   your URL here.
-4. Double-click `start.bat` (or run `./start.sh`). A black window opens showing
-   the relay status. Keep it open.
-5. Install the DSTP mod in DST. It's already configured to use
+1. Download the binary for your OS from the latest release:
+   - Windows: `dstp-relay.exe`
+   - Linux:   `dstp-relay-linux`
+   - macOS:   `dstp-relay-mac` (Apple Silicon)
+2. Put it in any folder. (Optional) drop a `dstp-relay.config.json` next to it
+   to override the upstream panel — see Configuration below. Without a config
+   file it uses the baked-in defaults.
+3. Run it: double-click on Windows, or `./dstp-relay-linux` on Linux/macOS
+   (you may need `chmod +x` first). A window opens showing the relay status.
+   Keep it open.
+4. Install the DSTP mod in DST. It's already configured to use
    `http://127.0.0.1:47834` (the relay's port) — no configuration needed.
 
 Done. The mod talks to the relay on localhost; the relay forwards to your
 chosen panel backend.
+
+The relay is a single self-contained ~2MB native binary (Rust) with no
+runtime dependencies — nothing to install.
 
 ## Configuration
 
@@ -52,11 +55,16 @@ notes inline.
 
 ## Build from source
 
+Requires the Rust toolchain (`rustup`).
+
 ```bash
 cd relay
-bun install
-bun run build:all   # produces dist/dstp-relay{.exe,-linux,-mac}
+cargo build --release        # produces target/release/dstp-relay(.exe)
 ```
+
+Cross-compile to another platform with `cargo build --release --target <triple>`
+(e.g. `x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`).
+The release CI builds all three on native runners.
 
 ## Security notes
 

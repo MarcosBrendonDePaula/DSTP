@@ -32,7 +32,7 @@ DSTP conecta um **mod Lua** rodando no servidor DST a um **painel web full-stack
                                          ◄── WebSocket (Live Components)
 ```
 
-- **Sandbox do DST:** `TheSim:QueryServer` só permite `127.0.0.1`/`localhost`. Para hospedar central (um backend, vários servidores), cada host roda o **`relay/`** (forwarder Bun) que escuta local e repassa ao backend.
+- **Sandbox do DST:** `TheSim:QueryServer` só permite `127.0.0.1`/`localhost`. Para hospedar central (um backend, vários servidores), cada host roda o **`relay/`** (forwarder nativo em Rust, ~2MB) que escuta local e repassa ao backend.
 - **Um worker por servidor:** cada servidor DST processa seus fluxos num Bun Worker dedicado e isolado (ver `WORKERS.md`).
 - **Bidirecional num só ciclo HTTP:** o jogo POSTa estado+eventos e recebe comandos na mesma resposta. Sem conexão direta.
 
@@ -119,7 +119,7 @@ frontend/                         # app FluxStack (Bun + Elysia + React 19)
   app/server/live/                #   LiveDSTP, LiveAutomation, FlowEngine, ServerCoreManager
   app/server/db/                  #   Drizzle schema, repositories, migrations (1 db/servidor)
   app/client/src/automation/      #   editor React Flow, nós, UI Builder
-relay/                            # forwarder Bun (bypass do sandbox)
+relay/                            # forwarder nativo em Rust (bypass do sandbox)
 examples/flows/                   # fluxos .dstp.json de exemplo
 docs/                             # AUTOMATION.md, WORKERS.md, IDEAS.md
 ```

@@ -12,5 +12,6 @@ node_modules/
 *.bun-build
 *.exe
 dist/
-relay/dist/dstp-relay.exe
-relay/dist/dstp-relay
+
+# Rust (relay)
+relay/target/

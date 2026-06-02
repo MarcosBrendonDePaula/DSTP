@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Scope note:** DSTP is a control/automation panel — NOT a mod compiler. Flows run on the backend and send commands to the DST server. We do NOT compile flows into Lua scripts.
 
-**Sandbox constraint:** DST's Lua `TheSim:QueryServer` has a hardcoded whitelist that only allows `127.0.0.1` and `localhost`. This was confirmed by Klei in their 2025 mod API thread. There is NO bypass via Lua, modinfo, DNS trick, or Workshop signing — the check is a textual string match on the URL before DNS resolution. To host DSTP centrally (one backend for many DST servers), each DST host must run `relay/` (a tiny Bun HTTP forwarder) on their machine that listens on 127.0.0.1 and proxies to the central backend. See `relay/README.md`.
+**Sandbox constraint:** DST's Lua `TheSim:QueryServer` has a hardcoded whitelist that only allows `127.0.0.1` and `localhost`. This was confirmed by Klei in their 2025 mod API thread. There is NO bypass via Lua, modinfo, DNS trick, or Workshop signing — the check is a textual string match on the URL before DNS resolution. To host DSTP centrally (one backend for many DST servers), each DST host must run `relay/` (a tiny ~2MB native Rust HTTP forwarder) on their machine that listens on 127.0.0.1 and proxies to the central backend. See `relay/README.md`.
 
 ## Specs — READ BEFORE working on UI or client/server code
 

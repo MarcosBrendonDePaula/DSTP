@@ -1,9 +1,9 @@
-# Build the standalone DSTP relay binaries (Windows / Linux / macOS) and
+# Build the standalone DSTP relay binaries (Linux / Windows / macOS) and
 # attach them to a GitHub Release as raw executables.
 #
-# The relay has no dependencies — it's a single Bun script compiled to a
-# self-contained executable. Each binary is self-sufficient: download the one
-# for your OS and run it directly.
+# The relay is a small Rust program — a self-contained ~2MB native binary
+# with no runtime dependencies. Each platform is built on its native runner
+# to avoid cross-linker pain.
 #
 # Triggers:
 #   - push of a tag like v1.2.3
@@ -22,37 +22,83 @@ on:
         required: true
         type: string
 
-env:
-  BUN_VERSION: "1.3.12"
-
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write   # needed to create the GitHub Release
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: dstp-relay-linux
+            ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: dstp-relay.exe
+            ext: ".exe"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: dstp-relay-mac
+            ext: ""
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: relay
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun ${{ env.BUN_VERSION }}
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          targets: ${{ matrix.target }}
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            relay/target
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('relay/Cargo.toml') }}
+
+      - name: Build (release)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p ../dist-assets
+          cp "target/${{ matrix.target }}/release/dstp-relay${{ matrix.ext }}" "../dist-assets/${{ matrix.asset }}"
+          ls -la "../dist-assets/${{ matrix.asset }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist-assets/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Resolve tag
         id: tag
         run: |
           TAG="${{ inputs.tag || github.ref_name }}"
           echo "value=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Releasing relay: ${TAG}"
 
-      - name: Build relay binaries (win/linux/mac)
-        working-directory: relay
-        run: bun run build:all
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
 
-      - name: List built binaries
-        working-directory: relay
-        run: ls -la dist/dstp-relay.exe dist/dstp-relay-linux dist/dstp-relay-mac
+      - name: List assets
+        run: ls -la assets
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -60,7 +106,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.value }}
           name: Relay ${{ steps.tag.outputs.value }}
           body: |
-            DSTP relay standalone binaries.
+            DSTP relay standalone binaries (Rust, ~2MB, no dependencies).
 
             Download the executable for your OS and run it directly. Configure
             via env vars (DSTP_UPSTREAM / DSTP_PORT / DSTP_TOKEN) or a
@@ -68,9 +114,6 @@ jobs:
 
             - Windows: `dstp-relay.exe`
             - Linux:   `dstp-relay-linux`
-            - macOS:   `dstp-relay-mac`
-          files: |
-            relay/dist/dstp-relay.exe
-            relay/dist/dstp-relay-linux
-            relay/dist/dstp-relay-mac
+            - macOS:   `dstp-relay-mac` (Apple Silicon)
+          files: assets/*
           fail_on_unmatched_files: true
