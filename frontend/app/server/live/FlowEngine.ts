@@ -8,6 +8,7 @@
 import { FlowRepository, AutomationLogRepository, FlowMemoryRepository, type FlowNode, type FlowEdge, type Flow } from '../db'
 import { getAnalysis, type FlowAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
+import { resolveValue } from './expressions'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -674,34 +675,9 @@ export class FlowEngine {
   // ─── Resolve template variables from context ───────
   // Supports: {{trigger.name}}, {{node_id.field}}, {{node_id.body.key}}, plain values
 
+  // Delegates to the pure, unit-tested resolver in expressions.ts.
   private resolveValue(template: any, context: Record<string, any>): any {
-    if (typeof template !== 'string') return template
-    if (!template.includes('{{')) return template
-
-    // If the entire string is a single {{path}} with no surrounding text, return the raw value
-    const singleMatch = template.match(/^\{\{([^}]+)\}\}$/)
-    if (singleMatch) {
-      const parts = singleMatch[1].trim().split('.')
-      let value: any = context
-      for (const part of parts) {
-        if (value == null) return template
-        value = value[part]
-      }
-      return value ?? template
-    }
-
-    // Otherwise, replace all {{...}} with stringified values
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-      const parts = path.trim().split('.')
-      let value: any = context
-
-      for (const part of parts) {
-        if (value == null) return match
-        value = value[part]
-      }
-
-      return value ?? match
-    })
+    return resolveValue(template, context)
   }
 
   // ─── Condition evaluator ───────────────────────────
