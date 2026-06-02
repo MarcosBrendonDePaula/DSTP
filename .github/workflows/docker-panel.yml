@@ -40,6 +40,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # The Docker Hub secrets live in the "DOCKER" environment, so the job must
+    # opt into it to read DOCKERHUB_USERNAME / DOCKERHUB_TOKEN.
+    environment: DOCKER
     permissions:
       contents: read
 
