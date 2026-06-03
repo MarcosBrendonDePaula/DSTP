@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { apiGet, apiSend, seg } from '../lib/api'
 
 // Environments vault UI. Lists environments, lets you create/delete them and
 // manage write-only secret keys inside each. Values are never read back from the
@@ -10,23 +11,19 @@ import { useEffect, useState, useCallback } from 'react'
 type Env = { id: number; name: string; secretCount: number }
 
 const api = (serverId: string, path = '') =>
-  `/api/environments/${encodeURIComponent(serverId)}${path}`
+  `/api/environments/${seg(serverId)}${path}`
 
+// Throw-on-error wrappers around the central client: this modal's callers rely
+// on a rejected promise to surface vault errors (e.g. duplicate env name).
 async function jget(url: string) {
-  const r = await fetch(url, { credentials: 'include' })
-  if (!r.ok) throw new Error(`${r.status}`)
-  return r.json()
+  const { ok, status, data } = await apiGet(url)
+  if (!ok) throw new Error(`${status}`)
+  return data
 }
 async function jsend(url: string, method: string, body?: any) {
-  const r = await fetch(url, {
-    method,
-    credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const data = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(data?.error || `${r.status}`)
-  return data
+  const { ok, status, data } = await apiSend(url, method, body)
+  if (!ok) throw new Error(data?.error || `${status}`)
+  return data ?? {}
 }
 
 export function EnvironmentsModal({ serverId, onClose }: { serverId: string; onClose: () => void }) {
@@ -177,7 +174,7 @@ function SecretsEditor({ serverId, env, onClose }: { serverId: string; env: Env;
     const key = newKey.trim()
     if (!key || !newValue) return
     try {
-      await jsend(`${base}/${encodeURIComponent(key)}`, 'PUT', { value: newValue })
+      await jsend(`${base}/${seg(key)}`, 'PUT', { value: newValue })
       setNewKey(''); setNewValue('')
       reload()
     } catch (e: any) {
@@ -187,7 +184,7 @@ function SecretsEditor({ serverId, env, onClose }: { serverId: string; env: Env;
 
   const deleteSecret = async (key: string) => {
     if (!confirm(`Excluir o secret "${key}"?`)) return
-    try { await jsend(`${base}/${encodeURIComponent(key)}`, 'DELETE'); reload() }
+    try { await jsend(`${base}/${seg(key)}`, 'DELETE'); reload() }
     catch (e: any) { setError(`Erro: ${e.message}`) }
   }
 

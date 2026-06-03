@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { apiGet, apiPost, seg } from '../lib/api'
 
 type Mode = 'loading' | 'setup' | 'login' | 'set_password' | 'authed'
 
@@ -39,11 +40,7 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
       const params = new URLSearchParams(window.location.search)
       const accessToken = params.get('access')
       if (accessToken) {
-        const redeemRes = await fetch(`/api/panel-auth/redeem/${encodeURIComponent(accessToken)}`, {
-          method: 'POST',
-          credentials: 'include',
-        })
-        const redeemData = await redeemRes.json()
+        const { data: redeemData } = await apiPost(`/api/panel-auth/redeem/${seg(accessToken)}`)
         stripAccessFromUrl()
         if (redeemData.success) {
           if (redeemData.needsSetup) {
@@ -56,18 +53,15 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
         // Fall through to normal flow if link was invalid/expired
       }
 
-      const meRes = await fetch('/api/panel-auth/me', { credentials: 'include' })
-      const me = await meRes.json()
+      const { data: me } = await apiGet('/api/panel-auth/me')
       setAuthorizedServers(me.servers || [])
       if ((me.servers || []).includes(serverId)) {
         // Session valid, but check if password was ever set
-        const statusRes = await fetch(`/api/panel-auth/status/${encodeURIComponent(serverId)}`)
-        const status = await statusRes.json()
+        const { data: status } = await apiGet(`/api/panel-auth/status/${seg(serverId)}`)
         setMode(status.setup ? 'authed' : 'set_password')
         return
       }
-      const statusRes = await fetch(`/api/panel-auth/status/${encodeURIComponent(serverId)}`)
-      const status = await statusRes.json()
+      const { data: status } = await apiGet(`/api/panel-auth/status/${seg(serverId)}`)
       // Server that never connected and has no config → let through to landing page.
       if (!status.exists) { setMode('authed'); return }
       setMode(status.setup ? 'login' : 'setup')
@@ -88,13 +82,7 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
     if (password !== password2) { setError('As senhas não coincidem'); return }
     setBusy(true)
     try {
-      const res = await fetch(`/api/panel-auth/setup/${encodeURIComponent(serverId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token: token.trim(), password }),
-      })
-      const data = await res.json()
+      const { data } = await apiPost(`/api/panel-auth/setup/${seg(serverId)}`, { token: token.trim(), password })
       if (!data.success) {
         setError(
           data.reason === 'invalid_token' ? 'Token inválido' :
@@ -118,13 +106,7 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
     if (password !== password2) { setError('As senhas não coincidem'); return }
     setBusy(true)
     try {
-      const res = await fetch(`/api/panel-auth/set-initial-password/${encodeURIComponent(serverId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password }),
-      })
-      const data = await res.json()
+      const { data } = await apiPost(`/api/panel-auth/set-initial-password/${seg(serverId)}`, { password })
       if (!data.success) {
         setError(
           data.reason === 'already_setup' ? 'Senha já definida' :
@@ -146,13 +128,7 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
     setError(null)
     setBusy(true)
     try {
-      const res = await fetch(`/api/panel-auth/login/${encodeURIComponent(serverId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password }),
-      })
-      const data = await res.json()
+      const { data } = await apiPost(`/api/panel-auth/login/${seg(serverId)}`, { password })
       if (!data.success) {
         setError(data.reason === 'not_setup' ? 'Servidor ainda não configurado' : 'Senha incorreta')
         return
@@ -311,16 +287,11 @@ export function AuthGate({ serverId, children, fallback }: AuthGateProps) {
 }
 
 export async function logoutServer(serverId: string) {
-  await fetch('/api/panel-auth/logout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ serverId }),
-  })
+  await apiPost('/api/panel-auth/logout', { serverId })
   window.location.reload()
 }
 
 export async function logoutAll() {
-  await fetch('/api/panel-auth/logout', { method: 'POST', credentials: 'include' })
+  await apiPost('/api/panel-auth/logout')
   window.location.reload()
 }
