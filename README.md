@@ -29,6 +29,8 @@ flowchart TB
         server -. "RPC UICallback" .-> client
     end
 
+    relay["Relay (Rust)<br/>listens on 127.0.0.1:47834<br/>forwards to upstream"]
+
     subgraph back["Backend (Bun + Elysia)"]
         api["POST /dst/sync"]
         worker["1 Worker per server<br/>FlowEngine, automation"]
@@ -39,10 +41,17 @@ flowchart TB
 
     panel["Admin Panel (React)<br/>Live Components"]
 
-    server -- "POST /dst/sync<br/>state + events" --> api
-    api -- "commands + enable_events<br/>(same HTTP response)" --> server
+    server -- "QueryServer<br/>state + events" --> relay
+    relay -- "forward to upstream" --> api
+    api -- "commands + enable_events<br/>(same HTTP response)" --> relay
+    relay -- "commands" --> server
     back <-- "WebSocket<br/>STATE_DELTA" --> panel
 ```
+
+> The **relay** sits between the game and the backend because the DST Lua sandbox
+> only lets `TheSim:QueryServer` reach `127.0.0.1`/`localhost`. The relay listens
+> on loopback and forwards to the backend (local in dev, remote in prod) — that's
+> what makes one central backend serve many DST hosts.
 
 - **DST sandbox:** `TheSim:QueryServer` only allows `127.0.0.1`/`localhost`. To host centrally (one backend, many servers), each host runs the **relay** (a tiny ~2MB native Rust forwarder) that listens locally and forwards to the backend. The relay lives in a separate repo: [`dstp-relay`](https://github.com/MarcosBrendonDePaula/dstp-relay).
 - **One worker per server:** each DST server processes its flows in a dedicated, isolated Bun Worker (see `WORKERS.md`).

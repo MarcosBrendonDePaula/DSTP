@@ -32,6 +32,8 @@ flowchart TB
         server -. "RPC UICallback" .-> client
     end
 
+    relay["Relay (Rust)<br/>listens on 127.0.0.1:47834<br/>forwards to upstream"]
+
     subgraph back["Backend (Bun + Elysia)"]
         api["POST /dst/sync"]
         worker["1 Worker per server<br/>FlowEngine, automation"]
@@ -42,15 +44,19 @@ flowchart TB
 
     panel["Admin Panel (React)<br/>Live Components"]
 
-    server -- "POST /dst/sync<br/>state + events" --> api
-    api -- "commands + enable_events<br/>(same HTTP response)" --> server
+    server -- "QueryServer<br/>state + events" --> relay
+    relay -- "forward to upstream" --> api
+    api -- "commands + enable_events<br/>(same HTTP response)" --> relay
+    relay -- "commands" --> server
     back <-- "WebSocket<br/>STATE_DELTA" --> panel
 ```
 
-One HTTP cycle of `/dst/sync` carries both directions: the game POSTs its state +
-events, and the backend's response carries the queued commands + the event
-categories to enable. The panel talks to the backend over WebSocket (Live
-Components), never to the game directly.
+The **relay** is required because the DST Lua sandbox only allows
+`TheSim:QueryServer` to reach `127.0.0.1`/`localhost` — it listens on loopback and
+forwards to the backend (local in dev via `relay-config.json`, remote in prod). One
+HTTP cycle of `/dst/sync` carries both directions: the game POSTs state + events and
+the backend's response carries the queued commands + event categories to enable. The
+panel talks to the backend over WebSocket (Live Components), never to the game directly.
 
 Two separate codebases in one repo:
 
