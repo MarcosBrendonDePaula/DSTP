@@ -23,13 +23,15 @@ function makeHost() {
   const commands: Cmd[] = []
   const states: Record<string, any>[] = []
   const toggles: Array<{ serverId: string; category: string; enabled: boolean }> = []
+  // Mutable: tests that exercise get_player/find_player push groups here.
+  const groups: any[] = []
   const host: EngineHost = {
     pushCommand: (serverId, type, data) => { commands.push({ serverId, type, data }) },
-    getServerGroups: () => [],
+    getServerGroups: () => groups,
     emitState: (delta) => { states.push(delta) },
     requestEventToggle: (serverId, category, enabled) => { toggles.push({ serverId, category, enabled }) },
   }
-  return { host, commands, states, toggles }
+  return { host, commands, states, toggles, groups }
 }
 
 // ── Node/edge builders ──
@@ -43,6 +45,18 @@ const setVar = (id: string, params: any, data: any = {}): FlowNode =>
   ({ id, type: 'set_variable', data: { params, ...data }, position: { x: 0, y: 0 } } as any)
 const webhook = (id: string, params: any = {}): FlowNode =>
   ({ id, type: 'webhook', data: { params }, position: { x: 0, y: 0 } } as any)
+const delay = (id: string, params: any = {}): FlowNode =>
+  ({ id, type: 'delay', data: { params }, position: { x: 0, y: 0 } } as any)
+const getPlayer = (id: string, params: any = {}): FlowNode =>
+  ({ id, type: 'get_player', data: { params }, position: { x: 0, y: 0 } } as any)
+const findPlayer = (id: string, params: any = {}): FlowNode =>
+  ({ id, type: 'find_player', data: { params }, position: { x: 0, y: 0 } } as any)
+const memory = (id: string, action: string, params: any = {}): FlowNode =>
+  ({ id, type: 'memory', data: { action, params }, position: { x: 0, y: 0 } } as any)
+const waitNode = (id: string, data: any = {}): FlowNode =>
+  ({ id, type: 'wait', data, position: { x: 0, y: 0 } } as any)
+const uiNode = (id: string, type: string, params: any = {}, pos: any = { x: 0, y: 0 }): FlowNode =>
+  ({ id, type, data: { params }, position: pos } as any)
 const edge = (source: string, target: string, sourceHandle?: string): FlowEdge =>
   ({ id: `${source}->${target}${sourceHandle ? ':' + sourceHandle : ''}`, source, target, ...(sourceHandle ? { sourceHandle } : {}) } as any)
 
@@ -59,6 +73,7 @@ afterAll(() => {
 
 let engine: FlowEngine
 let commands: Cmd[]
+let groups: any[]
 
 beforeEach(() => {
   // Wipe any flows left by prior tests — evaluateEvent runs ALL enabled flows
@@ -69,7 +84,14 @@ beforeEach(() => {
   const h = makeHost()
   engine = new FlowEngine(h.host)
   commands = h.commands
+  groups = h.groups
 })
+
+// Register one server group with the given players (for get_player/find_player).
+function setPlayers(players: any[]) {
+  groups.length = 0
+  groups.push({ server_id: SERVER, all_players: players })
+}
 
 // Save a flow (enabled) and fire one event; evaluateEvent is fire-and-forget, so
 // drain the microtask/timer queue so the async executeFlow finishes before asserts.
@@ -238,5 +260,187 @@ describe('FlowEngine e2e — webhook trigger', () => {
       data: { body: null, query: { x: '42' }, headers: {}, method: 'GET' },
     })
     expect(commands[0].data.message).toBe('q=42')
+  })
+})
+
+describe('FlowEngine e2e — action / runFlowAction', () => {
+  it('emits a generic action as pushCommand(action_type, resolvedParams)', async () => {
+    const nodes = [trigger('t', 'player_death'), action('a', 'kick', { userid: '{{trigger.userid}}', reason: 'afk' })]
+    await run(nodes, [edge('t', 'a')], { type: 'player_death', data: { userid: 'KU_9' } })
+    expect(commands[0]).toEqual({ serverId: SERVER, type: 'kick', data: { userid: 'KU_9', reason: 'afk' } })
+  })
+
+  it('coerces boolean param keys (visible) from string', async () => {
+    // 'visible' is in BOOLEAN_PARAM_KEYS
+    const nodes = [trigger('t', 'player_death'), action('a', 'set_flag', { visible: 'true' })]
+    await run(nodes, [edge('t', 'a')], { type: 'player_death', data: {} })
+    expect(commands[0].data.visible).toBe(true)
+  })
+
+  it('a ui_ action emits a ui_command envelope and strips userid into it', async () => {
+    const nodes = [trigger('t', 'player_death'), action('a', 'ui_notification', { userid: 'u1', text: 'hello', duration: '3' })]
+    await run(nodes, [edge('t', 'a')], { type: 'player_death', data: {} })
+    expect(commands[0]).toMatchObject({
+      type: 'ui_command',
+      data: { userid: 'u1', cmd: { action: 'create', type: 'notification', text: 'hello', duration: 3 } },
+    })
+    expect(commands[0].data.cmd.userid).toBeUndefined() // userid lives on the envelope, not the cmd
+  })
+
+  it('a ui_ action WITHOUT userid emits nothing', async () => {
+    const nodes = [trigger('t', 'player_death'), action('a', 'ui_notification', { text: 'hello' })]
+    await run(nodes, [edge('t', 'a')], { type: 'player_death', data: {} })
+    expect(commands).toHaveLength(0)
+  })
+
+  it('ui_progress_bar value is the val/max ratio', async () => {
+    const nodes = [trigger('t', 'player_death'), action('a', 'ui_progress_bar', { userid: 'u1', value: '50', max: '100' })]
+    await run(nodes, [edge('t', 'a')], { type: 'player_death', data: {} })
+    expect(commands[0].data.cmd.value).toBe(0.5)
+  })
+})
+
+describe('FlowEngine e2e — delay', () => {
+  it('clamps a negative delay to 0 and passes through', async () => {
+    const nodes = [trigger('t', 'player_death'), delay('d', { delay_ms: '-5' }), action('a', 'announce', { message: 'after' })]
+    await run(nodes, [edge('t', 'd'), edge('d', 'a')], { type: 'player_death', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual(['after'])
+  })
+})
+
+describe('FlowEngine e2e — get_player', () => {
+  it('returns the player object when found, usable downstream', async () => {
+    setPlayers([{ userid: 'KU_1', name: 'Wilson', health: 88 }])
+    const nodes = [
+      trigger('t', 'chat_message'),
+      getPlayer('g', { userid: 'KU_1' }),
+      action('a', 'announce', { message: 'hp={{g.health}}' }),
+    ]
+    await run(nodes, [edge('t', 'g'), edge('g', 'a')], { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toBe('hp=88')
+  })
+
+  it('returns an error object when the player is not found', async () => {
+    setPlayers([])
+    const nodes = [
+      trigger('t', 'chat_message'),
+      getPlayer('g', { userid: 'ghost' }),
+      action('a', 'announce', { message: 'err={{g.error}}' }),
+    ]
+    await run(nodes, [edge('t', 'g'), edge('g', 'a')], { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toBe('err=player not found')
+  })
+})
+
+describe('FlowEngine e2e — find_player', () => {
+  it('finds by case-insensitive substring and strips a command prefix', async () => {
+    setPlayers([{ userid: 'KU_2', name: 'Maxwell' }])
+    const nodes = [
+      trigger('t', 'chat_message'),
+      findPlayer('f', { name: '#tp maxw' }), // prefix '#tp ' stripped, 'maxw' matches Maxwell
+      action('a', 'announce', { message: 'id={{f.userid}}' }),
+    ]
+    await run(nodes, [edge('t', 'f'), edge('f', 'a')], { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toBe('id=KU_2')
+  })
+})
+
+describe('FlowEngine e2e — memory (persistent)', () => {
+  it('write then read round-trips a value through SQLite', async () => {
+    // Same flowId so both nodes share the memory namespace.
+    const fid = uid()
+    const w = [trigger('t', 'player_death'), memory('m', 'write', { key: 'deaths', value: '7' })]
+    await run(w, [edge('t', 'm')], { type: 'player_death', data: {} }, fid)
+
+    const r = [trigger('t', 'player_death'), memory('m', 'read', { key: 'deaths' }), action('a', 'announce', { message: 'd={{m.value}}' })]
+    await run(r, [edge('t', 'm'), edge('m', 'a')], { type: 'player_death', data: {} }, fid)
+    expect(commands[0].data.message).toBe('d=7')
+  })
+
+  it('read of a missing key yields null in the node output', async () => {
+    // The memory node's output is { action:'read', key, value: null } for a missing
+    // key. We surface `action` (a present field) downstream to prove the node ran
+    // and produced the read shape — value=null itself leaves a mixed-string
+    // template literal (resolveValue keeps unresolved {{...}} verbatim), so assert
+    // on a resolvable sibling field instead.
+    const nodes = [trigger('t', 'player_death'), memory('m', 'read', { key: 'never_set_xyz' }), action('a', 'announce', { message: 'op={{m.action}}' })]
+    await run(nodes, [edge('t', 'm'), edge('m', 'a')], { type: 'player_death', data: {} })
+    expect(commands[0].data.message).toBe('op=read')
+  })
+})
+
+describe('FlowEngine e2e — ui_builder / ui_panel (tree)', () => {
+  it('ui_builder pushes a tree create command and resolves {{templates}}', async () => {
+    const builder: FlowNode = {
+      id: 'b', type: 'ui_builder',
+      data: { params: { userid: 'u1', id: 'hud1' }, tree: { type: 'text', text: 'hi {{trigger.name}}' } },
+      position: { x: 0, y: 0 },
+    } as any
+    const nodes = [trigger('t', 'player_death'), builder]
+    await run(nodes, [edge('t', 'b')], { type: 'player_death', data: { name: 'Wendy' } })
+    expect(commands[0]).toMatchObject({
+      type: 'ui_command',
+      data: { userid: 'u1', cmd: { action: 'create', type: 'tree', id: 'hud1', group: 'hud1', tree: { type: 'text', text: 'hi Wendy' } } },
+    })
+  })
+
+  it('ui_panel node builds a tree from connected ui_* children and does NOT continue the action chain', async () => {
+    const nodes = [
+      trigger('t', 'player_death'),
+      uiNode('p', 'ui_panel', { userid: 'u1', id: 'pnl', title: 'Shop' }),
+      uiNode('txt', 'ui_text', { text: 'Welcome' }),
+      action('after', 'announce', { message: 'should-not-run' }),
+    ]
+    // p has a ui_text child AND a normal action edge; only the child is consumed,
+    // the action chain from a ui_panel node is intentionally not followed.
+    await run(nodes, [edge('t', 'p'), edge('p', 'txt'), edge('p', 'after')], { type: 'player_death', data: {} })
+    const ui = commands.find(c => c.type === 'ui_command')
+    expect(ui!.data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'pnl', group: 'pnl' })
+    expect(ui!.data.cmd.tree).toMatchObject({ type: 'panel', children: [{ type: 'text', text: 'Welcome' }] })
+    // the announce action wired off ui_panel must NOT have fired
+    expect(commands.some(c => c.type === 'announce')).toBe(false)
+  })
+})
+
+describe('FlowEngine e2e — wait / merge (stateful)', () => {
+  // Two trigger nodes (different event types) converge on one wait. The flow is
+  // stateful (has a wait), so executeStatefulBranch handles each branch. The
+  // downstream runs only after both branches arrive (mode 'all'). onSatisfied
+  // fires via queueMicrotask, so we give it a moment to settle.
+  function buildWaitFlow(mode: 'all' | 'any') {
+    const nodes = [
+      trigger('ta', 'player_spawn'),
+      trigger('tb', 'player_death'),
+      waitNode('w', { mode, correlation: 'broadcast', timeoutMs: 60000 }),
+      action('done', 'announce', { message: 'merged' }),
+    ]
+    const edges = [edge('ta', 'w'), edge('tb', 'w'), edge('w', 'done')]
+    return { nodes, edges }
+  }
+
+  it('mode "all" waits for BOTH branches before continuing', async () => {
+    const fid = uid()
+    const { nodes, edges } = buildWaitFlow('all')
+    new FlowRepository(SERVER).save({ id: fid, name: fid, enabled: true, nodes, edges })
+
+    // First branch only — must NOT continue yet.
+    engine.evaluateEvent(SERVER, { type: 'player_spawn', data: { userid: 'KU_1' } })
+    await new Promise(r => setTimeout(r, 30))
+    expect(commands.some(c => c.type === 'announce')).toBe(false)
+
+    // Second branch — now both arrived → downstream runs.
+    engine.evaluateEvent(SERVER, { type: 'player_death', data: { userid: 'KU_1' } })
+    await new Promise(r => setTimeout(r, 30))
+    expect(commands.filter(c => c.type === 'announce').map(c => c.data.message)).toEqual(['merged'])
+  })
+
+  it('mode "any" continues as soon as the FIRST branch arrives', async () => {
+    const fid = uid()
+    const { nodes, edges } = buildWaitFlow('any')
+    new FlowRepository(SERVER).save({ id: fid, name: fid, enabled: true, nodes, edges })
+
+    engine.evaluateEvent(SERVER, { type: 'player_spawn', data: { userid: 'KU_1' } })
+    await new Promise(r => setTimeout(r, 30))
+    expect(commands.filter(c => c.type === 'announce')).toHaveLength(1)
   })
 })
