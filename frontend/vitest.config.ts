@@ -20,8 +20,15 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     include: ['app/server/**/*.{test,spec}.ts'],
-    // PanelAuthStore.test.ts imports bun:sqlite (via @server/db) and bun:test;
-    // it runs under `bun test`, not vitest. See the test:unit script.
-    exclude: ['app/server/services/PanelAuthStore.test.ts', '**/node_modules/**'],
+    // These import bun:test and/or hit the real bun:sqlite DB; they run under
+    // `bun test`, not vitest. See the test:unit script.
+    exclude: [
+      'app/server/services/PanelAuthStore.test.ts',
+      'app/server/db/repositories/EnvironmentRepository.test.ts',
+      'app/server/db/connection.test.ts',
+      'app/server/live/vault-context.test.ts',
+      'app/server/routes/environments.routes.test.ts',
+      '**/node_modules/**',
+    ],
   },
 })

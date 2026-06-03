@@ -6,6 +6,7 @@ import { LiveDSTP } from '@server/live/LiveDSTP'
 import { FlowEditor } from './FlowEditor'
 import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
+import { EnvironmentsModal } from './EnvironmentsModal'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
@@ -21,6 +22,7 @@ export function AutomationPage() {
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
   const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
   const [flowEnabled, setFlowEnabled] = useState(true)
+  const [showEnvironments, setShowEnvironments] = useState(false)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -342,11 +344,19 @@ export function AutomationPage() {
           }}
         />
         <button
+          onClick={() => setShowEnvironments(true)}
+          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
+          title="Variáveis de ambiente criptografadas (API keys, tokens)"
+        >🔑 Environments</button>
+        <button
           onClick={createNewFlow}
           className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
         >+ Novo Fluxo</button>
         {urlServer && <AccountMenu serverId={urlServer} />}
       </div>
+      {showEnvironments && urlServer && (
+        <EnvironmentsModal serverId={urlServer} onClose={() => setShowEnvironments(false)} />
+      )}
 
       <div className="flex gap-4">
         {/* Flows list */}
