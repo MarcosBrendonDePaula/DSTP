@@ -119,7 +119,7 @@ export type PanelAuth = typeof panelAuth.$inferSelect
 
 export interface FlowNode {
   id: string
-  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'memory' | 'http_request' | 'set_variable' | 'script' | 'wait' | 'ai_agent' | 'ui_menu' | 'ui_rule' | 'ui_builder' | 'ui_panel' | 'ui_col' | 'ui_row' | 'ui_tabs' | 'ui_text' | 'ui_icon' | 'ui_image' | 'ui_button' | 'ui_bar' | 'ui_spacer'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'get_player' | 'find_player' | 'memory' | 'http_request' | 'set_variable' | 'script' | 'wait' | 'ai_agent' | 'ai_memory' | 'ui_menu' | 'ui_rule' | 'ui_builder' | 'ui_panel' | 'ui_col' | 'ui_row' | 'ui_tabs' | 'ui_text' | 'ui_icon' | 'ui_image' | 'ui_button' | 'ui_bar' | 'ui_spacer'
   data: Record<string, any>
   position: { x: number; y: number }
 }

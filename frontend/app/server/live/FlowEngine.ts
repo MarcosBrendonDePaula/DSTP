@@ -455,6 +455,11 @@ export class FlowEngine {
         const output = await executeAIAgent(node, nodes, edges, context, {
           resolve: (tpl, ctx) => this.resolveValue(tpl, ctx),
           runTool: (toolNode, args, ctx) => {
+            // ai_memory: the AI's own key/value store. It picks operation + key
+            // (free-form, e.g. "player:joe:house" or "server:pvp") + value.
+            if (toolNode.type === 'ai_memory') {
+              return this.runAiMemory(serverId, ctx, args)
+            }
             // Merge: AI-provided args override the node's configured params, then
             // run it through the SAME action pipeline (resolveValue + coerce +
             // pushCommand). A scoped clone keeps the original node untouched.
@@ -465,6 +470,18 @@ export class FlowEngine {
             if (tt === 'script') return this.executeScript(merged, ctx, serverId)
             this.runFlowAction(serverId, merged, ctx)
             return { executed: true, action: tt }
+          },
+          // Conversation history, persisted per-flow under "aichat:<scopeKey>".
+          loadHistory: (scopeKey: string) => {
+            const flowId = String(context._flowId || '')
+            if (!flowId) return []
+            const v = new FlowMemoryRepository(serverId).get(flowId, `aichat:${scopeKey}`)
+            return Array.isArray(v) ? v : []
+          },
+          saveHistory: (scopeKey: string, turns: any[]) => {
+            const flowId = String(context._flowId || '')
+            if (!flowId) return
+            new FlowMemoryRepository(serverId).set(flowId, `aichat:${scopeKey}`, turns)
           },
         })
         setContext(node.id, output)
@@ -1126,6 +1143,57 @@ export class FlowEngine {
       result[key] = this.resolveValue(val, context)
     }
     return result
+  }
+
+  // ─── ai_memory tool executor ────────────────────────
+  // The AI's own key/value store, used as a tool by the ai_agent node. The model
+  // picks the operation and a FREE-FORM key (e.g. "player:joe:house", "server:pvp")
+  // so it can decide the scope itself. Persisted per-flow via FlowMemoryRepository,
+  // namespaced under "aimem:" so it never collides with the memory node or the
+  // chat-history keys. Returns a small JSON result the model can read back.
+  private runAiMemory(serverId: string, context: Record<string, any>, args: Record<string, any>): any {
+    const flowId = String(context._flowId || '')
+    if (!flowId) return { ok: false, error: 'no flow context' }
+    const op = String(args.operation || args.op || '').toLowerCase()
+    const key = args.key != null ? String(args.key) : ''
+    const NS = 'aimem:'
+    const repo = new FlowMemoryRepository(serverId)
+    try {
+      switch (op) {
+        case 'save':
+        case 'set': {
+          if (!key) return { ok: false, error: 'key required' }
+          repo.set(flowId, NS + key, args.value ?? null)
+          return { ok: true, op: 'save', key }
+        }
+        case 'get':
+        case 'read': {
+          if (!key) return { ok: false, error: 'key required' }
+          const value = repo.get(flowId, NS + key)
+          return { ok: true, op: 'get', key, value: value ?? null, found: value !== undefined }
+        }
+        case 'list': {
+          // List keys (optionally filtered by prefix), without dumping every value.
+          const all = repo.getAll(flowId)
+          const prefix = key // "list" can pass a key as a prefix filter
+          const items = Object.keys(all)
+            .filter(k => k.startsWith(NS))
+            .map(k => k.slice(NS.length))
+            .filter(k => !prefix || k.startsWith(prefix))
+          return { ok: true, op: 'list', keys: items }
+        }
+        case 'delete':
+        case 'del': {
+          if (!key) return { ok: false, error: 'key required' }
+          repo.delete(flowId, NS + key)
+          return { ok: true, op: 'delete', key }
+        }
+        default:
+          return { ok: false, error: `unknown operation "${op}". Use save|get|list|delete.` }
+      }
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) }
+    }
   }
 
   // ─── Script node executor ───────────────────────────

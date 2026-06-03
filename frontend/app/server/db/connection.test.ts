@@ -3,8 +3,7 @@
 import { describe, it, expect, afterAll } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-
-const { getDb } = await import('./connection')
+import { getDb } from './connection'
 
 const VALID = `__test_conn_${Date.now()}`
 

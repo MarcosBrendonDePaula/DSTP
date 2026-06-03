@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { discoverToolNodes, schemaForNode, toolNameFor } from './executeAIAgent'
+import { discoverToolNodes, schemaForNode, toolNameFor, computeScopeKey, trimHistory, compactHistory, type ChatTurn } from './executeAIAgent'
 import type { FlowNode, FlowEdge } from '../../db'
 
 const node = (id: string, type: string, data: any = {}): FlowNode =>
@@ -40,6 +40,46 @@ describe('discoverToolNodes', () => {
     ] as any
     expect(discoverToolNodes(ai, nodes, edges).length).toBe(1)
   })
+
+  it('discovers an ai_memory node as a tool', () => {
+    const mem = node('n_mem', 'ai_memory')
+    const edges: FlowEdge[] = [
+      { id: 'e1', source: 'n_mem', target: 'ai1', targetHandle: 'tools' },
+    ] as any
+    const tools = discoverToolNodes(ai, [ai, mem], edges)
+    expect(tools.map(t => t.type)).toContain('ai_memory')
+  })
+})
+
+describe('computeScopeKey (conversation memory)', () => {
+  it('global scope ignores the player', () => {
+    expect(computeScopeKey('global', { trigger: { userid: 'KU_1' } })).toBe('global')
+  })
+  it('player scope keys by userid', () => {
+    expect(computeScopeKey('player', { trigger: { userid: 'KU_abc' } })).toBe('player:KU_abc')
+  })
+  it('player scope falls back to name, then unknown', () => {
+    expect(computeScopeKey('player', { trigger: { name: 'Joe' } })).toBe('player:Joe')
+    expect(computeScopeKey('player', { trigger: {} })).toBe('player:unknown')
+  })
+})
+
+describe('trimHistory', () => {
+  const turn = (i: number): ChatTurn => ({ role: i % 2 ? 'assistant' : 'user', content: `m${i}` })
+  it('keeps only the last `limit` pairs (2*limit messages)', () => {
+    const turns = Array.from({ length: 20 }, (_, i) => turn(i))
+    const out = trimHistory(turns, 3)
+    expect(out.length).toBe(6)
+    expect(out[0].content).toBe('m14') // last 6 of 20
+  })
+  it('returns all when under the limit', () => {
+    const turns = [turn(0), turn(1)]
+    expect(trimHistory(turns, 10).length).toBe(2)
+  })
+  it('defaults to 10 pairs for a bad limit', () => {
+    const turns = Array.from({ length: 50 }, (_, i) => turn(i))
+    expect(trimHistory(turns, NaN as any).length).toBe(20)
+  })
 })
 
 describe('schemaForNode', () => {
@@ -56,6 +96,59 @@ describe('schemaForNode', () => {
   it('produces an empty object schema for a paramless node', () => {
     const s = schemaForNode(node('x', 'action', { action_type: 'pause' }))
     expect(s.properties).toEqual({})
+  })
+
+  it('excludes params the author already fixed (only empty/template params are inputs)', () => {
+    // chat_send: message empty (AI fills), name fixed "[IA]" (author set → fixed)
+    const n = node('x', 'action', { action_type: 'chat_send', params: { message: '', name: '[IA]' } })
+    const s = schemaForNode(n)
+    expect(Object.keys(s.properties)).toEqual(['message'])
+    expect(s.properties.name).toBeUndefined()
+  })
+
+  it('exposes a template-valued param as a fillable input', () => {
+    const n = node('x', 'action', { action_type: 'heal', params: { userid: '{{trigger.userid}}', amount: '50' } })
+    const s = schemaForNode(n)
+    // userid is a template (placeholder) → fillable; amount fixed at 50 → not
+    expect(Object.keys(s.properties)).toEqual(['userid'])
+  })
+})
+
+describe('compactHistory', () => {
+  const turn = (i: number): ChatTurn => ({ role: i % 2 ? 'assistant' : 'user', content: `m${i}` })
+
+  it('returns unchanged when under the limit', async () => {
+    const turns = [turn(0), turn(1)]
+    expect(await compactHistory(turns, 5)).toEqual(turns)
+  })
+
+  it('without a summarizer, behaves like rotate (keeps last 2*limit)', async () => {
+    const turns = Array.from({ length: 20 }, (_, i) => turn(i))
+    const out = await compactHistory(turns, 3)
+    expect(out.length).toBe(6)
+    expect(out[0].content).toBe('m14')
+  })
+
+  it('with a summarizer, prepends a single summary turn + keeps recents', async () => {
+    const turns = Array.from({ length: 20 }, (_, i) => turn(i))
+    const summarize = async (dropped: ChatTurn[]) => `resumo de ${dropped.length} msgs`
+    const out = await compactHistory(turns, 3, summarize)
+    expect(out[0].role).toBe('assistant')
+    expect(out[0].content).toContain('[resumo da conversa anterior]')
+    expect(out[0].content).toContain('resumo de 14 msgs') // 20 - 6 kept = 14 dropped
+    expect(out.length).toBe(1 + 6) // summary + last 3 pairs
+  })
+
+  it('compounds an existing summary instead of nesting', async () => {
+    const withSummary: ChatTurn[] = [
+      { role: 'assistant', content: '[resumo da conversa anterior] velho' },
+      ...Array.from({ length: 20 }, (_, i) => turn(i)),
+    ]
+    let receivedPrior: string | null = 'NOT_CALLED'
+    const summarize = async (_d: ChatTurn[], prior: string | null) => { receivedPrior = prior; return 'novo' }
+    const out = await compactHistory(withSummary, 3, summarize)
+    expect(receivedPrior).toBe('velho') // prior summary passed through, not re-nested
+    expect(out.filter(t => t.content.includes('[resumo')).length).toBe(1) // single summary
   })
 })
 

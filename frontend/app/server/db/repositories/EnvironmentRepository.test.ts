@@ -4,12 +4,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { __setKeyForTest } from '../../services/SecretCrypto'
+import { EnvironmentRepository, MIN_SECRET_LEN, MAX_SECRET_LEN } from './EnvironmentRepository'
 
-// The vault must be enabled for set/get to work — set the master key before the
-// repo (and SecretCrypto) are first touched.
-process.env.DSTP_SECRET_KEY = 'test-master-key-env-repo'
-
-const { EnvironmentRepository } = await import('./EnvironmentRepository')
+// The vault must be enabled for set/get to work. Force the key via the test-only
+// override (NOT process.env — that leaks into the environment and breaks the dev
+// server's stable key).
+beforeAll(() => __setKeyForTest('test-master-key-env-repo'))
 
 const SERVER_A = `__test_envrepo_A_${Date.now()}`
 const SERVER_B = `__test_envrepo_B_${Date.now()}`
@@ -76,8 +77,7 @@ describe('EnvironmentRepository — CRUD + crypto', () => {
 })
 
 describe('EnvironmentRepository — value size limits (MED-2/#3)', () => {
-  it('rejects a too-short secret and a too-large secret', async () => {
-    const { MIN_SECRET_LEN, MAX_SECRET_LEN } = await import('./EnvironmentRepository')
+  it('rejects a too-short secret and a too-large secret', () => {
     const repo = new EnvironmentRepository(SERVER_A)
     const id = repo.createEnvironment('sizes')
     expect(() => repo.setSecret(id, 'SHORT', 'ab')).toThrow(/too short/)

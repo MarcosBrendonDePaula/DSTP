@@ -34,11 +34,20 @@ const redisSchema = {
   url: config.string('REDIS_URL', 'redis://localhost:6379')
 } as const
 
+// Secrets vault (Environments). The master key encrypts every stored secret at
+// rest. It MUST be stable across restarts — if it changes, all stored secrets
+// become undecryptable. Keep it ONLY in .env (single source), never as a session
+// env var. Empty = vault disabled.
+const vaultSchema = {
+  secretKey: config.string('DSTP_SECRET_KEY', '')
+} as const
+
 export const servicesConfig = defineNestedConfig({
   email: emailSchema,
   jwt: jwtSchema,
   storage: storageSchema,
-  redis: redisSchema
+  redis: redisSchema,
+  vault: vaultSchema
 })
 
 export type ServicesConfig = typeof servicesConfig

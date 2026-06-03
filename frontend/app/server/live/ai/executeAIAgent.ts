@@ -27,12 +27,101 @@ const BOOLEAN_KEYS = new Set(['enabled', 'drop', 'visible'])
 const DEFAULT_MAX_STEPS = 8
 const MAX_STEPS_CAP = 25
 
+// Short, human descriptions of the common actions so the model knows what each
+// tool DOES (the rich client catalog isn't available on the backend). Falls back
+// to the action_type name for anything not listed.
+const ACTION_DESCRIPTIONS: Record<string, string> = {
+  announce: 'Broadcast a global announcement to everyone on the server.',
+  private_message: 'Whisper a private message to one player (needs userid).',
+  chat_send: 'Send a message into the public chat as the bot.',
+  heal: 'Restore a player\'s health (needs userid; amount optional, "max" for full).',
+  feed: 'Restore a player\'s hunger (needs userid).',
+  restore_sanity: 'Restore a player\'s sanity (needs userid).',
+  respawn: 'Revive a player from ghost/dead state (needs userid).',
+  kill: 'Instantly kill a player (needs userid).',
+  kick: 'Disconnect a player from the server (needs userid).',
+  ban: 'Ban a player (needs userid).',
+  godmode: 'Toggle invincibility for a player (needs userid).',
+  teleport: 'Teleport a player to coordinates x,z (needs userid, x, z).',
+  teleport_to_player: 'Teleport one player to another.',
+  give_item: 'Give an item (prefab) to a player (needs userid, prefab, count).',
+  spawn_prefab: 'Spawn an entity at coordinates (prefab, x, z).',
+  spawn_at_player: 'Spawn an entity at a player\'s position (needs userid, prefab).',
+  set_season: 'Change the world season (autumn/winter/spring/summer).',
+  set_phase: 'Change the time of day (day/dusk/night).',
+  skip_day: 'Advance the world by N days.',
+}
+
+// Tool schema for the ai_memory node (the AI's own key/value store).
+const AI_MEMORY_SCHEMA = {
+  type: 'object',
+  properties: {
+    operation: { type: 'string', enum: ['save', 'get', 'list', 'delete'], description: 'What to do' },
+    key: { type: 'string', description: 'Free-form key, e.g. "player:joe:house" or "server:pvp". For list, an optional prefix.' },
+    value: { type: 'string', description: 'Value to store (only for save)' },
+  },
+  required: ['operation'],
+  additionalProperties: false,
+}
+
+export type ChatTurn = { role: 'user' | 'assistant'; content: string }
+
+// Scope key for conversation history: per-player (keyed by userid/name) or one
+// shared "global" history per flow.
+export function computeScopeKey(scope: string, context: Record<string, any>): string {
+  if (scope === 'global') return 'global'
+  return `player:${context?.trigger?.userid ?? context?.trigger?.name ?? 'unknown'}`
+}
+
+export type MemoryMode = 'rotate' | 'compact'
+
+function normLimit(limit: number): number {
+  return Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 10
+}
+
+// ROTATE mode: keep only the last `limit` turn-pairs (oldest fall off, FIFO).
+export function trimHistory(turns: ChatTurn[], limit: number): ChatTurn[] {
+  return turns.slice(-(normLimit(limit) * 2))
+}
+
+// COMPACT mode: when the history exceeds `limit` pairs, summarize the OLDEST
+// overflow into a single "assistant" summary turn and keep the recent pairs
+// verbatim. `summarize` produces the summary text from the dropped turns. Async
+// because summarizing calls the model. Falls back to rotate if no summarizer.
+export async function compactHistory(
+  turns: ChatTurn[],
+  limit: number,
+  summarize?: (toSummarize: ChatTurn[], priorSummary: string | null) => Promise<string>,
+): Promise<ChatTurn[]> {
+  const n = normLimit(limit)
+  const maxMsgs = n * 2
+  if (turns.length <= maxMsgs) return turns
+  if (!summarize) return turns.slice(-maxMsgs) // no summarizer → behave like rotate
+
+  // Carry forward an existing summary (first turn tagged) so context compounds.
+  const SUMMARY_TAG = '[resumo da conversa anterior]'
+  const hasPriorSummary = turns[0]?.role === 'assistant' && turns[0].content.startsWith(SUMMARY_TAG)
+  const priorSummary = hasPriorSummary ? turns[0].content.slice(SUMMARY_TAG.length).trim() : null
+  const body = hasPriorSummary ? turns.slice(1) : turns
+
+  const keep = body.slice(-maxMsgs)        // recent pairs kept verbatim
+  const drop = body.slice(0, body.length - maxMsgs) // older turns → summarized
+  if (drop.length === 0) return turns.slice(-maxMsgs)
+
+  const summaryText = await summarize(drop, priorSummary)
+  return [{ role: 'assistant', content: `${SUMMARY_TAG} ${summaryText}` }, ...keep]
+}
+
 export interface AIAgentDeps {
   // Resolve a {{...}} template against the flow context (engine's resolveValue).
   resolve: (template: any, context: Record<string, any>) => any
   // Execute one tool node for real, with the params the model chose. Returns a
   // small JSON-serializable result handed back to the model.
   runTool: (toolNode: FlowNode, args: Record<string, any>, context: Record<string, any>) => Promise<any> | any
+  // Conversation history (optional). Keyed by the agent's scope. Returns the
+  // stored turns; saveHistory persists the (trimmed) list.
+  loadHistory?: (scopeKey: string) => ChatTurn[]
+  saveHistory?: (scopeKey: string, turns: ChatTurn[]) => void
 }
 
 // Build the language model for the configured provider, using the resolved key.
@@ -57,16 +146,25 @@ export function toolNameFor(node: FlowNode, used: Set<string>): string {
   return name
 }
 
-// Generate a JSON Schema (object) from a node's params. Each param key becomes a
-// property; type inferred from the numeric/boolean key sets, else string.
+// Generate a JSON Schema (object) from a node's params. Only EMPTY params become
+// inputs the model fills — params already set on the node (e.g. chat_send name=
+// "[IA]") are FIXED by the flow author and must not be overridable by the model.
+// A param value that looks like an unresolved template ("{{...}}") counts as a
+// placeholder hint, so it's exposed as a fillable input too.
 export function schemaForNode(node: FlowNode): Record<string, any> {
   const params = (node.data?.params || {}) as Record<string, any>
   const properties: Record<string, any> = {}
+  const required: string[] = []
   for (const key of Object.keys(params)) {
+    const raw = params[key]
+    const isEmpty = raw == null || raw === ''
+    const isTemplate = typeof raw === 'string' && raw.includes('{{')
+    if (!isEmpty && !isTemplate) continue // fixed by the author → not a model input
     const t = NUMERIC_KEYS.has(key) ? 'number' : BOOLEAN_KEYS.has(key) ? 'boolean' : 'string'
     properties[key] = { type: t, description: `Parameter "${key}"` }
+    required.push(key)
   }
-  return { type: 'object', properties, additionalProperties: false, required: [] }
+  return { type: 'object', properties, additionalProperties: false, required }
 }
 
 // Discover the nodes wired into the ai_agent's `tools` input handle.
@@ -105,6 +203,14 @@ export async function executeAIAgent(
   const temperature = data.temperature != null && data.temperature !== ''
     ? Number(deps.resolve(data.temperature, context)) : undefined
 
+  // Conversation memory (optional). Scope: per-player (keyed by trigger.userid)
+  // or global (one history per flow). memory_limit = max turns kept.
+  const memoryEnabled = !!data.memory_enabled && !!deps.loadHistory && !!deps.saveHistory
+  const memoryScope = String(data.memory_scope || 'player')
+  const memoryLimit = Number(deps.resolve(data.memory_limit, context))
+  const memoryMode: MemoryMode = data.memory_mode === 'compact' ? 'compact' : 'rotate'
+  const scopeKey = computeScopeKey(memoryScope, context)
+
   if (!model) throw new Error('ai_agent: no model configured')
   if (!apiKey) throw new Error('ai_agent: no API key (set api_key, e.g. {{environment.prod.ANTHROPIC_KEY}})')
   if (!prompt) throw new Error('ai_agent: no prompt configured')
@@ -116,10 +222,14 @@ export async function executeAIAgent(
   const tools: ToolSet = {}
   for (const node of toolNodes) {
     const name = toolNameFor(node, used)
-    const label = node.data?.action_type || node.type
+    const isMem = node.type === 'ai_memory'
+    const actionType = node.data?.action_type || node.type
+    const description = isMem
+      ? 'Persistent memory. Save/get/list/delete facts using a FREE-FORM key — YOU choose the scope by how you name the key: per-player facts as "player:<name>:<fact>", server-wide facts as "server:<fact>". operation: save|get|list|delete. For save, include value. For list, key is an optional prefix filter.'
+      : (ACTION_DESCRIPTIONS[actionType] || `Run the "${actionType}" action. Fill the listed parameters.`)
     tools[name] = dynamicTool({
-      description: `Flow node "${label}". Call to run it with the given params.`,
-      inputSchema: jsonSchema(schemaForNode(node) as any),
+      description,
+      inputSchema: jsonSchema((isMem ? AI_MEMORY_SCHEMA : schemaForNode(node)) as any),
       execute: async (args: any) => {
         const safeArgs = (args && typeof args === 'object') ? args : {}
         toolCalls.push({ tool: name, args: safeArgs })
@@ -129,19 +239,46 @@ export async function executeAIAgent(
     })
   }
 
+  // Load prior turns and build the message list (history + current prompt). With
+  // memory off, fall back to a single-shot prompt.
+  const history: ChatTurn[] = memoryEnabled ? (deps.loadHistory!(scopeKey) || []) : []
   const llm = buildModel(provider, model, apiKey)
   const result = await generateText({
     model: llm,
     system,
-    prompt,
+    ...(history.length > 0
+      ? { messages: [...history, { role: 'user' as const, content: prompt }] }
+      : { prompt }),
     tools,
     stopWhen: stepCountIs(maxSteps),
     ...(temperature != null && Number.isFinite(temperature) ? { temperature } : {}),
   })
 
+  const text = String(result.text ?? '')
+
+  // Persist the turn. ROTATE drops the oldest pairs; COMPACT summarizes the
+  // overflow into a single summary turn (preserving context) and keeps recents.
+  if (memoryEnabled) {
+    const next: ChatTurn[] = [...history, { role: 'user', content: prompt }, { role: 'assistant', content: text }]
+    if (memoryMode === 'compact') {
+      const summarize = async (toSummarize: ChatTurn[], prior: string | null): Promise<string> => {
+        const convo = toSummarize.map(t => `${t.role === 'user' ? 'Jogador' : 'IA'}: ${t.content}`).join('\n')
+        const sres = await generateText({
+          model: llm,
+          system: 'Você resume conversas de forma concisa, preservando fatos importantes (nomes, pedidos, decisões). Responda só com o resumo, sem preâmbulo.',
+          prompt: `${prior ? `Resumo até agora:\n${prior}\n\n` : ''}Resuma a conversa abaixo em poucas frases, mantendo o que importa:\n${convo}`,
+        })
+        return String(sres.text ?? '').trim()
+      }
+      deps.saveHistory!(scopeKey, await compactHistory(next, memoryLimit, summarize))
+    } else {
+      deps.saveHistory!(scopeKey, trimHistory(next, memoryLimit))
+    }
+  }
+
   // Output. Mask any secret that may have leaked into the model's text.
   return {
-    text: maskSecrets(String(result.text ?? ''), context),
+    text: maskSecrets(text, context),
     steps: result.steps?.length ?? 0,
     toolCalls: maskSecrets(toolCalls, context),
     usage: result.usage ?? null,

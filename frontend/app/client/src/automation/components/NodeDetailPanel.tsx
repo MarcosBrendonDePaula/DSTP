@@ -418,6 +418,89 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
     )
   }
 
+  if (type === 'ai_agent') {
+    const provider = data.provider || 'anthropic'
+    const MODELS: Record<string, string[]> = {
+      anthropic: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+      openai: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+      google: ['gemini-2.0-flash', 'gemini-2.0-pro'],
+    }
+    return (
+      <div className="space-y-2">
+        <ConfigField label="Provider">
+          <ConfigSelect
+            value={provider}
+            onChange={v => updateData({ provider: v, model: (MODELS[v] || [])[0] || '' })}
+            options={[
+              { value: 'anthropic', label: 'Anthropic (Claude)' },
+              { value: 'openai', label: 'OpenAI (GPT)' },
+              { value: 'google', label: 'Google (Gemini)' },
+            ]}
+          />
+        </ConfigField>
+        <ConfigField label="Modelo">
+          <ConfigInput value={data.model || ''} onChange={v => updateData({ model: v })} placeholder={(MODELS[provider] || [])[0] || 'modelo'} />
+        </ConfigField>
+        <ConfigField label="API Key (use o cofre)">
+          <ConfigInput value={data.api_key || ''} onChange={v => updateData({ api_key: v })} placeholder="{{environment.prod.OPENAI_KEY}}" />
+        </ConfigField>
+        <ConfigField label="System (instruções fixas)">
+          <ConfigTextarea value={data.system || ''} onChange={v => updateData({ system: v })} placeholder="Você é um assistente do servidor DST..." rows={4} />
+        </ConfigField>
+        <ConfigField label="Prompt">
+          <ConfigTextarea value={data.prompt || ''} onChange={v => updateData({ prompt: v })} placeholder='Jogador "{{trigger.name}}" disse: "{{trigger.message}}"' rows={3} />
+        </ConfigField>
+        <div className="grid grid-cols-2 gap-2">
+          <ConfigField label="Max steps">
+            <ConfigInput value={data.max_steps || ''} onChange={v => updateData({ max_steps: v })} placeholder="8" />
+          </ConfigField>
+          <ConfigField label="Temperature">
+            <ConfigInput value={data.temperature || ''} onChange={v => updateData({ temperature: v })} placeholder="0.7" />
+          </ConfigField>
+        </div>
+
+        <div className="pt-2 mt-1 border-t border-white/5">
+          <div className="text-[10px] text-gray-500 mb-1">🧠 Memória de conversa (histórico)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <ConfigField label="Memória">
+              <ConfigSelect
+                value={data.memory_enabled ? 'on' : 'off'}
+                onChange={v => updateData({ memory_enabled: v === 'on' })}
+                options={[{ value: 'off', label: 'Desligada' }, { value: 'on', label: 'Ligada' }]}
+              />
+            </ConfigField>
+            <ConfigField label="Escopo">
+              <ConfigSelect
+                value={data.memory_scope || 'player'}
+                onChange={v => updateData({ memory_scope: v })}
+                options={[{ value: 'player', label: 'Por jogador' }, { value: 'global', label: 'Global do servidor' }]}
+              />
+            </ConfigField>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ConfigField label="Limite (nº de mensagens)">
+              <ConfigInput value={data.memory_limit || ''} onChange={v => updateData({ memory_limit: v })} placeholder="10" />
+            </ConfigField>
+            <ConfigField label="Modo ao atingir limite">
+              <ConfigSelect
+                value={data.memory_mode || 'rotate'}
+                onChange={v => updateData({ memory_mode: v })}
+                options={[
+                  { value: 'rotate', label: 'Rotativo (descarta antiga)' },
+                  { value: 'compact', label: 'Compactar (resume antigas)' },
+                ]}
+              />
+            </ConfigField>
+          </div>
+        </div>
+
+        <div className="text-[10px] text-gray-500">
+          🔧 Conecte nós (action, ai_memory, etc.) no handle <span className="text-fuchsia-400">tools</span> — a IA os chama como ferramentas.
+        </div>
+      </div>
+    )
+  }
+
   if (type === 'set_variable') {
     const entries = Object.entries(data.params || {})
     const setKey = (oldKey: string, newKey: string) => {

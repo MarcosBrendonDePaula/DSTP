@@ -5,14 +5,17 @@
 // `secret.` resolution in FlowEngine). Plaintext never reaches the client, the
 // flow JSON, logs, or traces.
 //
-// Cipher: AES-256-GCM (authenticated). The master key comes from the backend
-// env var DSTP_SECRET_KEY. If it's absent the vault is DISABLED — encrypt/decrypt
-// throw a clear error, and callers surface "vault disabled" rather than storing
-// plaintext.
+// Cipher: AES-256-GCM (authenticated). The master key comes from DSTP_SECRET_KEY,
+// read through FluxStack's declarative config (servicesConfig.vault.secretKey) so
+// there's a SINGLE, stable source of truth — not a raw/ambiguous env read. It must
+// stay stable across restarts: if it changes, every stored secret becomes
+// undecryptable. Empty = vault DISABLED (encrypt/decrypt throw a clear error and
+// callers surface "vault disabled" rather than storing plaintext).
 //
 // Stored format (single string):  v1:<iv_b64>:<tag_b64>:<ciphertext_b64>
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
+import { servicesConfig } from '@config/system/services.config'
 
 const VERSION = 'v1'
 const ALGO = 'aes-256-gcm'
@@ -24,11 +27,13 @@ const KDF_SALT = 'dstp.secret.vault.v1'
 
 let cachedKey: Buffer | null = null
 let cachedFrom: string | null = null
+// Test-only override (see __setKeyForTest). null = use the real config source.
+let testKeyOverride: string | null | undefined = undefined
 
 // Derive (and cache) the 32-byte AES key from DSTP_SECRET_KEY.
-// Returns null when the vault is disabled (env var missing/empty).
+// Returns null when the vault is disabled (key missing/empty).
 function getKey(): Buffer | null {
-  const raw = process.env.DSTP_SECRET_KEY
+  const raw = testKeyOverride !== undefined ? testKeyOverride : servicesConfig.vault.secretKey
   if (!raw || raw.trim() === '') return null
   if (cachedKey && cachedFrom === raw) return cachedKey
   // scrypt stretches whatever the user provides into a proper 32-byte key, so a
@@ -41,6 +46,20 @@ function getKey(): Buffer | null {
 // True when DSTP_SECRET_KEY is configured and the vault can encrypt/decrypt.
 export function isVaultEnabled(): boolean {
   return getKey() !== null
+}
+
+// Test-only: force the master key (bypassing config) so suites are deterministic
+// without touching the global env/config. Pass undefined to clear the override.
+export function __setKeyForTest(key: string | null | undefined): void {
+  testKeyOverride = key
+  cachedKey = null
+  cachedFrom = null
+}
+
+// Test-only: drop the derived-key cache.
+export function __resetKeyCache(): void {
+  cachedKey = null
+  cachedFrom = null
 }
 
 export class VaultDisabledError extends Error {

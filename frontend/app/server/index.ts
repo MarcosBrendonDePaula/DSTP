@@ -16,6 +16,7 @@ import { swaggerPlugin } from "@core/plugins/built-in/swagger"
 import { liveComponentsPlugin } from "@core/server/live"
 import { appInstance } from "@server/app"
 import { appConfig } from "@config"
+import { servicesConfig } from "@config/system/services.config"
 
 // 🔒 Auth provider para Live Components
 import { liveAuthManager } from "@core/server/live"
@@ -32,6 +33,9 @@ console.log('🔓 DevAuthProvider registered')
 
 // Inicializar sistema de autenticação
 initAuth()
+
+// Secrets vault status at boot (never logs the key itself).
+console.log(`[DSTP][VAULT] ${servicesConfig.vault.secretKey ? 'enabled (DSTP_SECRET_KEY set)' : 'DISABLED (no DSTP_SECRET_KEY)'}`)
 
 const framework = new FluxStackFramework()
   .use(swaggerPlugin)

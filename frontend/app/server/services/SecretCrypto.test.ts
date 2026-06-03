@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { encrypt, decrypt, isVaultEnabled, VaultDisabledError } from './SecretCrypto'
+import { encrypt, decrypt, isVaultEnabled, VaultDisabledError, __setKeyForTest } from './SecretCrypto'
 
-const ORIGINAL = process.env.DSTP_SECRET_KEY
+// The master key comes from FluxStack config (servicesConfig.vault.secretKey),
+// frozen at import. Tests override it deterministically via __setKeyForTest —
+// no env/config mutation, so suites can't leak a key into the environment.
+function setKey(v: string | undefined) { __setKeyForTest(v ?? null) }
 
 describe('SecretCrypto', () => {
-  beforeEach(() => { process.env.DSTP_SECRET_KEY = 'test-master-key-123' })
-  afterEach(() => {
-    if (ORIGINAL === undefined) delete process.env.DSTP_SECRET_KEY
-    else process.env.DSTP_SECRET_KEY = ORIGINAL
-  })
+  beforeEach(() => setKey('test-master-key-123'))
+  afterEach(() => __setKeyForTest(undefined)) // clear override → back to config
 
   it('round-trips a value', () => {
     const blob = encrypt('sk-ant-super-secret')
@@ -27,7 +27,7 @@ describe('SecretCrypto', () => {
 
   it('fails to decrypt with a different master key', () => {
     const blob = encrypt('secret')
-    process.env.DSTP_SECRET_KEY = 'a-totally-different-key'
+    setKey('a-totally-different-key')
     expect(() => decrypt(blob)).toThrow()
   })
 
@@ -42,7 +42,7 @@ describe('SecretCrypto', () => {
   })
 
   it('throws VaultDisabledError when the master key is absent', () => {
-    delete process.env.DSTP_SECRET_KEY
+    setKey(undefined)
     expect(isVaultEnabled()).toBe(false)
     expect(() => encrypt('x')).toThrow(VaultDisabledError)
     expect(() => decrypt('v1:a:b:c')).toThrow(VaultDisabledError)
