@@ -1,4 +1,5 @@
 import { TriggerNode } from './triggers/TriggerNode'
+import { WebhookNode } from './triggers/WebhookNode'
 import { ConditionNode } from './conditions/ConditionNode'
 import { ActionNode } from './actions/ActionNode'
 import { HttpRequestNode } from './actions/HttpRequestNode'
@@ -17,6 +18,7 @@ import { AIMemoryNode } from './ai/AIMemoryNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
+  webhook: WebhookNode,
   condition: ConditionNode,
   action: ActionNode,
   delay: DelayNode,

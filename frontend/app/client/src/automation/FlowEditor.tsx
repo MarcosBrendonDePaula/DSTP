@@ -79,6 +79,7 @@ const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
 }))
 
 const NODE_CATALOG: NodeCatalogItem[] = [
+  { type: 'webhook', label: 'Webhook', description: 'Dispara o fluxo por uma request HTTP externa.', category: 'Gatilhos', icon: '🪝', accent: 'text-green-400', data: { params: { method: 'ANY', token: '' } } },
   { type: 'condition', label: 'Condition', description: 'Divide o fluxo em verdadeiro/falso.', category: 'Logica', icon: '?', accent: 'text-yellow-400' },
   { type: 'wait', label: 'Wait / Merge', description: 'Espera outros eventos ou junta caminhos.', category: 'Logica', icon: '↔', accent: 'text-pink-400' },
   { type: 'delay', label: 'Delay', description: 'Pausa a execucao por um tempo.', category: 'Logica', icon: '⏱', accent: 'text-gray-400' },

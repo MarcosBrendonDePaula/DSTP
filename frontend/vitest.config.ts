@@ -29,6 +29,7 @@ export default defineConfig({
       'app/server/live/vault-context.test.ts',
       'app/server/routes/environments.routes.test.ts',
       'app/server/live/FlowEngine.e2e.test.ts',
+      'app/server/live/webhook.test.ts',
       '**/node_modules/**',
     ],
   },

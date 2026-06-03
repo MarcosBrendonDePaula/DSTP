@@ -5,6 +5,7 @@ import { authRoutes } from "./auth.routes"
 import { dstRoutes } from "./dst.routes"
 import { panelAuthRoutes } from "./panel-auth.routes"
 import { environmentsRoutes } from "./environments.routes"
+import { webhookRoutes } from "./webhook.routes"
 
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .get("/", () => ({ message: "🔥 Hot Reload funcionando! FluxStack API v1.4.0 ⚡" }), {
@@ -44,3 +45,4 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(usersRoutes)
   .use(roomRoutes)
   .use(dstRoutes)
+  .use(webhookRoutes)

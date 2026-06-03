@@ -146,9 +146,15 @@ export class FlowEngine {
     const flows = this.flowRepo(server_id).findEnabled()
 
     for (const flow of flows) {
-      const triggers = (flow.nodes as FlowNode[]).filter(n => n.type === 'trigger')
+      // Both `trigger` nodes (game events, matched by event_type) and `webhook`
+      // nodes (inbound HTTP, matched by node id == event.webhookId) act as entry
+      // points. From here on a matched node is just "the trigger" for the flow.
+      const triggers = (flow.nodes as FlowNode[]).filter(n => n.type === 'trigger' || n.type === 'webhook')
       for (const trigger of triggers) {
-        if (trigger.data.event_type === event.type) {
+        const matches = trigger.type === 'webhook'
+          ? (event.type === 'webhook' && event.webhookId === trigger.id)
+          : (trigger.data.event_type === event.type)
+        if (matches) {
           const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
           if (analysis.isSimple) {
             this.executeFlow(flow, trigger, event, server_id)

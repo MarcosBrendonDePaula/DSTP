@@ -41,6 +41,8 @@ const condition = (id: string, params: any): FlowNode =>
   ({ id, type: 'condition', data: { ...params }, position: { x: 0, y: 0 } } as any)
 const setVar = (id: string, params: any, data: any = {}): FlowNode =>
   ({ id, type: 'set_variable', data: { params, ...data }, position: { x: 0, y: 0 } } as any)
+const webhook = (id: string, params: any = {}): FlowNode =>
+  ({ id, type: 'webhook', data: { params }, position: { x: 0, y: 0 } } as any)
 const edge = (source: string, target: string, sourceHandle?: string): FlowEdge =>
   ({ id: `${source}->${target}${sourceHandle ? ':' + sourceHandle : ''}`, source, target, ...(sourceHandle ? { sourceHandle } : {}) } as any)
 
@@ -197,5 +199,44 @@ describe('FlowEngine e2e — context resolution', () => {
     await run(nodes, [edge('t', 'a')], { type: 'player_death', data: {} })
     expect(commands[0].data.message).toBe('100')
     expect(typeof commands[0].data.message).toBe('string')
+  })
+})
+
+describe('FlowEngine e2e — webhook trigger', () => {
+  it('fires a flow whose entry is a webhook node matching webhookId', async () => {
+    const nodes = [webhook('wh1'), action('a', 'announce', { message: 'pinged' })]
+    await run(nodes, [edge('wh1', 'a')], { type: 'webhook', webhookId: 'wh1', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual(['pinged'])
+  })
+
+  it('does NOT fire when the webhookId does not match', async () => {
+    const nodes = [webhook('wh1'), action('a', 'announce', { message: 'pinged' })]
+    await run(nodes, [edge('wh1', 'a')], { type: 'webhook', webhookId: 'other', data: {} })
+    expect(commands).toHaveLength(0)
+  })
+
+  it('does NOT fire a webhook node on a game event of the same payload', async () => {
+    const nodes = [webhook('wh1'), action('a', 'announce', { message: 'pinged' })]
+    // a non-webhook event must never trigger a webhook node
+    await run(nodes, [edge('wh1', 'a')], { type: 'player_death', webhookId: 'wh1', data: {} })
+    expect(commands).toHaveLength(0)
+  })
+
+  it('exposes the request body downstream as {{trigger.body.*}}', async () => {
+    const nodes = [webhook('wh1'), action('a', 'announce', { message: 'hi {{trigger.body.name}}' })]
+    await run(nodes, [edge('wh1', 'a')], {
+      type: 'webhook', webhookId: 'wh1',
+      data: { body: { name: 'Wilson' }, query: {}, headers: {}, method: 'POST' },
+    })
+    expect(commands[0].data.message).toBe('hi Wilson')
+  })
+
+  it('exposes query params downstream as {{trigger.query.*}}', async () => {
+    const nodes = [webhook('wh1'), action('a', 'announce', { message: 'q={{trigger.query.x}}' })]
+    await run(nodes, [edge('wh1', 'a')], {
+      type: 'webhook', webhookId: 'wh1',
+      data: { body: null, query: { x: '42' }, headers: {}, method: 'GET' },
+    })
+    expect(commands[0].data.message).toBe('q=42')
   })
 })

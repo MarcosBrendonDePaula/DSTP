@@ -68,6 +68,7 @@ function CollapsibleJson({ label, children, depth }: { label: string; children: 
 
 const nodeTypeMeta: Record<string, { icon: string; label: string; color: string }> = {
   trigger:      { icon: '⚡', label: 'Trigger',   color: '#22c55e' },
+  webhook:      { icon: '🪝', label: 'Webhook',   color: '#22c55e' },
   condition:    { icon: '❓', label: 'Condição',  color: '#eab308' },
   action:       { icon: '🎯', label: 'Ação',      color: '#3b82f6' },
   delay:        { icon: '⏱', label: 'Delay',     color: '#a855f7' },
