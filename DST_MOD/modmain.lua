@@ -94,12 +94,11 @@ AddPrefabPostInit("player_classified", function(inst)
             if not msg or msg == "" then return end
 
             -- Panel links: open the URL silently, do NOT echo to chat.
-            -- The link is built server-side from the backend's reported panel_url
-            -- (or the baked PANEL_URL fallback), so we accept the relay/backend
-            -- address or any https URL — never plain http to an arbitrary host.
+            -- The link is built server-side from the backend's reported panel_url,
+            -- so we trust it and open any http(s) URL — no host allowlist.
             if msg:sub(1, 7) == "Panel: " then
                 local url = msg:match("(https?://[%w%.%-_:/%?=&#]+)")
-                if url and (url:find(BACKEND_URL, 1, true) == 1 or url:find("https://", 1, true) == 1) then
+                if url then
                     GLOBAL.VisitURL(url)
                 end
                 return

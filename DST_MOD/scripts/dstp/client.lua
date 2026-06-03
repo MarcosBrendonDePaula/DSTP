@@ -1961,20 +1961,47 @@ SendPrivateMessage = function(player, message)
     end
 end
 
--- Fetch a one-shot magic link from the backend and call cb(url) with the final URL.
--- Falls back to the plain panel_url if the backend is unreachable.
-local function FetchPanelUrlWithToken(cb)
+-- Issue a one-shot magic link from the backend and call cb(url) with the final
+-- URL. `panel_base` is the resolved panel address (e.g. http://localhost:3000)
+-- already containing "/?server=...". Falls back to the plain base if the token
+-- request fails.
+local function IssueLinkAndBuild(panel_base, cb)
     local link_url = config.backend_url .. "/api/panel-auth/issue-link/" .. config.server_id
-    if DSTP._DEBUG then Log("FetchPanelUrl: GET " .. link_url) end
+    if DSTP._DEBUG then Log("IssueLink: GET " .. link_url) end
     _G.TheSim:QueryServer(link_url, function(result, is_ok, http_code)
-        local final_url = config.panel_url
+        local final_url = panel_base
         if is_ok and http_code == 200 and result then
             local ok, parsed = _G.pcall(_G.json.decode, result)
             if ok and parsed and parsed.token then
-                final_url = config.panel_url .. "&access=" .. tostring(parsed.token)
+                final_url = panel_base .. "&access=" .. tostring(parsed.token)
             end
         end
         cb(final_url)
+    end, "GET")
+end
+
+-- Fetch a one-shot magic link from the backend and call cb(url) with the final URL.
+-- Re-resolves the panel address from the relay (/relay-status -> upstream) at click
+-- time instead of trusting the value cached at boot. Without this, a #panel issued
+-- before the boot-time relay-status reply lands uses the provisional URL, which falls
+-- back to the prod domain (https://dstp.marcosbrendon.com) even on a dev/local relay.
+-- The two QueryServer calls are CHAINED (relay-status, then issue-link) so they never
+-- run concurrently — DST has very few concurrent QueryServer slots.
+local function FetchPanelUrlWithToken(cb)
+    local status_url = config.backend_url .. "/relay-status"
+    _G.TheSim:QueryServer(status_url, function(result, is_ok, http_code)
+        local panel_base = config.panel_url  -- fallback: whatever we resolved at boot
+        if is_ok and http_code == 200 and result then
+            local ok, parsed = _G.pcall(_G.json.decode, result)
+            if ok and parsed and type(parsed.upstream) == "string" and parsed.upstream ~= "" then
+                panel_base = parsed.upstream .. "/?server=" .. config.server_id
+                -- Refresh the cache too, so other paths benefit.
+                config.panel_url_base = parsed.upstream
+                config.panel_url = panel_base
+                if DSTP._DEBUG then Log("FetchPanelUrl: upstream resolved -> " .. tostring(panel_base)) end
+            end
+        end
+        IssueLinkAndBuild(panel_base, cb)
     end, "GET")
 end
 
