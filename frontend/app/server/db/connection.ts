@@ -43,7 +43,19 @@ setInterval(() => {
   }
 }, DB_CLEANUP_INTERVAL)
 
+// serverId becomes a filename (`<serverId>.sqlite`), so it MUST NOT contain path
+// separators or traversal sequences — otherwise a crafted id like "../../x" would
+// open/create a DB outside DATA_DIR. Allow only the charset real server ids use
+// (auto ids are "dst-<hex>", shards add ":"). Reject everything else loudly.
+const SAFE_SERVER_ID = /^[A-Za-z0-9:_-]+$/
+function assertSafeServerId(serverId: string): void {
+  if (typeof serverId !== 'string' || !SAFE_SERVER_ID.test(serverId)) {
+    throw new Error(`Invalid serverId: ${JSON.stringify(serverId)}`)
+  }
+}
+
 export function getDb(serverId: string) {
+  assertSafeServerId(serverId)
   const cached = dbCache.get(serverId)
   if (cached) {
     cached.lastAccess = Date.now()

@@ -43,7 +43,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:unit": "vitest run --config vitest.config.ts && bun test ./app/server/services/PanelAuthStore.test.ts",
+    "test:unit": "vitest run --config vitest.config.ts && bun test ./app/server/services/PanelAuthStore.test.ts ./app/server/db/repositories/EnvironmentRepository.test.ts ./app/server/db/connection.test.ts ./app/server/live/vault-context.test.ts ./app/server/routes/environments.routes.test.ts",
     "typecheck:api": "tsc --noEmit -p tsconfig.api-strict.json",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

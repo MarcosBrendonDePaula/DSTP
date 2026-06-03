@@ -194,6 +194,13 @@ Each DST server has 1-2 shards: master (overworld) and caves. The mod sends `sha
 - No authentication on `/api/dst/sync` — trusted local network only (the DST mod posts here).
 - The **admin panel** is gated by per-server auth: a password (hashed in `panel_auth`) plus cookie sessions, authorized per `server_id`. Setup token is announced per server on first `/dst/sync`. In-game magic links (`/panel-auth/issue-link`) let an admin grant access from chat. See `PanelAuthStore.ts`.
 
+### Secrets Vault (Environments)
+- **Environments** group encrypted secrets per server: `server → environments → secrets`. Stored encrypted at rest (AES-256-GCM, `SecretCrypto.ts`); the master key is `DSTP_SECRET_KEY` (env var, NOT in the DB/git). DB stolen without the key = useless blobs.
+- Reference in flows: `{{environment.<env>.<KEY>}}` (explicit) or `{{env.<KEY>}}` (the flow's `defaultEnvironmentId`). Decrypted **lazily at execution time** (`vault-context.ts`), never eagerly, never sent to the client (UI lists keys only, values are write-only).
+- **Masking** (`vault-mask.ts`): resolved secret values are scrubbed to `***` in every observable sink — logs, capture traces, WebSocket `STATE_DELTA`, masked `console.error`. Fail-closed via a per-worker global registry; linear (single regex) and size-capped to avoid DoS.
+- **Masking boundary — important:** masking defends against *accidental verbatim* leakage to observers (someone reading logs / stealing the DB). It is **NOT** a containment boundary against a flow author. The `script` node runs arbitrary JS and can transform a secret (`btoa(secret)`, slice it, `fetch()` it out) — those forms are intentionally not masked. A flow author is already an admin who can read the secret directly; that's accepted, same trust level as the `script` RCE.
+- Per-server DBs: `serverId` becomes a sqlite filename, so it's charset-validated in `getDb` (path-traversal defense). Secret values are length-bounded (`MIN_SECRET_LEN`..`MAX_SECRET_LEN`).
+
 ### DST-Specific
 - DST `Announce` is global. Private messaging built via `net_string` on `player_classified` (channel `dstp.pm`).
 - DST chat converts `/` to `#` — use `#tp nome` to test chat triggers. `find_player` node strips `#/!.` prefixes automatically.

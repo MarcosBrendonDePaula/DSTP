@@ -10,6 +10,7 @@ import { getAnalysis, type FlowAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { resolveValue, evaluateCondition as evalCondition, stripCommandPrefix } from './expressions'
 import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
+import { installVaultAccessors, maskSecrets } from './vault-context'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -30,11 +31,17 @@ export interface EngineHost {
 const MAX_STORE_KEYS = 500
 // Capture mode — when active, execution traces are collected and emitted at the end
 const MAX_CAPTURE_TRACE = 200
+// Upper bound for a delay node (1h). Prevents a flow holding an execution +
+// its resolved-secret context alive indefinitely.
+const MAX_DELAY_MS = 60 * 60 * 1000
 
 // Loop protection — see loop-guard.ts. The guard is stashed on the context
 // under this key so it rides along the recursion without changing 11 call
 // signatures. The __ prefix keeps it from colliding with user data paths.
 const LOOP_GUARD_KEY = '__loopGuard'
+// Per-execution capture buffer, stashed non-enumerably on the context (like the
+// loop guard) so concurrent flows don't share one engine-wide trace array.
+const CAPTURE_BUFFER_KEY = '__captureBuffer'
 
 // Editor inputs are always strings (React text fields), but the mod's commands
 // expect numbers for certain fields (heal amount, count, coords...). DoDelta("100")
@@ -74,7 +81,8 @@ export class FlowEngine {
 
   // Capture mode — when active, execution traces are collected and emitted at the end
   private _captureServerId: string | null = null
-  private _captureTrace: Array<{ nodeId: string; status: string; input: Record<string, any>; output: any; error?: string; timestamp: number }> = []
+  // Trace buffers are per-execution (on each context), not engine-wide — see
+  // captureBufferFor. The engine keeps only the on/off gate + auto-stop timer.
   private _captureTimeout: ReturnType<typeof setTimeout> | null = null
 
   // Shared storage between flows — Script nodes can read/write via context.store
@@ -155,7 +163,6 @@ export class FlowEngine {
 
   startCapture(serverId: string) {
     this._captureServerId = serverId
-    this._captureTrace = []
     // Auto-stop after 5 minutes to prevent unbounded memory growth
     if (this._captureTimeout) clearTimeout(this._captureTimeout)
     this._captureTimeout = setTimeout(() => this.stopCapture(serverId), 5 * 60 * 1000)
@@ -168,18 +175,34 @@ export class FlowEngine {
       this._captureTimeout = null
     }
     this._captureServerId = null
-    this._captureTrace = []
     this.host.emitState({ [`capture:${serverId}`]: null } as any)
   }
 
-  private pushTrace(serverId: string, nodeId: string, status: string, input: Record<string, any>, output: any, error?: string) {
+  // The capture buffer lives on each execution's context (non-enumerable), NOT on
+  // the engine — so concurrent flows in the same worker don't mix traces into a
+  // shared array (and one flow finishing can't steal/flush another's). The engine
+  // only holds the "is capture on for this server?" gate.
+  private captureBufferFor(context: Record<string, any> | undefined): Array<any> | null {
+    if (!context) return null
+    let buf: Array<any> = (context as any)[CAPTURE_BUFFER_KEY]
+    if (!buf) {
+      buf = []
+      Object.defineProperty(context, CAPTURE_BUFFER_KEY, { value: buf, enumerable: false, configurable: true })
+    }
+    return buf
+  }
+
+  private pushTrace(serverId: string, nodeId: string, status: string, input: Record<string, any>, output: any, error?: string, context?: Record<string, any>) {
     if (this._captureServerId !== serverId) return
-    if (this._captureTrace.length >= MAX_CAPTURE_TRACE) return
-    this._captureTrace.push({
+    const buf = this.captureBufferFor(context)
+    if (!buf || buf.length >= MAX_CAPTURE_TRACE) return
+    // Mask secrets at push time so plaintext never lands in the buffer.
+    const maskCtx = context ?? input
+    buf.push({
       nodeId,
       status,
-      input: { ...input },
-      output,
+      input: maskSecrets({ ...input }, maskCtx),
+      output: maskSecrets(output, maskCtx),
       error,
       timestamp: Date.now(),
     })
@@ -238,7 +261,7 @@ export class FlowEngine {
       if (node.type === 'wait') {
         // In simple flow mode (stopAtWait=false), wait nodes just pass through
         setContext(node.id, { waited: true, passthrough: true })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
@@ -251,7 +274,7 @@ export class FlowEngine {
       } else if (node.type === 'condition') {
         const result = this.evaluateCondition(node, context)
         setContext(node.id, { result, field: node.data.field, value: node.data.value })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const conditionOutEdges = edges.filter(e => e.source === node.id)
         for (const condEdge of conditionOutEdges) {
@@ -268,10 +291,13 @@ export class FlowEngine {
         }
 
       } else if (node.type === 'delay') {
-        const ms = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
+        const raw = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
+        // Clamp: no negative/NaN, and cap so a flow can't hold an execution (and
+        // its resolved-secret context) alive for an unbounded time.
+        const ms = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), MAX_DELAY_MS) : 0
         setContext(node.id, { delayed: true, ms })
         await new Promise(resolve => setTimeout(resolve, ms))
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
@@ -298,7 +324,7 @@ export class FlowEngine {
           setContext(node.id, { error: 'no userid provided' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
@@ -328,7 +354,7 @@ export class FlowEngine {
           setContext(node.id, { error: 'no name provided' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
@@ -364,7 +390,7 @@ export class FlowEngine {
           setContext(node.id, { error: 'invalid action or missing key' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
 
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
@@ -391,7 +417,7 @@ export class FlowEngine {
           }})
         }
         setContext(node.id, { rendered: true })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
         const outEdges = edges.filter(e => e.source === node.id)
         for (const edge of outEdges) {
           const nextNode = nodes.find(n => n.id === edge.target)
@@ -419,7 +445,7 @@ export class FlowEngine {
           this.host.pushCommand(serverId, 'ui_command', { userid, cmd: { action: 'create', type: 'tree', ...payload } })
         }
         setContext(node.id, { rendered: true, tree })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
         // Intentionally do not follow edges as actions.
 
       } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
@@ -436,7 +462,7 @@ export class FlowEngine {
           setContext(node.id, { executed: true, action: actionType })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id])
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
         executedActions.push(actionType)
 
         const outEdges = edges.filter(e => e.source === node.id)
@@ -449,7 +475,7 @@ export class FlowEngine {
         }
       }
     } catch (nodeErr: any) {
-      this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message)
+      this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message, context)
       throw nodeErr
     }
 
@@ -481,6 +507,8 @@ export class FlowEngine {
       _flowName: flow.name,
       _serverId: serverId,
     }
+    // Lazy {{environment.x.y}} / {{env.y}} accessors (decrypt on read, masked later).
+    installVaultAccessors(context, serverId)
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
     }
@@ -493,7 +521,7 @@ export class FlowEngine {
       }
     }
 
-    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger)
+    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
     try {
       const outEdges = edges.filter(e => e.source === trigger.id)
@@ -503,19 +531,20 @@ export class FlowEngine {
         await this.processNode(target, nodes, edges, context, serverId, executedActions, setContext, false)
       }
     } catch (err) {
-      console.error(`[DSTP Automation] Flow "${flow.name}" error:`, err)
+      console.error(`[DSTP Automation] Flow "${flow.name}" error:`, maskSecrets(String((err as any)?.message ?? err), context))
     }
 
-    // If capturing, emit the complete trace and stop capture
+    // If capturing, emit THIS execution's own trace (from its context buffer) and
+    // stop capture. Already masked at push time; mask the context snapshot too.
     if (this._captureServerId === serverId) {
+      const trace = (context as any)[CAPTURE_BUFFER_KEY] ?? []
       this.host.emitState({ [`capture:${serverId}`]: {
         active: false,
         flowId: flow.id,
-        trace: this._captureTrace,
-        context,
+        trace: maskSecrets(trace, context),
+        context: maskSecrets(context, context),
       }} as any)
       this._captureServerId = null
-      this._captureTrace = []
     }
 
     // Always log and update stats
@@ -526,7 +555,7 @@ export class FlowEngine {
       flowName: flow.name,
       eventType: event.type,
       actions: executedActions,
-      context,
+      context: maskSecrets(context, context),
     })
 
     this.syncState(serverId)
@@ -557,6 +586,7 @@ export class FlowEngine {
       _flowName: flow.name,
       _serverId: serverId,
     }
+    installVaultAccessors(context, serverId)
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
     }
@@ -569,7 +599,7 @@ export class FlowEngine {
       }
     }
 
-    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger)
+    this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
     try {
       // Walk from trigger, stopping at Wait nodes
@@ -603,7 +633,7 @@ export class FlowEngine {
             serverId,
             waitNode.id,
             trigger.id,
-            { ...context },
+            maskSecrets({ ...context }, context),
             waitConfig.mode || 'all',
             waitAnalysis.requiredTriggers,
             correlationMode,
@@ -624,7 +654,7 @@ export class FlowEngine {
         }
       }
     } catch (err) {
-      console.error(`[DSTP Automation] Flow "${flow.name}" stateful branch error:`, err)
+      console.error(`[DSTP Automation] Flow "${flow.name}" stateful branch error:`, maskSecrets(String((err as any)?.message ?? err), context))
     }
 
     // Log the branch arrival (not the full flow completion)
@@ -634,7 +664,7 @@ export class FlowEngine {
         flowName: flow.name,
         eventType: event.type,
         actions: [...executedActions, '_branch_arrived'],
-        context,
+        context: maskSecrets(context, context),
       })
     }
 
@@ -661,6 +691,10 @@ export class FlowEngine {
     if (waitNode.data.alias) {
       mergedContext[waitNode.data.alias] = waitOutput
     }
+    // The merged context came from serialized branch snapshots, which dropped the
+    // non-enumerable vault accessors — reinstall so post-wait nodes can resolve
+    // {{environment.x.y}} / {{env.y}} again (and secrets get masked in logs).
+    installVaultAccessors(mergedContext, serverId)
 
     const setContext = (nodeId: string, value: any) => {
       mergedContext[nodeId] = value
@@ -670,7 +704,7 @@ export class FlowEngine {
       }
     }
 
-    this.pushTrace(serverId, waitNode.id, 'completed', {}, waitOutput)
+    this.pushTrace(serverId, waitNode.id, 'completed', {}, waitOutput, undefined, mergedContext)
 
     try {
       // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
@@ -690,7 +724,7 @@ export class FlowEngine {
         await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
       }
     } catch (err) {
-      console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, err)
+      console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, maskSecrets(String((err as any)?.message ?? err), mergedContext))
     }
 
     // Log the post-wait execution
@@ -699,7 +733,7 @@ export class FlowEngine {
       flowName: flow.name,
       eventType: '_wait_satisfied',
       actions: executedActions,
-      context: mergedContext,
+      context: maskSecrets(mergedContext, mergedContext),
     })
 
     this.syncState(serverId)
@@ -1110,7 +1144,8 @@ export class FlowEngine {
 
       return result ?? { executed: true }
     } catch (err: any) {
-      console.error(`[DSTP Script] Error:`, err.message)
+      // Mask: a script can throw with a resolved secret embedded in the message.
+      console.error(`[DSTP Script] Error:`, maskSecrets(String(err?.message ?? err), context))
       return { error: err.message }
     }
   }

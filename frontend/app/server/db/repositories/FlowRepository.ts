@@ -27,7 +27,7 @@ export class FlowRepository {
       .filter(f => f.enabled)
   }
 
-  save(flow: { id: string; name: string; enabled: boolean; nodes: FlowNode[]; edges: FlowEdge[]; triggerCount?: number; lastTriggered?: Date | null }) {
+  save(flow: { id: string; name: string; enabled: boolean; nodes: FlowNode[]; edges: FlowEdge[]; triggerCount?: number; lastTriggered?: Date | null; defaultEnvironmentId?: number | null }) {
     const now = new Date()
     const existing = this.findById(flow.id)
 
@@ -38,6 +38,9 @@ export class FlowRepository {
           enabled: flow.enabled,
           nodes: flow.nodes,
           edges: flow.edges,
+          // Only overwrite the default environment when the caller provides the
+          // field (undefined = leave as-is); null explicitly clears it.
+          ...(flow.defaultEnvironmentId !== undefined ? { defaultEnvironmentId: flow.defaultEnvironmentId } : {}),
           updatedAt: now,
         })
         .where(eq(flows.id, flow.id))
@@ -52,6 +55,7 @@ export class FlowRepository {
           nodes: flow.nodes,
           edges: flow.edges,
           triggerCount: 0,
+          defaultEnvironmentId: flow.defaultEnvironmentId ?? null,
           createdAt: now,
           updatedAt: now,
         })

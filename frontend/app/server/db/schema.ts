@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // ─── Flows ───────────────────────────────────────────
 
@@ -11,6 +11,10 @@ export const flows = sqliteTable('flows', {
   edges: text('edges', { mode: 'json' }).notNull().$type<FlowEdge[]>().default([]),
   triggerCount: integer('trigger_count').notNull().default(0),
   lastTriggered: integer('last_triggered', { mode: 'timestamp_ms' }),
+  // Default environment for {{env.KEY}} resolution in this flow. References
+  // environments.id; null means the flow has no default (only {{environment.x.y}}
+  // explicit refs will resolve).
+  defaultEnvironmentId: integer('default_environment_id'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
@@ -69,6 +73,36 @@ export const flowMemory = sqliteTable('flow_memory', {
 })
 
 export type FlowMemoryEntry = typeof flowMemory.$inferSelect
+
+// ─── Environments + Secrets (encrypted vault, per server) ────
+// Two levels: an `environments` group (e.g. "prod", "dev") holds N secrets.
+// Each secret's `valueEnc` is the "v1:iv:tag:ciphertext" blob (AES-256-GCM via
+// SecretCrypto) — never plaintext. Decrypted lazily only when a node references
+// {{environment.ENV.KEY}} (explicit) or {{env.KEY}} (from the active env) at
+// execution time. One environment per server may be flagged active.
+
+export const environments = sqliteTable('environments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  serverId: text('server_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+}, (t) => ({
+  serverNameUnique: uniqueIndex('environments_server_name_unique').on(t.serverId, t.name),
+}))
+
+export const environmentSecrets = sqliteTable('environment_secrets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  environmentId: integer('environment_id').notNull(),
+  key: text('key').notNull(),
+  valueEnc: text('value_enc').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+}, (t) => ({
+  envKeyUnique: uniqueIndex('environment_secrets_env_key_unique').on(t.environmentId, t.key),
+}))
+
+export type EnvironmentRow = typeof environments.$inferSelect
+export type EnvironmentSecretRow = typeof environmentSecrets.$inferSelect
 
 // ─── Panel Auth (per-server password) ────────────────
 
