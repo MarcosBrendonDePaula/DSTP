@@ -73,14 +73,14 @@ describe('replaySyncs', () => {
     }]
   }
 
-  it('replays a captured event through a saved flow and produces its command', () => {
+  it('replays a captured event through a saved flow and produces its command', async () => {
     new FlowRepository(SERVER).save({
       id: 'f1', name: 'f1', enabled: true,
       nodes: [trigger('t', 'player_death'), action('a', 'announce', { message: 'RIP {{trigger.userid}}' })],
       edges: [edge('t', 'a')],
     })
     const rec = recordingWith([{ type: 'player_death', data: { userid: 'KU_9' } }])
-    const r: ReplayResult = replaySyncs(SERVER, rec)
+    const r: ReplayResult = await replaySyncs(SERVER, rec)
 
     expect(r.events).toBe(1)
     expect(r.commands).toHaveLength(1)
@@ -88,7 +88,7 @@ describe('replaySyncs', () => {
     expect(r.byEventType['player_death']).toHaveLength(1)
   })
 
-  it('feeds the recorded player snapshot to get_player during replay', () => {
+  it('feeds the recorded player snapshot to get_player during replay', async () => {
     new FlowRepository(SERVER).save({
       id: 'f2', name: 'f2', enabled: true,
       nodes: [
@@ -102,15 +102,33 @@ describe('replaySyncs', () => {
       [{ type: 'chat_message', data: {} }],
       [{ userid: 'KU_1', name: 'Wilson', health: 73 }],
     )
-    const r = replaySyncs(SERVER, rec)
+    const r = await replaySyncs(SERVER, rec)
     expect(r.commands[0]).toMatchObject({ type: 'announce', data: { message: 'hp=73' } })
   })
 
-  it('ignores syncs for other servers', () => {
+  it('captures commands from nodes AFTER an async (script) node', async () => {
+    // Regression: replaySyncs used to read commands synchronously right after
+    // evaluateEvent, so a flow that awaits (script node) lost every node past the
+    // await. Here the announce runs only after the script's await resolves.
+    new FlowRepository(SERVER).save({
+      id: 'f_async', name: 'f_async', enabled: true,
+      nodes: [
+        { id: 't', type: 'trigger', data: { event_type: 'player_death' }, position: { x: 0, y: 0 } } as any,
+        { id: 's', type: 'script', data: { action_type: 'script', params: { code: 'function run(c){ return { ok: 1 }; }' } }, position: { x: 0, y: 0 } } as any,
+        action('a', 'announce', { message: 'after-script' }),
+      ],
+      edges: [edge('t', 's'), edge('s', 'a')],
+    })
+    const rec = recordingWith([{ type: 'player_death', data: { userid: 'KU_1' } }])
+    const r = await replaySyncs(SERVER, rec)
+    expect(r.commands.map(c => c.type)).toContain('announce')
+  })
+
+  it('ignores syncs for other servers', async () => {
     const rec = [
       { t: 0, server_id: 'other', shard_id: 'other:master', shard_type: 'master', server: {}, players: [], events: [{ type: 'player_death', data: {} }] },
     ] as any
-    const r = replaySyncs(SERVER, rec)
+    const r = await replaySyncs(SERVER, rec)
     expect(r.syncs).toBe(0)
     expect(r.events).toBe(0)
   })

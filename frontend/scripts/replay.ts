@@ -27,7 +27,7 @@ if (!serverArg && servers.length > 1) {
   console.log(`(no server_id given — replaying "${serverId}"; pass one to pick)`)
 }
 
-const result = replaySyncs(serverId, recording)
+const result = await replaySyncs(serverId, recording)
 
 console.log(`\n▶ Replayed ${serverId}: ${result.syncs} syncs, ${result.events} events`)
 console.log(`  → ${result.commands.length} command(s) produced by flows\n`)

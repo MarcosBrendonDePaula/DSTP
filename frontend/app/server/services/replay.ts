@@ -35,10 +35,18 @@ export function loadRecording(path: string): RecordedSync[] {
   return parseRecording(readFileSync(path, 'utf8'))
 }
 
+// Drain pending async flow work. evaluateEvent is fire-and-forget and a flow can
+// await (script/http_request/delay nodes), so nodes AFTER an async one run on a
+// later microtask/timer. Without this, replay captures only the commands emitted
+// synchronously before the first await and silently drops the rest.
+const settle = (ms = 10) => new Promise<void>(r => setTimeout(r, ms))
+
 // Replay recorded syncs for ONE server against a fresh engine. The engine reads
 // flows from that server's real db (FlowRepository), so the replay reflects the
-// flows currently saved. Returns every command the flows emitted.
-export function replaySyncs(serverId: string, recording: RecordedSync[]): ReplayResult {
+// flows currently saved. Returns every command the flows emitted. Async because
+// flows can await — we settle the event loop after each event so post-await nodes
+// are captured.
+export async function replaySyncs(serverId: string, recording: RecordedSync[]): Promise<ReplayResult> {
   const commands: ReplayCommand[] = []
   const byEventType: Record<string, ReplayCommand[]> = {}
 
@@ -70,6 +78,8 @@ export function replaySyncs(serverId: string, recording: RecordedSync[]): Replay
       const before = commands.length
       engine.evaluateEvent(serverId, evt)
       eventCount++
+      // Let the (possibly async) flow finish before attributing its commands.
+      await settle()
       const produced = commands.slice(before)
       if (produced.length) {
         (byEventType[evt.type] ??= []).push(...produced)
