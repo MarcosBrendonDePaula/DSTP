@@ -23,19 +23,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph host["DST Host machine"]
+        client["DST Client<br/>PM, UI widgets, HUD"]
+        server["DST Server (Cluster)<br/>mod Lua"]
+        client -. "net_string<br/>(player_classified)" .-> server
+        server -. "RPC UICallback" .-> client
+    end
+
+    subgraph back["Backend (Bun + Elysia)"]
+        api["POST /dst/sync"]
+        worker["1 Worker per server<br/>FlowEngine, automation"]
+        db[("SQLite<br/>1 db per server")]
+        api <--> worker
+        worker <--> db
+    end
+
+    panel["Admin Panel (React)<br/>Live Components"]
+
+    server -- "POST /dst/sync<br/>state + events" --> api
+    api -- "commands + enable_events<br/>(same HTTP response)" --> server
+    back <-- "WebSocket<br/>STATE_DELTA" --> panel
 ```
-DST Client          DST Server (Cluster)      Backend (Bun)      Admin Panel (React)
-    │                      │                       │                    │
-    │← net_string ─────────│                       │                    │
-    │  (PM / UI widgets)   │                       │                    │
-    │                      │─ POST /dst/sync ─────→│                    │
-    │                      │  (state + events)     │                    │
-    │                      │← {commands,           │                    │
-    │                      │   enable_events} ─────│                    │
-    │─ RPC UICallback ────→│                       │                    │
-    │                      │                       │← WebSocket ────────│
-    │                      │                       │─ STATE_DELTA ─────→│
-```
+
+One HTTP cycle of `/dst/sync` carries both directions: the game POSTs its state +
+events, and the backend's response carries the queued commands + the event
+categories to enable. The panel talks to the backend over WebSocket (Live
+Components), never to the game directly.
 
 Two separate codebases in one repo:
 

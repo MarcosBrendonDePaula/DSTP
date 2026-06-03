@@ -2,191 +2,205 @@
 
 # 🎮 DSTP — Don't Starve Together Panel
 
-**Painel web de administração + motor de automação visual para servidores de Don't Starve Together.**
+**Web admin panel + visual automation engine for Don't Starve Together servers.**
 
-Gerencie players, mundo e chat, crie automações com fluxos visuais, e construa **UI dentro do jogo** — tudo pelo navegador.
+Manage players, world and chat, build automations with visual flows, and create **in-game UI** — all from the browser.
 
-`Bun` · `Elysia` · `React 19` · `React Flow` · `SQLite / Drizzle` · `Mod Lua DST`
+`Bun` · `Elysia` · `React 19` · `React Flow` · `SQLite / Drizzle` · `DST Lua mod`
 
 </div>
 
 ---
 
-## ✨ O que é
+## ✨ What it is
 
-DSTP conecta um **mod Lua** rodando no servidor DST a um **painel web full-stack**. O mod faz polling HTTP (a única forma de rede permitida pelo sandbox do DST), enviando estado e eventos do jogo; o backend responde com comandos. Em cima disso, um **editor de fluxos visual** (estilo n8n) deixa você automatizar a lógica do servidor sem escrever código — e até **desenhar interfaces que aparecem na tela dos jogadores**.
+DSTP connects a **Lua mod** running on the DST server to a **full-stack web panel**. The mod polls over HTTP (the only networking the DST sandbox allows), sending game state and events; the backend replies with commands. On top of that, a **visual flow editor** (n8n-style) lets you automate server logic without writing code — and even **draw interfaces that show up on players' screens**.
 
-> **Não é** um compilador de mods. Os fluxos rodam no backend e mandam comandos/UI pro jogo. É um painel de controle + automação, não geração de Lua.
+> **It is NOT** a mod compiler. Flows run on the backend and send commands/UI to the game. It's a control + automation panel, not Lua generation.
 
-## 🏗 Arquitetura
+## 🏗 Architecture
 
+```mermaid
+flowchart TB
+    subgraph host["DST Host machine"]
+        client["DST Client<br/>PM, widgets, HUD"]
+        server["DST Server<br/>mod Lua"]
+        client -. "net_string<br/>(player_classified)" .-> server
+        server -. "RPC UICallback" .-> client
+    end
+
+    subgraph back["Backend (Bun + Elysia)"]
+        api["POST /dst/sync"]
+        worker["1 Worker per server<br/>FlowEngine, automation"]
+        db[("SQLite<br/>1 db per server")]
+        api <--> worker
+        worker <--> db
+    end
+
+    panel["Admin Panel (React)<br/>Live Components"]
+
+    server -- "POST /dst/sync<br/>state + events" --> api
+    api -- "commands + enable_events<br/>(same HTTP response)" --> server
+    back <-- "WebSocket<br/>STATE_DELTA" --> panel
 ```
-   DST Client  ◄── net_string ──┐
-       │  (PM, widgets, HUD)     │
-       ▼                         │
-   DST Server (mod Lua) ── POST /dst/sync ──►  Backend (Bun + Elysia)
-       ▲   estado + eventos        {commands,     │  SQLite (1 db/servidor)
-       └────────── comandos ───────  enable_events}│  1 Worker por servidor
-                                                    ▼
-                                         Painel Admin (React)
-                                         ◄── WebSocket (Live Components)
-```
 
-- **Sandbox do DST:** `TheSim:QueryServer` só permite `127.0.0.1`/`localhost`. Para hospedar central (um backend, vários servidores), cada host roda o **relay** (forwarder nativo em Rust, ~2MB) que escuta local e repassa ao backend. O relay vive em repo separado: [`dstp-relay`](https://github.com/MarcosBrendonDePaula/dstp-relay).
-- **Um worker por servidor:** cada servidor DST processa seus fluxos num Bun Worker dedicado e isolado (ver `WORKERS.md`).
-- **Bidirecional num só ciclo HTTP:** o jogo POSTa estado+eventos e recebe comandos na mesma resposta. Sem conexão direta.
+- **DST sandbox:** `TheSim:QueryServer` only allows `127.0.0.1`/`localhost`. To host centrally (one backend, many servers), each host runs the **relay** (a tiny ~2MB native Rust forwarder) that listens locally and forwards to the backend. The relay lives in a separate repo: [`dstp-relay`](https://github.com/MarcosBrendonDePaula/dstp-relay).
+- **One worker per server:** each DST server processes its flows in a dedicated, isolated Bun Worker (see `WORKERS.md`).
+- **Bidirectional in a single HTTP cycle:** the game POSTs state + events and gets commands back in the same response. No direct connection.
 
 ---
 
-## 🚀 Recursos
+## 🚀 Features
 
-### 🛠 Administração em tempo real
-- Estado ao vivo: players (vitais, posição, inventário, idade, admin), mundo (dia/fase/estação), multi-shard (overworld + caves agrupados em abas)
-- **56 ações** de comando: heal, feed, godmode, kick, ban, respawn, give/remove item, teleport, set_phase/season, skip_day, rollback, regenerate, lightning, spawn…
-- Mensagens privadas e anúncios; chat capturado em tempo real
-- **Auth por servidor** (senha + sessões; magic-link in-game via `#panel`)
+### 🛠 Real-time administration
+- Live state: players (vitals, position, inventory, age, admin), world (day/phase/season), multi-shard (overworld + caves grouped into tabs)
+- **56 command actions**: heal, feed, godmode, kick, ban, respawn, give/remove item, teleport, set_phase/season, skip_day, rollback, regenerate, lightning, spawn…
+- Private messages and announcements; chat captured in real time
+- **Per-server auth** (password + sessions; in-game magic-link via `#panel`)
 
-### ⚡ Automação visual (fluxos)
-Editor drag-and-drop estilo n8n. **11 tipos de nó**, **74 triggers**, **56 ações**.
+### ⚡ Visual automation (flows)
+n8n-style drag-and-drop editor. **11 node types**, **74 triggers**, **56 actions**.
 
-- **Triggers** em 13 categorias: players, chat, combat, crafting, inventory, health, gathering, world, weather, bosses, survival, character, exploration, ui, **economy**
-- **Nós:** trigger · condition · action · delay · http_request · set_variable · **script (JS via Monaco)** · get_player · find_player · memory (SQLite persistente) · wait/merge
-- **Contexto estilo n8n:** `{{node.campo}}` / `{{alias.campo}}`, resolução de caminho profundo, tipos preservados
-- **Captura/debug** de traces por nó; **auto-ativação** de categorias de evento quando um fluxo precisa
-- **Stateful Wait/Merge:** correlação multi-branch com timeout
+- **Triggers** across 13 categories: players, chat, combat, crafting, inventory, health, gathering, world, weather, bosses, survival, character, exploration, ui, **economy**
+- **Nodes:** trigger · condition · action · delay · http_request · set_variable · **script (JS via Monaco)** · get_player · find_player · memory (persistent SQLite) · wait/merge
+- **n8n-style context:** `{{node.field}}` / `{{alias.field}}`, deep-path resolution, types preserved
+- **Capture/debug** per-node traces; **auto-activation** of event categories when a flow needs them
+- **Stateful Wait/Merge:** multi-branch correlation with timeout
+- **Encrypted Environments vault** for secrets (API keys/tokens), referenced as `{{environment.ENV.KEY}}` / `{{env.KEY}}`
 
-### 🖥 UI dentro do jogo — *construída por fluxos*
-- **🎨 UI Builder** — monta a interface inteira **num único nó**, com editor de árvore visual (canvas limpo)
-- **Renderer genérico** client-side com **auto-layout**: painel, coluna, linha, **abas**, texto, **ícone de item real**, imagem, botão, barra de progresso, espaço
-- **`ui_set`** — atualiza **qualquer propriedade** de qualquer nó em tempo real, sem redesenhar (saldo, barra de vida, mostrar/esconder)
-- **Clique em qualquer widget** → vira trigger `ui_callback` no fluxo
-- **Tabs** client-side (troca sem round-trip) e **follow-entity** (HUD que segue um mob/boss no mundo)
-- **Rules engine** declarativa: HUD reativo local (HP bar ao vivo) sem ida ao backend
+### 🖥 In-game UI — *built by flows*
+- **🎨 UI Builder** — assemble the whole interface **in a single node**, with a visual tree editor (clean canvas)
+- **Generic client-side renderer** with **auto-layout**: panel, column, row, **tabs**, text, **real item icon**, image, button, progress bar, spacer
+- **`ui_set`** — update **any property** of any node in real time, without redrawing (balance, health bar, show/hide)
+- **Click any widget** → becomes a `ui_callback` trigger in the flow
+- Client-side **tabs** (switch with no round-trip) and **follow-entity** (a HUD that tracks a mob/boss in the world)
+- Declarative **rules engine**: reactive local HUD (live HP bar) with no backend round-trip
 
-### 🔗 Bindings — dados server-only no cliente
-O DST **não replica** dados como vida de mob pro cliente. O sistema de **bindings** adiciona netvars próprios para trafegar dados server-only ao cliente — genérico e seguro (catálogo curado, gate por prefab).
+### 🔗 Bindings — server-only data on the client
+DST does **not** replicate data like mob health to the client. The **bindings** system adds its own netvars to ship server-only data to the client — generic and safe (curated catalog, gated by prefab).
 
-- Hoje: **vida de mob** → barra de HP real sobre criaturas, descendo conforme o dano
-- Adicionar um dado novo = uma entrada de config (source + binding), sem mexer na lógica
+- Today: **mob health** → real HP bar above creatures, dropping as they take damage
+- Adding new data = one config entry (source + binding), no logic changes
 
-### 🎒 Inventário & economia
-- Kit completo: count · has · give · equip · unequip · drop · clear · **remove N de prefab (atômico)** · transfer · dump_inventory
-- **Lojinha de exemplo** completa: comprar/vender com **ícones reais**, abas, **saldo ao vivo**, quantidade em inventário por item, débito atômico de item real **ou** moeda virtual (memory)
+### 🎒 Inventory & economy
+- Full kit: count · has · give · equip · unequip · drop · clear · **remove N of prefab (atomic)** · transfer · dump_inventory
+- Complete **example shop**: buy/sell with **real icons**, tabs, **live balance**, per-item inventory count, atomic debit of a real item **or** virtual currency (memory)
 
 ---
 
-## 🏁 Começando
+## 🏁 Getting started
 
 ```bash
-# painel + backend (porta 3000)
+# panel + backend (port 3000)
 cd frontend && bun install && bun run dev
 
 # type-check / migrations
 cd frontend && bunx tsc --noEmit
-cd frontend && bun run db:generate   # gera migration do schema
-cd frontend && bun run db:studio     # GUI do banco
+cd frontend && bun run db:generate   # generate migration from schema
+cd frontend && bun run db:studio     # database GUI
 
-# copiar o mod pra pasta do DST (após mudar Lua)
+# copy the mod into the DST folder (after changing Lua)
 cp DST_MOD/scripts/dstp/*.lua "<DST>/mods/DSTP/scripts/dstp/"
 cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "<DST>/mods/DSTP/"
 ```
 
-Habilite no `modoverrides.lua`:
+Enable it in `modoverrides.lua`:
 ```lua
 ["DSTP"] = { enabled = true, configuration_options = {
     SERVER_ID = "auto",
-    POLL_INTERVAL = 0.5,   -- 0.1 a 30s (relay permite sub-segundo)
+    POLL_INTERVAL = 0.5,   -- 0.1 to 30s (the relay allows sub-second)
     EVT_PLAYERS = true, EVT_CHAT = true, EVT_WORLD = true,
-    -- demais categorias OFF por padrão; fluxos ativam o que precisam
+    -- other categories OFF by default; flows activate what they need
 }},
 ```
 
-Abra `http://localhost:3000/?server=<SERVER_ID>` — o painel conecta sozinho quando o servidor começa a sincronizar.
+Open `http://localhost:3000/?server=<SERVER_ID>` — the panel connects on its own once the server starts syncing.
 
 ---
 
-## 📦 Estrutura
+## 📦 Structure
 
 ```
-DST_MOD/                          # mod DST (Lua)
+DST_MOD/                          # DST mod (Lua)
   modinfo.lua, modmain.lua        #   config, entrypoint, netvars, bindings
   scripts/dstp/
-    client.lua                    #   bridge HTTP, ~40 comandos, listeners (server-side)
-    ui_widgets.lua                #   renderer de UI client-side (árvore + auto-layout + follow)
-    rules_engine.lua              #   regras declarativas when/do (reativo no cliente)
-  specs/                          #   conhecimento técnico não-óbvio — LER antes de mexer
-frontend/                         # app FluxStack (Bun + Elysia + React 19)
+    client.lua                    #   HTTP bridge, ~40 commands, listeners (server-side)
+    ui_widgets.lua                #   client-side UI renderer (tree + auto-layout + follow)
+    rules_engine.lua              #   declarative when/do rules (reactive on the client)
+  specs/                          #   non-obvious technical knowledge — READ before changing
+frontend/                         # FluxStack app (Bun + Elysia + React 19)
   app/server/live/                #   LiveDSTP, LiveAutomation, FlowEngine, ServerCoreManager
-  app/server/db/                  #   Drizzle schema, repositories, migrations (1 db/servidor)
-  app/client/src/automation/      #   editor React Flow, nós, UI Builder
-# (o relay vive em repo separado: github.com/MarcosBrendonDePaula/dstp-relay)
-examples/flows/                   # fluxos .dstp.json de exemplo
+  app/server/db/                  #   Drizzle schema, repositories, migrations (1 db per server)
+  app/client/src/automation/      #   React Flow editor, nodes, UI Builder
+# (the relay lives in a separate repo: github.com/MarcosBrendonDePaula/dstp-relay)
+examples/flows/                   # example .dstp.json flows
 docs/                             # AUTOMATION.md, WORKERS.md, IDEAS.md
 ```
 
 ## 🧰 Stack
 
-| Camada | Tech |
-|--------|------|
-| Mod | Lua 5.1 (sandbox DST) — HTTP via `TheSim:QueryServer` |
+| Layer | Tech |
+|-------|------|
+| Mod | Lua 5.1 (DST sandbox) — HTTP via `TheSim:QueryServer` |
 | Backend | Bun + Elysia + FluxStack Live Components |
-| Banco | SQLite (`bun:sqlite`) + Drizzle ORM (1 db por servidor) |
+| Database | SQLite (`bun:sqlite`) + Drizzle ORM (1 db per server) |
 | Frontend | React 19 + Vite + Tailwind |
-| Editor de fluxo | React Flow (xyflow) · código em Monaco |
+| Flow editor | React Flow (xyflow) · Monaco for code |
 
-## 📚 Documentação
+## 📚 Documentation
 
-| Doc | Conteúdo |
+| Doc | Contents |
 |-----|----------|
-| `CLAUDE.md` | Visão geral, arquitetura, regras do projeto |
-| `docs/AUTOMATION.md` · `docs/WORKERS.md` | Motor de automação · workers por servidor |
-| `docs/IDEAS.md` | Lista completa de ideias futuras |
-| `DST_MOD/specs/dst-client-constraints.md` | **Ler antes de mexer em UI/rede** — o que o cliente DST vê/não vê, armadilhas de netvar |
-| `DST_MOD/specs/ui-by-nodes.md` · `ui-system.md` | UI por fluxos e contrato da árvore de widgets |
-| `DST_MOD/specs/dynamic-data-bindings.md` · `data-catalog.md` | Sistema de bindings e quais dados vale replicar |
+| `CLAUDE.md` | Overview, architecture, project rules |
+| `docs/AUTOMATION.md` · `docs/WORKERS.md` | Automation engine · per-server workers |
+| `docs/IDEAS.md` | Full list of future ideas |
+| `DST_MOD/specs/dst-client-constraints.md` | **Read before touching UI/networking** — what the DST client sees/doesn't, netvar pitfalls |
+| `DST_MOD/specs/ui-by-nodes.md` · `ui-system.md` | UI by flows and the widget-tree contract |
+| `DST_MOD/specs/dynamic-data-bindings.md` · `data-catalog.md` | Bindings system and which data is worth replicating |
 
 ---
 
 ## 🗺 Roadmap
 
-### ✅ Feito
-- Painel admin em tempo real, multi-shard, auth por servidor
-- Motor de automação n8n-style: 11 nós, captura/debug, stateful Wait/Merge
-- Worker isolado por servidor; relay com auto-reconnect
-- **UI por fluxos**: UI Builder, renderer genérico, `ui_set`, tabs, follow-entity
-- **Lojinha** comprar/vender com ícones, saldo ao vivo, inventário real
-- **Bindings**: vida de mob replicada ao cliente (barra de HP real)
-- HUD de jogador ao vivo (posição, vitais, moedas, dia)
+### ✅ Done
+- Real-time admin panel, multi-shard, per-server auth
+- n8n-style automation engine: 11 nodes, capture/debug, stateful Wait/Merge
+- Isolated worker per server; relay with auto-reconnect
+- **UI by flows**: UI Builder, generic renderer, `ui_set`, tabs, follow-entity
+- Buy/sell **shop** with icons, live balance, real inventory
+- **Bindings**: mob health replicated to the client (real HP bar)
+- Live player HUD (position, vitals, coins, day)
+- **Encrypted Environments vault** for flow secrets
 
-### 🔜 Próximo (caminho claro)
-- **Interface de autoria de bindings** — declarar dados a replicar pelo painel, sem editar Lua
-- **Mais sources no catálogo** (sob demanda, só quando uma UI consumir): vida de outros players, combustível de fogueira, timer de crockpot/plantação, frescor de comida
-- **Nós Switch/Router, Loop, Aggregator** — fluxos mais expressivos (`IDEAS.md`)
-- Monitoramento de desempenho do servidor no painel
-- Light mode · mobile responsive · multi-idioma
+### 🔜 Next (clear path)
+- **Bindings authoring UI** — declare data to replicate from the panel, no Lua editing
+- **More catalog sources** (on demand, only when a UI consumes them): other players' health, campfire fuel, crockpot/plant timers, food freshness
+- **Switch/Router, Loop, Aggregator nodes** — more expressive flows (`IDEAS.md`)
+- Server performance monitoring in the panel
+- Light mode · mobile responsive · multi-language
 
-### 🔮 Futuro / exploratório
-- **Sistema de plugins** — pacotes que registram triggers, ações, painéis e Live Components; descoberta automática em `plugins/`
-- Plugins prontos: Economy · Voting · Auto-Ban (anti-grief) · Boss Timer · Welcome Kit · Scheduler · Stats Dashboard
-- **Mapa 2D do mundo** no browser com posição dos players em tempo real
-- Multi-user com permissões (admin/moderator/viewer), audit log, API REST pública
-- Deploy via Docker, backup automático dos DBs, delta-sync / compressão do payload
-- Inventário drag-and-drop, console Lua remoto com autocomplete, spawn por clique no mapa
+### 🔮 Future / exploratory
+- **Plugin system** — packages that register triggers, actions, panels and Live Components; auto-discovery in `plugins/`
+- Ready-made plugins: Economy · Voting · Auto-Ban (anti-grief) · Boss Timer · Welcome Kit · Scheduler · Stats Dashboard
+- **2D world map** in the browser with live player positions
+- Multi-user with permissions (admin/moderator/viewer), audit log, public REST API
+- Docker deploy, automatic DB backups, delta-sync / payload compression
+- Drag-and-drop inventory, remote Lua console with autocomplete, click-to-spawn on the map
 
 ---
 
-## ⚠️ Constraints que vale saber (resumo)
+## ⚠️ Constraints worth knowing (summary)
 
-- **HTTP só pra `127.0.0.1`** (sandbox) → use o `relay/`.
-- **Vida de mob não é replicada** pro cliente nativamente → resolvida via bindings.
-- **Netvars são posicionais** → adicione sempre gateando por `inst.prefab` (tag/replica/components dessincronizam e crasham). Detalhes em `specs/dst-client-constraints.md`.
+- **HTTP only to `127.0.0.1`** (sandbox) → use the relay.
+- **Mob health is not replicated** to the client natively → solved via bindings.
+- **Netvars are positional** → always add them gated by `inst.prefab` (tags/replicas/components desync and crash). Details in `specs/dst-client-constraints.md`.
 
 ---
 
 <div align="center">
 
-Feito para a comunidade DST 🪓 — um painel que o jogo não tem nativamente.
+Built for the DST community 🪓 — a panel the game doesn't ship with.
 
-**Licença:** MIT
+**License:** MIT
 
 </div>
