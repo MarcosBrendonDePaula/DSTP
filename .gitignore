@@ -12,3 +12,6 @@ node_modules/
 *.bun-build
 *.exe
 dist/
+
+# Local relay dev binary (built from the dstp-relay repo)
+relay-dev/
