@@ -6,10 +6,11 @@ const typeColors: Record<string, { bg: string; border: string; accent: string }>
   action: { bg: '#0d0d1f', border: '#3b82f630', accent: '#3b82f6' },
   delay: { bg: '#1a1518', border: '#a855f730', accent: '#a855f7' },
   wait: { bg: '#1a0d1f', border: '#ec489930', accent: '#ec4899' },
+  ai_agent: { bg: '#170d1f', border: '#d946ef30', accent: '#d946ef' },
 }
 
 interface BaseNodeProps {
-  type: 'trigger' | 'condition' | 'action' | 'delay' | 'wait'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'wait' | 'ai_agent'
   icon: string
   label: string
   selected?: boolean

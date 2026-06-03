@@ -11,6 +11,7 @@ import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { resolveValue, evaluateCondition as evalCondition, stripCommandPrefix } from './expressions'
 import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 import { installVaultAccessors, maskSecrets } from './vault-context'
+import { executeAIAgent } from './ai/executeAIAgent'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -447,6 +448,37 @@ export class FlowEngine {
         setContext(node.id, { rendered: true, tree })
         this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
         // Intentionally do not follow edges as actions.
+
+      } else if (node.type === 'ai_agent') {
+        // Agentic loop: the tools are the nodes wired into this node's `tools`
+        // input handle. The model fills params; we execute the real node.
+        const output = await executeAIAgent(node, nodes, edges, context, {
+          resolve: (tpl, ctx) => this.resolveValue(tpl, ctx),
+          runTool: (toolNode, args, ctx) => {
+            // Merge: AI-provided args override the node's configured params, then
+            // run it through the SAME action pipeline (resolveValue + coerce +
+            // pushCommand). A scoped clone keeps the original node untouched.
+            const merged: FlowNode = { ...toolNode, data: { ...toolNode.data, params: { ...(toolNode.data?.params || {}), ...args } } }
+            const tt = merged.data.action_type || merged.type
+            if (tt === 'http_request') return this.executeHttpRequest(merged, ctx)
+            if (tt === 'set_variable') return this.executeSetVariable(merged, ctx)
+            if (tt === 'script') return this.executeScript(merged, ctx, serverId)
+            this.runFlowAction(serverId, merged, ctx)
+            return { executed: true, action: tt }
+          },
+        })
+        setContext(node.id, output)
+        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        executedActions.push('ai_agent')
+
+        const aiOutEdges = edges.filter(e => e.source === node.id)
+        for (const edge of aiOutEdges) {
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (nextNode) {
+            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+            if (waitResult) return waitResult
+          }
+        }
 
       } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
         const actionType = node.data.action_type || node.type

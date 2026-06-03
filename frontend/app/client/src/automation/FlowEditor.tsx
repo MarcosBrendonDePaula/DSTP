@@ -84,6 +84,7 @@ const NODE_CATALOG: NodeCatalogItem[] = [
   { type: 'delay', label: 'Delay', description: 'Pausa a execucao por um tempo.', category: 'Logica', icon: '⏱', accent: 'text-gray-400' },
   { type: 'http_request', label: 'HTTP', description: 'Chama uma API externa.', category: 'Acoes', icon: '🌐', accent: 'text-cyan-400' },
   { type: 'script', label: 'Script', description: 'Executa codigo customizado.', category: 'Acoes', icon: '{}', accent: 'text-orange-400' },
+  { type: 'ai_agent', label: 'AI Agent', description: 'IA que usa nos conectados como ferramentas (porta tools).', category: 'IA', icon: '🤖', accent: 'text-fuchsia-400' },
   { type: 'get_player', label: 'Get Player', description: 'Busca dados de um jogador por userid.', category: 'Dados', icon: '👤', accent: 'text-teal-400' },
   { type: 'find_player', label: 'Find Player', description: 'Localiza jogador por nome.', category: 'Dados', icon: '⌕', accent: 'text-teal-400' },
   { type: 'set_variable', label: 'Variable', description: 'Grava valor no contexto do fluxo.', category: 'Dados', icon: 'x=', accent: 'text-purple-400' },

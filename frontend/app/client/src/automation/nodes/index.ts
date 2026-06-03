@@ -12,6 +12,7 @@ import { MemoryNode } from './actions/MemoryNode'
 import { MenuNode } from './actions/MenuNode'
 import { HudRuleNode } from './actions/HudRuleNode'
 import { UIBuilderNode, UIPanelNode, UIColNode, UIRowNode, UITabsNode, UITextNode, UIIconNode, UIButtonNode, UIBarNode, UISpacerNode } from './ui'
+import { AIAgentNode } from './ai/AIAgentNode'
 
 export const nodeTypes = {
   trigger: TriggerNode,
@@ -25,6 +26,7 @@ export const nodeTypes = {
   script: ScriptNode,
   wait: WaitNode,
   memory: MemoryNode,
+  ai_agent: AIAgentNode,
   ui_menu: MenuNode,
   ui_rule: HudRuleNode,
   ui_builder: UIBuilderNode,
