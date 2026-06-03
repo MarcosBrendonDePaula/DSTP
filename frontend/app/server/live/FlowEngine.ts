@@ -209,6 +209,33 @@ export class FlowEngine {
     })
   }
 
+  // Trace a node as completed with its own output. Wraps the verbose pushTrace
+  // call every node-handler ends with (input snapshot + context[node.id]).
+  private traceCompleted(serverId: string, nodeId: string, inputSnapshot: Record<string, any>, context: Record<string, any>) {
+    this.pushTrace(serverId, nodeId, 'completed', inputSnapshot, context[nodeId], undefined, context)
+  }
+
+  // Read a node param, preferring the live `params` bag over the legacy flat
+  // `data` field. Uses ?? (not ||) so 0/"" are kept; `def` is the final fallback.
+  private param(node: FlowNode, key: string, def: any = undefined): any {
+    return node.data.params?.[key] ?? (node.data as any)[key] ?? def
+  }
+
+  // Stable id for a UI node's widget/group (author-set id or a per-node default).
+  private uiNodeId(node: FlowNode): string {
+    return this.param(node, 'id') || `ui_${node.id}`
+  }
+
+  // Find the first player in `serverId`'s shard group matching `predicate`.
+  private findPlayerInServer(serverId: string, predicate: (p: any) => boolean): any | null {
+    for (const g of this.host.getServerGroups()) {
+      if (g.server_id !== serverId) continue
+      const found = g.all_players.find(predicate)
+      if (found) return found
+    }
+    return null
+  }
+
   // ─── Flow Execution with Context ────────────────────
   // Each node registers its output in context[node_id]
   // Downstream nodes can reference via {{node_id.field}}
@@ -258,38 +285,43 @@ export class FlowEngine {
 
     const inputSnapshot = { ...context }
 
+    // Walk a node's outgoing edges, recursing into each target. `filter` lets a
+    // node skip edges (e.g. condition follows only the true/false branch). If a
+    // recursion hits a wait node (stopAtWait), it bubbles that node back up so
+    // the caller can pause the branch there.
+    const followOutEdges = async (
+      filter?: (edge: FlowEdge) => boolean,
+    ): Promise<FlowNode | null> => {
+      const outEdges = edges.filter(e => e.source === node.id && (!filter || filter(e)))
+      for (const edge of outEdges) {
+        const nextNode = nodes.find(n => n.id === edge.target)
+        if (nextNode) {
+          const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+          if (waitResult) return waitResult
+        }
+      }
+      return null
+    }
+
     try {
       if (node.type === 'wait') {
         // In simple flow mode (stopAtWait=false), wait nodes just pass through
         setContext(node.id, { waited: true, passthrough: true })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
       } else if (node.type === 'condition') {
         const result = this.evaluateCondition(node, context)
         setContext(node.id, { result, field: node.data.field, value: node.data.value })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const conditionOutEdges = edges.filter(e => e.source === node.id)
-        for (const condEdge of conditionOutEdges) {
-          const shouldFollow = condEdge.sourceHandle === 'true' ? result
+        const waitResult = await followOutEdges(condEdge => {
+          return condEdge.sourceHandle === 'true' ? result
             : condEdge.sourceHandle === 'false' ? !result
             : result
-          if (shouldFollow) {
-            const nextNode = nodes.find(n => n.id === condEdge.target)
-            if (nextNode) {
-              const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-              if (waitResult) return waitResult
-            }
-          }
-        }
+        })
+        if (waitResult) return waitResult
 
       } else if (node.type === 'delay') {
         const raw = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
@@ -298,73 +330,42 @@ export class FlowEngine {
         const ms = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), MAX_DELAY_MS) : 0
         setContext(node.id, { delayed: true, ms })
         await new Promise(resolve => setTimeout(resolve, ms))
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (node.type === 'get_player') {
-        const userid = this.resolveValue(node.data.params?.userid || node.data.userid, context)
+        const userid = this.resolveValue(this.param(node, 'userid'), context)
         if (userid) {
-          const groups = this.host.getServerGroups()
-          let playerData: any = null
-          for (const g of groups) {
-            if (g.server_id === serverId) {
-              playerData = g.all_players.find((p: any) => p.userid === userid)
-              if (playerData) break
-            }
-          }
+          const playerData = this.findPlayerInServer(serverId, (p: any) => p.userid === userid)
           setContext(node.id, playerData || { error: 'player not found', userid })
         } else {
           setContext(node.id, { error: 'no userid provided' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (node.type === 'find_player') {
-        let searchName = String(this.resolveValue(node.data.params?.name || node.data.name, context) || '')
+        let searchName = String(this.resolveValue(this.param(node, 'name'), context) || '')
         searchName = stripCommandPrefix(searchName)
         if (searchName) {
-          const groups = this.host.getServerGroups()
-          let playerData: any = null
-          for (const g of groups) {
-            if (g.server_id === serverId) {
-              playerData = g.all_players.find((p: any) =>
-                p.name && p.name.toLowerCase().includes(searchName.toLowerCase())
-              )
-              if (playerData) break
-            }
-          }
+          const needle = searchName.toLowerCase()
+          const playerData = this.findPlayerInServer(serverId, (p: any) =>
+            p.name && p.name.toLowerCase().includes(needle)
+          )
           setContext(node.id, playerData || { error: 'player not found', search: searchName })
         } else {
           setContext(node.id, { error: 'no name provided' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (node.type === 'memory') {
         const memRepo = new FlowMemoryRepository(serverId)
@@ -391,16 +392,10 @@ export class FlowEngine {
           setContext(node.id, { error: 'invalid action or missing key' })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (node.type === 'ui_builder') {
         // A ui_builder carries the whole UI tree as data (built in its own
@@ -409,24 +404,18 @@ export class FlowEngine {
         // continues the action chain afterwards (it's a normal action node).
         const rawTree = node.data.tree || {}
         const tree = this.resolveTree(rawTree, context)
-        const uiId = node.data.params?.id || node.data.id || `ui_${node.id}`
-        const userid = this.resolveValue(node.data.params?.userid ?? node.data.userid ?? '', context)
+        const uiId = this.uiNodeId(node)
+        const userid = this.resolveValue(this.param(node, 'userid', ''), context)
         if (userid) {
           this.host.pushCommand(serverId, 'ui_command', { userid, cmd: {
             action: 'create', type: 'tree', id: uiId, group: uiId, tree,
-            anchor: node.data.params?.anchor || node.data.anchor || 'center', seq: Date.now(),
+            anchor: this.param(node, 'anchor', 'center'), seq: Date.now(),
           }})
         }
         setContext(node.id, { rendered: true })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (node.type === 'ui_panel') {
         // A ui_panel is the ROOT of a UI composed from connected ui_* nodes.
@@ -434,19 +423,20 @@ export class FlowEngine {
         // subgraph, build a render tree, and push one ui_render. We do NOT
         // continue the normal action chain from here (children are consumed).
         const tree = this.buildUITree(node, nodes, edges, context)
-        const userid = this.resolveValue(node.data.params?.userid ?? node.data.userid ?? '', context)
+        const userid = this.resolveValue(this.param(node, 'userid', ''), context)
+        const uiId = this.uiNodeId(node)
         const payload: any = {
-          id: node.data.params?.id || node.data.id || `ui_${node.id}`,
-          group: node.data.params?.id || node.data.id || `ui_${node.id}`,
+          id: uiId,
+          group: uiId,
           tree,
-          anchor: node.data.params?.anchor || node.data.anchor || 'center',
+          anchor: this.param(node, 'anchor', 'center'),
           seq: Date.now(),
         }
         if (userid) {
           this.host.pushCommand(serverId, 'ui_command', { userid, cmd: { action: 'create', type: 'tree', ...payload } })
         }
         setContext(node.id, { rendered: true, tree })
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
         // Intentionally do not follow edges as actions.
 
       } else if (node.type === 'ai_agent') {
@@ -485,17 +475,11 @@ export class FlowEngine {
           },
         })
         setContext(node.id, output)
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
         executedActions.push('ai_agent')
 
-        const aiOutEdges = edges.filter(e => e.source === node.id)
-        for (const edge of aiOutEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
 
       } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
         const actionType = node.data.action_type || node.type
@@ -511,17 +495,11 @@ export class FlowEngine {
           setContext(node.id, { executed: true, action: actionType })
         }
 
-        this.pushTrace(serverId, node.id, 'completed', inputSnapshot, context[node.id], undefined, context)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
         executedActions.push(actionType)
 
-        const outEdges = edges.filter(e => e.source === node.id)
-        for (const edge of outEdges) {
-          const nextNode = nodes.find(n => n.id === edge.target)
-          if (nextNode) {
-            const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
-            if (waitResult) return waitResult
-          }
-        }
+        const waitResult = await followOutEdges()
+        if (waitResult) return waitResult
       }
     } catch (nodeErr: any) {
       this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message, context)
