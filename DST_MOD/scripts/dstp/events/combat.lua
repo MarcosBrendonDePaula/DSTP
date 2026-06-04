@@ -1,14 +1,16 @@
 -- DSTP Events / combat — per-player combat listeners: killed / attacked +
--- onattackother / onhitother (attacks ON other entities, for grief/PvP detection).
--- Extracted from events.lua verbatim. Registered via M.RegisterForPlayer(player,uid,
--- pname) by the events facade. Gates on core.evt_config.combat; emits via DSTP proxy.
+-- onattackother / onhitother (attacks ON other entities, for grief/PvP detection) +
+-- blocked / onmissother (defense + miss) + epicscare (boss-near warning, gates on
+-- evt_config.bosses since it's a boss proximity signal). Registered via
+-- M.RegisterForPlayer(player,uid,pname) by the events facade; emits via DSTP proxy.
 
 local M = {}
 
-local core, evt_config, DSTP
+local core, _G, evt_config, DSTP
 
 function M.Init(c)
     core = c
+    _G = c._G
     evt_config = c.evt_config
     DSTP = setmetatable({}, { __index = function(_, k)
         if k == "PushEvent" then return core.PushEvent end
@@ -64,6 +66,52 @@ function M.RegisterForPlayer(player, uid, pname)
             target_guid = target and target.GUID or nil,  -- p/ HUD seguir o alvo exato
             target_is_player = target and target:HasTag("player") or false,
             damage = data and data.damage or 0,
+        }, data)
+    end)
+
+    -- Player fully BLOCKED an incoming hit (armor recoil / shield / full absorb).
+    -- DST "blocked" fires on the defender (combat.lua:700) with KEYED fields
+    -- {attacker, damage, spdamage, original_damage}; attacker can be nil.
+    player:ListenForEvent("blocked", function(inst, data)
+        if not evt_config.combat then return end
+        local attacker = data and data.attacker
+        DSTP.PushEvent("player_block", {
+            userid = uid, name = pname,
+            attacker = attacker and attacker.prefab or "unknown",
+            attacker_is_player = attacker and attacker:HasTag("player") or false,
+            damage = data and data.damage or 0,
+            original_damage = data and data.original_damage or 0,
+        }, data)
+    end)
+
+    -- Player swung and MISSED a target (out of range / dodged). "onmissother"
+    -- fires on the attacker (combat.lua:1088); {target, weapon} keyed, weapon nil on bare hands.
+    player:ListenForEvent("onmissother", function(inst, data)
+        if not evt_config.combat then return end
+        local target = data and data.target
+        DSTP.PushEvent("player_attack_miss", {
+            userid = uid, name = pname,
+            target = target and target.prefab or "unknown",
+            target_guid = target and target.GUID or nil,
+            target_is_player = target and target:HasTag("player") or false,
+            weapon = data and data.weapon and data.weapon.prefab or nil,
+        }, data)
+    end)
+
+    -- An epic/boss roar scared this player (boss is near). DST "epicscare"
+    -- (epicscare.lua:23) is an AoE pulse pushed onto EVERY nearby _combat entity,
+    -- so a single roar fires once per nearby player AND re-fires per roar — debounce
+    -- per-player (3s) so a multi-roar fight doesn't spam. scarer is the boss entity.
+    player:ListenForEvent("epicscare", function(inst, data)
+        if not evt_config.bosses then return end
+        local now = _G.GetTime and _G.GetTime() or 0
+        if inst._dstp_last_epicscare and (now - inst._dstp_last_epicscare) < 3 then return end
+        inst._dstp_last_epicscare = now
+        local scarer = data and data.scarer
+        DSTP.PushEvent("boss_warning", {
+            userid = uid, name = pname,
+            scarer = scarer and scarer.prefab or "unknown",
+            duration = data and data.duration or 0,
         }, data)
     end)
 end

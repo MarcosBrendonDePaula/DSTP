@@ -1,7 +1,6 @@
 -- DSTP Events / inventory — per-player inventory listeners: equip / pickup / drop /
--- unequip + itemget. Extracted from events.lua verbatim. Registered via
--- M.RegisterForPlayer(player,uid,pname) by the events facade. Gates on
--- core.evt_config.inventory; emits via DSTP proxy.
+-- unequip + itemget + inventoryfull. Registered via M.RegisterForPlayer(player,uid,
+-- pname) by the events facade. Gates on core.evt_config.inventory; emits via DSTP proxy.
 
 local M = {}
 
@@ -61,6 +60,17 @@ function M.RegisterForPlayer(player, uid, pname)
             userid = uid, name = pname,
             prefab = item and item.prefab or "unknown",
             slot = data and data.slot or nil,
+        }, data)
+    end)
+
+    -- A pickup was REJECTED because every slot is taken ("inventoryfull",
+    -- inventory.lua:1214; data.item = the item that couldn't be stored).
+    player:ListenForEvent("inventoryfull", function(inst, data)
+        if not evt_config.inventory then return end
+        local item = data and data.item
+        DSTP.PushEvent("inventory_full", {
+            userid = uid, name = pname,
+            item = item and item.prefab or "unknown",
         }, data)
     end)
 end

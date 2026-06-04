@@ -10,6 +10,8 @@ export const TRIGGER_EVENTS = [
   { value: 'player_ghost', label: '👻 Player Ghost', category: 'players' },
   { value: 'player_respawn', label: '✨ Player Respawn', category: 'players' },
   { value: 'player_disconnected', label: '🔌 Player Disconnected', category: 'players' },
+  { value: 'player_new_character', label: '🆕 Novo Personagem (1º spawn)', category: 'players' },
+  { value: 'player_resurrected', label: '⛧ Player Ressuscitado', category: 'players' },
   // Griefing (anti-grief detection)
   { value: 'structure_burnt', label: '🔥 Structure Burnt', category: 'griefing' },
   { value: 'structure_hammered', label: '🔨 Structure Hammered', category: 'griefing' },
@@ -23,15 +25,20 @@ export const TRIGGER_EVENTS = [
   { value: 'player_attacked', label: '🛡 Player Attacked', category: 'combat' },
   { value: 'player_attack_other', label: '⚔ Player Atacou Alguém', category: 'combat' },
   { value: 'player_hit_other', label: '🩸 Player Acertou Alguém', category: 'combat' },
+  { value: 'player_block', label: '🛡 Player Bloqueou (armadura)', category: 'combat' },
+  { value: 'player_attack_miss', label: '💨 Player Errou o Golpe', category: 'combat' },
   // Crafting
   { value: 'player_craft', label: '🔨 Player Craft', category: 'crafting' },
   { value: 'player_build', label: '🏗 Player Build', category: 'crafting' },
+  { value: 'recipe_unlocked', label: '🔓 Receita Desbloqueada', category: 'crafting' },
+  { value: 'tech_tree_changed', label: '🔬 Tech Tree Mudou (prototipador)', category: 'crafting' },
   // Inventory
   { value: 'player_equip', label: '🎒 Player Equip', category: 'inventory' },
   { value: 'player_pickup', label: '📦 Player Pickup', category: 'inventory' },
   { value: 'player_drop', label: '📦 Player Drop', category: 'inventory' },
   { value: 'player_unequip', label: '🎒 Player Unequip', category: 'inventory' },
   { value: 'player_item_get', label: '📥 Player Recebeu Item', category: 'inventory' },
+  { value: 'inventory_full', label: '🚫 Inventário Cheio', category: 'inventory' },
   // Health
   { value: 'health_delta', label: '❤ Health Change', category: 'health' },
   { value: 'hunger_delta', label: '🍖 Hunger Change', category: 'health' },
@@ -42,6 +49,8 @@ export const TRIGGER_EVENTS = [
   { value: 'player_harvest', label: '🌿 Player Harvest', category: 'gathering' },
   { value: 'player_action_start', label: '▶ Começou Ação (colher/pick)', category: 'gathering' },
   { value: 'player_startfire', label: '🔥 Player Start Fire', category: 'gathering' },
+  { value: 'player_pick', label: '🌸 Player Colheu (do chão)', category: 'gathering' },
+  { value: 'player_mine_chop_start', label: '⛏ Começou a Minerar/Cortar', category: 'gathering' },
   // World
   { value: 'new_day', label: '🌅 New Day', category: 'world' },
   { value: 'phase_changed', label: '🌙 Phase Changed', category: 'world' },
@@ -50,6 +59,7 @@ export const TRIGGER_EVENTS = [
   { value: 'earthquake', label: '🌍 Earthquake', category: 'world' },
   { value: 'sinkhole_warn', label: '🕳 Sinkhole Warning', category: 'world' },
   { value: 'world_save', label: '💾 World Save', category: 'world' },
+  { value: 'rift_spawned', label: '🌑 Rift Aberto (lunar/sombrio)', category: 'world' },
   { value: 'tick', label: '⏲ Tick (heartbeat ~1s)', category: 'world' },
   { value: 'player_teleported', label: '🌀 Player Teleported', category: 'world' },
   // Weather
@@ -62,6 +72,7 @@ export const TRIGGER_EVENTS = [
   { value: 'fire_started', label: '🔥 Fire Started', category: 'bosses' },
   { value: 'hound_warning', label: '🐺 Hound Warning', category: 'bosses' },
   { value: 'hound_attack', label: '🐺 Hound Attack', category: 'bosses' },
+  { value: 'boss_warning', label: '😱 Boss Perto (rugido)', category: 'bosses' },
   // Survival
   { value: 'player_eat', label: '🍽 Player Eat', category: 'survival' },
   { value: 'player_insane', label: '😵 Player Insane', category: 'survival' },
@@ -76,6 +87,9 @@ export const TRIGGER_EVENTS = [
   { value: 'player_dismounted', label: '🐂 Player Dismounted', category: 'survival' },
   { value: 'player_on_fire', label: '🔥 Player Pegando Fogo', category: 'survival' },
   { value: 'player_fire_out', label: '💧 Player Apagou o Fogo', category: 'survival' },
+  { value: 'player_enlightened', label: '🌕 Player Iluminado (lunacy)', category: 'survival' },
+  { value: 'player_lunacy_normal', label: '🌑 Player Saiu da Lunacy', category: 'survival' },
+  { value: 'player_wet', label: '💦 Player Molhado/Secou', category: 'survival' },
   // UI
   { value: 'ui_callback', label: '🖱 UI Callback (button click)', category: 'ui' },
   // Economy / inventory results (emitted back by inventory commands)

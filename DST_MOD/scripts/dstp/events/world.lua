@@ -1,5 +1,5 @@
 -- DSTP Events / world — world-scoped day/phase/season/moon/earthquake/sinkhole/
--- save/hound listeners (was RegisterWorldEvents). Extracted from events.lua verbatim.
+-- save/hound/rift listeners (was RegisterWorldEvents). Extracted from events.lua verbatim.
 -- Registered via M.RegisterWorld(inst) by the events facade. Note: a few bodies here
 -- gate on OTHER categories (lightning -> weather, hounds -> bosses) — kept as-is to
 -- match the original file structure. Needs config (shard_type). DSTP proxy for PushEvent.
@@ -126,6 +126,20 @@ function M.RegisterWorld(inst)
         DSTP.PushEvent("hound_attack", {
             shard_type = config.shard_type,
         })
+    end)
+
+    -- A lunar/shadow rift opened ("ms_riftaddedtopool", riftspawner.lua:85;
+    -- data.rift = the rift portal entity). Major late-game world event.
+    inst:ListenForEvent("ms_riftaddedtopool", function(world, data)
+        if not evt_config.world then return end
+        local rift = data and data.rift
+        local x, _, z = 0, 0, 0
+        if rift and rift.Transform then x, _, z = rift.Transform:GetWorldPosition() end
+        DSTP.PushEvent("rift_spawned", {
+            rift_prefab = rift and rift.prefab or "unknown",
+            x = math.floor(x), z = math.floor(z),
+            shard_type = config.shard_type,
+        }, data)
     end)
 end
 

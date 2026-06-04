@@ -35,9 +35,19 @@ function M.RegisterForPlayer(player, uid, pname)
         DSTP.PushEvent("player_ghost", { userid = inst.userid or uid, name = inst.name or pname, prefab = inst.prefab or "" })
     end)
 
-    player:ListenForEvent("ms_respawnedfromghost", function(inst)
+    player:ListenForEvent("ms_respawnedfromghost", function(inst, data)
         if not evt_config.players then return end
+        -- player_respawn is the existing generic "came back" event. We ALSO surface a
+        -- distinct player_resurrected: ms_respawnedfromghost is the unified completion
+        -- signal for BOTH ghost revival and real-body (corpse) revival — data is {} for
+        -- the ghost path, { corpse=true, reviver=<player|nil> } for the corpse path.
         DSTP.PushEvent("player_respawn", { userid = inst.userid or uid, name = inst.name or pname, prefab = inst.prefab or "" })
+        local reviver = data and data.reviver
+        DSTP.PushEvent("player_resurrected", {
+            userid = inst.userid or uid, name = inst.name or pname,
+            corpse = data and data.corpse or false,
+            reviver = reviver and reviver.prefab or nil,
+        }, data)
     end)
 end
 
@@ -89,6 +99,23 @@ function M.RegisterWorld(inst)
                 cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
             }, data)
         end
+    end)
+
+    -- A brand-new character first-spawned (NOT a reconnect). DST
+    -- "ms_newplayercharacterspawned" fires on TheWorld with { player, mode } (keyed).
+    -- It only fires for a genuinely new character on a fixed-spawn world (not loading
+    -- in), so it cleanly distinguishes first-join from a normal player_spawn/rejoin —
+    -- ideal for welcome/first-join reward flows.
+    inst:ListenForEvent("ms_newplayercharacterspawned", function(world, data)
+        if not evt_config.players then return end
+        local p = data and data.player
+        if not p then return end
+        DSTP.PushEvent("player_new_character", {
+            userid = p.userid,
+            name = p.name,
+            prefab = p.prefab,
+            mode = data and data.mode or "unknown",
+        }, data)
     end)
 end
 

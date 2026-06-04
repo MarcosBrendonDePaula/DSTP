@@ -106,6 +106,22 @@ D(`
   assert(pl["oneat"], "survival per-player listener not registered (events/survival fan-out)")
   assert(pl["gotosleep"], "character per-player listener not registered (events/character fan-out)")
   assert(pl["onhammer"], "griefing per-player listener not registered (events/griefing fan-out)")
+  -- new audit events (#8-14) wired on the player:
+  assert(pl["blocked"], "player_block listener not registered")
+  assert(pl["onmissother"], "player_attack_miss listener not registered")
+  assert(pl["epicscare"], "boss_warning listener not registered")
+  assert(pl["inventoryfull"], "inventory_full listener not registered")
+  assert(pl["unlockrecipe"], "recipe_unlocked listener not registered")
+  assert(pl["techtreechange"], "tech_tree_changed listener not registered")
+  assert(pl["goenlightened"], "player_enlightened listener not registered")
+  assert(pl["sanitymodechanged"], "player_lunacy_normal listener not registered")
+  assert(pl["moisturedelta"], "player_wet listener not registered")
+  assert(pl["picksomething"], "player_pick listener not registered")
+  assert(pl["working"], "player_mine_chop_start listener not registered")
+  assert(pl["respawnfromcorpse"] or pl["ms_respawnedfromghost"], "player_resurrected listener not registered")
+  -- new world events:
+  assert(listeners["ms_riftaddedtopool"], "rift_spawned world listener not registered")
+  assert(listeners["ms_newplayercharacterspawned"], "player_new_character world listener not registered")
 
   local Core = _DSTP_MODULES["dstp/core"]
   assert(type(DSTP)=="table" and type(DSTP.Init)=="function", "DSTP public API broken")
