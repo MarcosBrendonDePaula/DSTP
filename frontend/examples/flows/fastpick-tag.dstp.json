@@ -1,0 +1,44 @@
+{
+  "name": "Fastpick (tag) — colheita instantânea ao entrar (admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_spawn", "alias": "joined" }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": { "x": 320, "y": 0 },
+      "data": { "params": { "userid": "{{joined.userid}}" }, "alias": "player" }
+    },
+    {
+      "id": "isadmin",
+      "type": "condition",
+      "position": { "x": 640, "y": 0 },
+      "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" }
+    },
+    {
+      "id": "fast",
+      "type": "player_state",
+      "position": { "x": 960, "y": -60 },
+      "data": { "params": { "userid": "{{joined.userid}}", "attribute": "tag", "mode": "on", "value": "fastpicker" } }
+    },
+    {
+      "id": "notify",
+      "type": "action",
+      "position": { "x": 1280, "y": -60 },
+      "data": {
+        "action_type": "ui_notification",
+        "params": { "userid": "{{joined.userid}}", "text": "Fastpick ativado (colheita instantânea)", "duration": "3" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_who", "source": "trg", "target": "who" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_fast", "source": "isadmin", "target": "fast", "sourceHandle": "true" },
+    { "id": "e_fast_notify", "source": "fast", "target": "notify" }
+  ]
+}
