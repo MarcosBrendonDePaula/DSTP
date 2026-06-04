@@ -79,6 +79,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'saveFlow',
     'deleteFlow',
     'toggleFlow',
+    'moveFlow',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
@@ -170,6 +171,10 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
         enabled: flow.enabled ?? true,
         nodes: flow.nodes || [],
         edges: flow.edges || [],
+        // Organization fields are partial-updated by the repo (undefined = leave
+        // as-is), so import/create can seed a folder without an editor save wiping it.
+        folderPath: flow.folderPath ?? flow.folder_path,
+        sortOrder: flow.sortOrder ?? flow.sort_order,
       })
       console.log(`[DSTP Automation] saveFlow: DB write OK for ${flow.id} (${nodesLen} nodes)`)
     } catch (err: any) {
@@ -196,6 +201,28 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
     }
     this.flowRepo(payload.server_id).toggle(payload.flow_id, payload.enabled)
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Move/reorder a flow in the panel list (drag-and-drop). Touches only the
+  // folder + order, never nodes/edges. `order` lets a single drag renumber several
+  // siblings in one round-trip (one syncState).
+  async moveFlow(payload: {
+    server_id: string
+    flow_id?: string
+    folder_path?: string
+    sort_order?: number
+    order?: Array<{ flow_id: string; folder_path: string; sort_order: number }>
+  }) {
+    const repo = this.flowRepo(payload.server_id)
+    if (Array.isArray(payload.order) && payload.order.length) {
+      for (const o of payload.order) repo.move(o.flow_id, o.folder_path ?? '', o.sort_order ?? 0)
+    } else if (payload.flow_id) {
+      repo.move(payload.flow_id, payload.folder_path ?? '', payload.sort_order ?? 0)
+    } else {
+      return { success: false, reason: 'no flow_id or order' }
+    }
     this.syncState(payload.server_id)
     return { success: true }
   }

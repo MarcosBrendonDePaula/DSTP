@@ -15,6 +15,13 @@ export const flows = sqliteTable('flows', {
   // environments.id; null means the flow has no default (only {{environment.x.y}}
   // explicit refs will resolve).
   defaultEnvironmentId: integer('default_environment_id'),
+  // Organization in the panel's flow list. folderPath is a "/"-separated path
+  // ("" = root, "Loja/Eventos" = nested); the tree is derived from these paths in
+  // the UI (no separate folders table). sortOrder is the manual order within a
+  // folder (tie-break: createdAt). Both mutated by FlowRepository.move via the
+  // drag-and-drop in AutomationPage.
+  folderPath: text('folder_path').notNull().default(''),
+  sortOrder: integer('sort_order').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })

@@ -34,6 +34,9 @@ interface FlowEditorProps {
   onSave: (nodes: Node[], edges: Edge[], closeAfter?: boolean) => void
   flowName: string
   onNameChange: (name: string) => void
+  folderPath?: string
+  onFolderChange?: (folder: string) => void
+  folderSuggestions?: string[]
   onBack?: () => void
   executionContext?: Record<string, any> | null
   captureData?: CaptureData | null
@@ -104,7 +107,7 @@ const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
 // separate — those are not node modules.
 const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, folderPath, onFolderChange, folderSuggestions = [], onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
@@ -415,6 +418,22 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             value={flowName}
             onChange={e => onNameChange(e.target.value)}
           />
+          {onFolderChange && (
+            <>
+              <span className="text-gray-500">/</span>
+              <span className="text-xs">📁</span>
+              <input
+                list="dstp-folder-list"
+                className="bg-transparent text-xs text-gray-300 w-[160px] focus:outline-none border-b border-transparent focus:border-white/20 placeholder:text-gray-600"
+                placeholder="pasta (ex: Loja/Eventos)"
+                value={folderPath ?? ''}
+                onChange={e => onFolderChange(e.target.value)}
+              />
+              <datalist id="dstp-folder-list">
+                {folderSuggestions.map(f => <option key={f} value={f} />)}
+              </datalist>
+            </>
+          )}
           <span className="text-[11px] text-gray-500">automação do servidor</span>
         </div>
 

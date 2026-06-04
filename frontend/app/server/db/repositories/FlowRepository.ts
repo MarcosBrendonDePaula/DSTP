@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, asc, desc } from 'drizzle-orm'
 import { getDb } from '../connection'
 import { flows, type Flow, type NewFlow, type FlowNode, type FlowEdge } from '../schema'
 
@@ -8,9 +8,11 @@ export class FlowRepository {
   private get db() { return getDb(this.serverId) }
 
   findAll(): Flow[] {
+    // Manual order within a folder first (sortOrder), newest as tie-break. The UI
+    // groups by folderPath into a tree and relies on this ordering inside a folder.
     return this.db.select().from(flows)
       .where(eq(flows.serverId, this.serverId))
-      .orderBy(desc(flows.createdAt))
+      .orderBy(asc(flows.sortOrder), desc(flows.createdAt))
       .all()
   }
 
@@ -27,7 +29,7 @@ export class FlowRepository {
       .filter(f => f.enabled)
   }
 
-  save(flow: { id: string; name: string; enabled: boolean; nodes: FlowNode[]; edges: FlowEdge[]; triggerCount?: number; lastTriggered?: Date | null; defaultEnvironmentId?: number | null }) {
+  save(flow: { id: string; name: string; enabled: boolean; nodes: FlowNode[]; edges: FlowEdge[]; triggerCount?: number; lastTriggered?: Date | null; defaultEnvironmentId?: number | null; folderPath?: string; sortOrder?: number }) {
     const now = new Date()
     const existing = this.findById(flow.id)
 
@@ -41,6 +43,10 @@ export class FlowRepository {
           // Only overwrite the default environment when the caller provides the
           // field (undefined = leave as-is); null explicitly clears it.
           ...(flow.defaultEnvironmentId !== undefined ? { defaultEnvironmentId: flow.defaultEnvironmentId } : {}),
+          // Same partial-update rule for organization fields: a plain editor save
+          // (which omits them) must NOT reset the flow's folder/order.
+          ...(flow.folderPath !== undefined ? { folderPath: flow.folderPath } : {}),
+          ...(flow.sortOrder !== undefined ? { sortOrder: flow.sortOrder } : {}),
           updatedAt: now,
         })
         .where(eq(flows.id, flow.id))
@@ -56,11 +62,22 @@ export class FlowRepository {
           edges: flow.edges,
           triggerCount: 0,
           defaultEnvironmentId: flow.defaultEnvironmentId ?? null,
+          folderPath: flow.folderPath ?? '',
+          sortOrder: flow.sortOrder ?? 0,
           createdAt: now,
           updatedAt: now,
         })
         .run()
     }
+  }
+
+  // Move/reorder a flow: update only folder + order, never nodes/edges — so it's
+  // safe against the editor's auto-save races. Mirrors toggle/updateStats.
+  move(id: string, folderPath: string, sortOrder: number) {
+    this.db.update(flows)
+      .set({ folderPath, sortOrder, updatedAt: new Date() })
+      .where(eq(flows.id, id))
+      .run()
   }
 
   delete(id: string) {

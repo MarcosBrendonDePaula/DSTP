@@ -7,6 +7,7 @@ import { FlowEditor } from './FlowEditor'
 import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
+import { FlowTree } from './FlowTree'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
@@ -22,7 +23,9 @@ export function AutomationPage() {
   const [editorEdges, setEditorEdges] = useState<Edge[]>([])
   const [originalCreatedAt, setOriginalCreatedAt] = useState<number | null>(null)
   const [flowEnabled, setFlowEnabled] = useState(true)
+  const [flowFolder, setFlowFolder] = useState('')
   const [showEnvironments, setShowEnvironments] = useState(false)
+  const [flowSearch, setFlowSearch] = useState('')
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -83,6 +86,7 @@ export function AutomationPage() {
     setEditorEdges([])
     setOriginalCreatedAt(null)
     setFlowEnabled(true)
+    setFlowFolder('')
   }
 
   const editFlow = (flow: any) => {
@@ -92,6 +96,7 @@ export function AutomationPage() {
     setEditorEdges(flow.edges || [])
     setOriginalCreatedAt(flow.created_at || null)
     setFlowEnabled(flow.enabled ?? true)
+    setFlowFolder(flow.folderPath ?? flow.folder_path ?? '')
   }
 
   // When URL has ?flow=ID and flows list loads, hydrate the editor with that flow's data
@@ -106,6 +111,7 @@ export function AutomationPage() {
       setEditorEdges(flow.edges || [])
       setOriginalCreatedAt(flow.created_at || null)
       setFlowEnabled(flow.enabled ?? true)
+      setFlowFolder(flow.folderPath ?? flow.folder_path ?? '')
       setHydrated(editingFlow) // triggers re-render AFTER state updates are applied
     }
   }, [editingFlow, flows, hydrated])
@@ -128,6 +134,7 @@ export function AutomationPage() {
           edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || undefined, targetHandle: e.targetHandle || undefined })),
           created_at: originalCreatedAt || Date.now(),
           trigger_count: 0,
+          folder_path: flowFolder,
         }
       })
       console.log('[DSTP] Flow saved:', editingFlow, result)
@@ -145,6 +152,20 @@ export function AutomationPage() {
   const toggleFlow = async (id: string, enabled: boolean) => {
     await auto.toggleFlow({ flow_id: id, server_id: urlServer, enabled })
   }
+
+  const moveFlow = async (id: string, folder_path: string, sort_order: number) => {
+    await auto.moveFlow({ flow_id: id, server_id: urlServer, folder_path, sort_order })
+  }
+
+  // Distinct existing folder paths (for the editor's datalist suggestions).
+  const folderSuggestions = useMemo(() => {
+    const set = new Set<string>()
+    for (const f of flows as any[]) {
+      const p = (f.folderPath ?? f.folder_path ?? '').trim()
+      if (p) set.add(p)
+    }
+    return [...set].sort()
+  }, [flows])
 
   const exportFlow = (flow: any) => {
     const exportData = {
@@ -297,6 +318,9 @@ export function AutomationPage() {
           onSave={saveFlow}
           flowName={flowName}
           onNameChange={setFlowName}
+          folderPath={flowFolder}
+          onFolderChange={setFlowFolder}
+          folderSuggestions={folderSuggestions}
           onBack={() => setEditingFlow(null)}
           executionContext={latestExecutionContext}
           captureData={editingFlow ? (captureData?.flowId === editingFlow ? captureData : captureData?.active ? captureData : null) : null}
@@ -387,46 +411,60 @@ export function AutomationPage() {
             )
           ) : (
             <div className="space-y-2">
-              {flows.map((flow: any) => (
-                <div key={flow.id} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
-                  <div className="flex items-center gap-3">
-                    {/* Toggle */}
-                    <button
-                      onClick={() => toggleFlow(flow.id, !flow.enabled)}
-                      className={`w-8 h-4 rounded-full transition-colors relative ${flow.enabled ? 'bg-green-500/30' : 'bg-white/10'}`}
-                    >
-                      <div className={`w-3 h-3 rounded-full absolute top-0.5 transition-all ${flow.enabled ? 'left-4 bg-green-400' : 'left-0.5 bg-gray-500'}`} />
-                    </button>
+              {/* Search filter over the folder tree */}
+              <input
+                value={flowSearch}
+                onChange={e => setFlowSearch(e.target.value)}
+                placeholder="🔎 Buscar fluxo por nome..."
+                className="w-full bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
+              />
+              <FlowTree
+                flows={flows}
+                search={flowSearch}
+                onMove={moveFlow}
+                renderFlow={(flow: any) => (
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
+                    <div className="flex items-center gap-3">
+                      {/* drag handle hint */}
+                      <span className="text-gray-600 text-xs cursor-grab" title="Arraste para mover de pasta / reordenar">⠿</span>
+                      {/* Toggle */}
+                      <button
+                        onClick={() => toggleFlow(flow.id, !flow.enabled)}
+                        className={`w-8 h-4 rounded-full transition-colors relative ${flow.enabled ? 'bg-green-500/30' : 'bg-white/10'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full absolute top-0.5 transition-all ${flow.enabled ? 'left-4 bg-green-400' : 'left-0.5 bg-gray-500'}`} />
+                      </button>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white">{flow.name}</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${flow.enabled ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-gray-500'}`}>
-                          {flow.enabled ? 'Ativo' : 'Inativo'}
-                        </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white">{flow.name}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded ${flow.enabled ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-gray-500'}`}>
+                            {flow.enabled ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">
+                          {flow.nodes?.length || 0} nodes · {flow.edges?.length || 0} conexões
+                          {flow.trigger_count > 0 && <> · Disparou {flow.trigger_count}x</>}
+                          {flow.last_triggered && <> · Último: {new Date(flow.last_triggered).toLocaleTimeString()}</>}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">
-                        {flow.nodes?.length || 0} nodes · {flow.edges?.length || 0} conexões
-                        {flow.trigger_count > 0 && <> · Disparou {flow.trigger_count}x</>}
-                        {flow.last_triggered && <> · Último: {new Date(flow.last_triggered).toLocaleTimeString()}</>}
-                      </div>
+
+                      <button
+                        onClick={() => editFlow(flow)}
+                        className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
+                      >✏️ Editar</button>
+                      <button
+                        onClick={() => exportFlow(flow)}
+                        className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
+                      >↗ Exportar</button>
+                      <button
+                        onClick={() => deleteFlow(flow.id)}
+                        className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+                      >🗑</button>
                     </div>
-
-                    <button
-                      onClick={() => editFlow(flow)}
-                      className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
-                    >✏️ Editar</button>
-                    <button
-                      onClick={() => exportFlow(flow)}
-                      className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
-                    >↗ Exportar</button>
-                    <button
-                      onClick={() => deleteFlow(flow.id)}
-                      className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors"
-                    >🗑</button>
                   </div>
-                </div>
-              ))}
+                )}
+              />
             </div>
           )}
         </div>
