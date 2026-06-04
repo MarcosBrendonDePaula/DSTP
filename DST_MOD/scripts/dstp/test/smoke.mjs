@@ -26,7 +26,7 @@ D(`_DSTP_MODULES = {}
    end`, 'shim')
 
 // Load the real submodules. Add new ones here as they're extracted.
-for (const mod of ['core']) {
+for (const mod of ['core', 'collectors']) {
   D(`_DSTP_MODULES["dstp/${mod}"] = (function()\n${dstp(`${mod}.lua`)}\nend)()`, `load ${mod}`)
 }
 // Stub land_claims (its own logic is tested elsewhere).
@@ -47,6 +47,7 @@ D(`
                QueryServer=function() end, GetPersistentString=function() end },
     require = function(n) return _DSTP_MODULES[n] or error("g.require "..n) end,
     Networking_Say = function() end,
+    pcall = pcall, error = error, tonumber = tonumber, unpack = unpack,
   }
   local calls = {}
   local env = { GLOBAL = GLOBAL, AddPrefabPostInit = function(name, fn) calls["postinit_"..name] = fn end }
@@ -60,5 +61,11 @@ D(`
   assert(Core.evt_config.players == true, "evt_config not set")
   assert(Core.command_handlers["heal"] and Core.command_handlers["announce"], "commands not registered")
   assert(calls["postinit_world"] ~= nil, "world postinit not registered")
-  print("✓ smoke: client loads, DSTP.Init runs, core populated, commands registered, API intact")
+  -- collectors wired and runnable
+  local Collectors = _DSTP_MODULES["dstp/collectors"]
+  assert(Collectors and type(Collectors.GetServerInfo)=="function", "collectors not loaded")
+  local info = Collectors.GetServerInfo()
+  assert(info.max_players == 6 and type(info.uptime)=="number", "GetServerInfo wrong: "..tostring(info.max_players))
+  assert(type(Collectors.GetAllPlayersData()) == "table", "GetAllPlayersData not table")
+  print("✓ smoke: client loads, DSTP.Init runs, core populated, commands registered, collectors run, API intact")
 `, 'boot')
