@@ -166,3 +166,21 @@ select option {
     opacity: 1;
   }
 }
+
+/* Node config rendered inside the detail modal (BaseNode configOnly). The node
+   ui.tsx is sized for the small canvas node; scale it up for the roomy modal. */
+.dstp-config label > span,
+.dstp-config .text-\[9px\],
+.dstp-config .text-\[8px\] {
+  font-size: 11px !important;
+  color: #9ca3af;
+}
+.dstp-config input,
+.dstp-config select,
+.dstp-config textarea {
+  font-size: 13px !important;
+  padding: 8px 10px !important;
+}
+.dstp-config > * + * { margin-top: 12px; }
+/* Give each field block clear separation in the modal */
+.dstp-config > div { width: 100%; }

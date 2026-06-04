@@ -83,17 +83,19 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
   // In the detail modal we only want the config fields + the alias input, not the
   // canvas chrome (handles/header/border/preview).
   if (configOnly) {
+    // `dstp-config` scales up the canvas-sized fields (labels/inputs/selects) for
+    // the roomy modal — see the CSS rules in index.css. No per-node changes.
     return (
-      <div className="space-y-2">
+      <div className="dstp-config space-y-3">
         {children}
         {onAliasChange && (
-          <label className="block">
-            <span className="text-[9px] text-gray-500 block mb-1">Alias</span>
+          <label className="block pt-2 border-t border-white/5">
+            <span className="text-[11px] text-gray-400 block mb-1">Alias</span>
             <input
               value={alias || ''}
               onChange={e => onAliasChange(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
               placeholder="apelido para {{alias.campo}}"
-              className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-[11px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+              className="w-full bg-white/5 border border-white/10 rounded px-2.5 py-2 text-[13px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
             />
           </label>
         )}
