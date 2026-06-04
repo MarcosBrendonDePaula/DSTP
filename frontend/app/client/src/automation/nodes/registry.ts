@@ -26,6 +26,8 @@ import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_
 import { ui as landClaimUi } from '@shared/automation/nodes/data/world/land_claim/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
+import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
+import { ui as listFlowsUi } from '@shared/automation/nodes/data/store/list_flows/ui'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
 import { ui as httpUi } from '@shared/automation/nodes/actions/http/http_request/ui'
 import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
@@ -98,6 +100,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: callComponentMeta, ui: callComponentUi },
   { meta: landClaimMeta, ui: landClaimUi },
   { meta: memoryMeta, ui: memoryUi },
+  { meta: listFlowsMeta, ui: listFlowsUi },
   { meta: httpMeta, ui: httpUi },
   { meta: scriptMeta, ui: scriptUi },
   { meta: uiBuilderMeta, ui: uiBuilderUi },

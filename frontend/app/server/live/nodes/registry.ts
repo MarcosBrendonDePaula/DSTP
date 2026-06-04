@@ -27,6 +27,8 @@ import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_
 import { handler as landClaimHandler } from '@shared/automation/nodes/data/world/land_claim/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
+import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
+import { handler as listFlowsHandler } from '@shared/automation/nodes/data/store/list_flows/exec'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
 import { handler as httpHandler } from '@shared/automation/nodes/actions/http/http_request/exec'
 import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
@@ -82,6 +84,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: callComponentMeta, handler: callComponentHandler },
   { meta: landClaimMeta, handler: landClaimHandler },
   { meta: memoryMeta, handler: memoryHandler },
+  { meta: listFlowsMeta, handler: listFlowsHandler },
   { meta: httpMeta, handler: httpHandler },
   { meta: scriptMeta, handler: scriptHandler },
   { meta: uiBuilderMeta, handler: uiBuilderHandler },

@@ -1,0 +1,24 @@
+{
+  "name": "!help — painel com a lista de comandos (lê os fluxos da pasta Comandos)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "command", "alias": "cmd" } },
+    { "id": "is", "type": "condition", "position": { "x": 300, "y": 0 }, "data": { "field": "{{cmd.message}}", "operator": "starts_with", "value": "!help" } },
+    { "id": "list", "type": "list_flows", "position": { "x": 600, "y": 0 }, "data": { "params": { "onlyEnabled": "true", "folder": "Comandos", "startsWith": "" }, "alias": "cmds" } },
+    { "id": "panel", "type": "action", "position": { "x": 900, "y": 0 }, "data": {
+      "action_type": "ui_panel",
+      "params": {
+        "userid": "{{cmd.userid}}",
+        "id": "help",
+        "title": "Comandos ({{cmds.count}})",
+        "body": "{{cmds.text}}",
+        "width": "440",
+        "height": "320"
+      }
+    } }
+  ],
+  "edges": [
+    { "id": "e_trg_is", "source": "trg", "target": "is" },
+    { "id": "e_is_list", "source": "is", "target": "list", "sourceHandle": "true" },
+    { "id": "e_list_panel", "source": "list", "target": "panel" }
+  ]
+}

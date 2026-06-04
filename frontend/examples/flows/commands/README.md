@@ -36,6 +36,16 @@ command
 | `cmd-sos` | `!sos` | Anuncia um pedido de ajuda com o nome de quem chamou |
 | `cmd-curar` | `!curar` | Cura o próprio player (admin) |
 | `cmd-eco` | `!eco <texto>` | Repete o que veio depois de `!eco` (usa Split) |
+| `cmd-help` | `!help` | Abre um painel listando os comandos da pasta "Comandos" (usa **List Flows**) |
+
+## `!help` que se atualiza sozinho (node List Flows)
+
+O `cmd-help` não tem a lista escrita à mão: ele usa o node **List Flows**, que lê os
+fluxos do servidor com filtros (só ativos / pasta / nome começa com). Coloque cada
+comando na pasta **"Comandos"** (e nomeie como `!cmd — descrição`) e ele aparece no
+`!help` sozinho. O node expõe `{{node.text}}` (nomes em linhas, pronto pro painel),
+`names`, `flows` (com nodeCount/edgeCount) e `count`. Útil em qualquer fluxo que
+precise enxergar os outros, não só no help.
 
 Requer o mod **v0.6.0+** (supressão de `!` + evento `command`). Lembre de **ativar**
 cada fluxo após importar.
