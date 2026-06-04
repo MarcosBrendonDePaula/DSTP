@@ -10,7 +10,19 @@
 // engine dispatcher, so handlers stay small and consistent.
 import type { FlowNode, FlowEdge } from '../../db'
 
-export type HandlerResult = 'continue' | 'stop' | { wait: FlowNode }
+// A handler returns one of:
+//   'continue'                  → trace, then follow ALL out-edges
+//   'stop'                      → trace, do NOT follow edges (ui_panel)
+//   { wait: FlowNode }          → bubble a paused wait node up
+//   { followEdges: filterFn }   → trace, then follow only edges passing the filter
+//                                 (condition's true/false branch). The dispatcher
+//                                 runs the filtered follow AFTER tracing, so order
+//                                 matches the legacy (trace before edge-follow).
+export type HandlerResult =
+  | 'continue'
+  | 'stop'
+  | { wait: FlowNode }
+  | { followEdges: (edge: FlowEdge) => boolean }
 
 export interface NodeRunContext {
   // ── The node and its graph ──
@@ -49,6 +61,8 @@ export interface NodeRunContext {
   runAiMemory: (args: Record<string, any>) => any
   buildUITree: () => any
   resolveTree: (tree: any) => any
+  /** Stable widget id for this UI node (author id or `ui_<nodeId>`). */
+  uiNodeId: () => string
   /** Run the AI agent for this node (callbacks built by the engine). */
   executeAIAgent: () => Promise<any>
 }

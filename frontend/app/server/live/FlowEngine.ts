@@ -286,6 +286,7 @@ export class FlowEngine {
       runAiMemory: (args) => this.runAiMemory(serverId, context, args),
       buildUITree: () => this.buildUITree(node, nodes, edges, context),
       resolveTree: (tree) => this.resolveTree(tree, context),
+      uiNodeId: () => this.uiNodeId(node),
       executeAIAgent: () => this.runAiAgentNode(node, nodes, edges, context, serverId),
     }
   }
@@ -368,7 +369,11 @@ export class FlowEngine {
       try {
         const result = await entry.handler(rc)
         this.traceCompleted(serverId, node.id, inputSnapshot, context)
-        if (typeof result === 'object' && result.wait) return result.wait
+        if (typeof result === 'object') {
+          if ('wait' in result) return result.wait
+          // Filtered follow (condition true/false). Traced above, like the legacy.
+          return await followOutEdges(result.followEdges)
+        }
         if (result === 'stop') return null
         return await followOutEdges()
       } catch (nodeErr: any) {

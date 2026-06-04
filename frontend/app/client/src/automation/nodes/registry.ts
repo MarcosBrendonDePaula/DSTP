@@ -24,6 +24,10 @@ import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_req
 import { ui as httpUi } from '@shared/automation/nodes/actions/http/http_request/ui'
 import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
 import { ui as scriptUi } from '@shared/automation/nodes/actions/code/script/ui'
+import { meta as uiBuilderMeta } from '@shared/automation/nodes/ui/builder/ui_builder/meta'
+import { ui as uiBuilderUi } from '@shared/automation/nodes/ui/builder/ui_builder/ui'
+import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/condition/meta'
+import { ui as conditionUi } from '@shared/automation/nodes/logic/branch/condition/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -39,6 +43,8 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: memoryMeta, ui: memoryUi },
   { meta: httpMeta, ui: httpUi },
   { meta: scriptMeta, ui: scriptUi },
+  { meta: uiBuilderMeta, ui: uiBuilderUi },
+  { meta: conditionMeta, ui: conditionUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──

@@ -25,6 +25,10 @@ import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_req
 import { handler as httpHandler } from '@shared/automation/nodes/actions/http/http_request/exec'
 import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
 import { handler as scriptHandler } from '@shared/automation/nodes/actions/code/script/exec'
+import { meta as uiBuilderMeta } from '@shared/automation/nodes/ui/builder/ui_builder/meta'
+import { handler as uiBuilderHandler } from '@shared/automation/nodes/ui/builder/ui_builder/exec'
+import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/condition/meta'
+import { handler as conditionHandler } from '@shared/automation/nodes/logic/branch/condition/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -40,6 +44,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: memoryMeta, handler: memoryHandler },
   { meta: httpMeta, handler: httpHandler },
   { meta: scriptMeta, handler: scriptHandler },
+  { meta: uiBuilderMeta, handler: uiBuilderHandler },
+  { meta: conditionMeta, handler: conditionHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))
