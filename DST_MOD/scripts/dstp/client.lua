@@ -4,40 +4,40 @@
 
 local DSTP = {}
 
-local _G = nil  -- set in Init()
+-- Shared state + ubiquitous helpers now live in dstp/core (DI hub). We alias them
+-- to module-locals so the ~700 internal call sites below stay unchanged. The TABLE
+-- aliases (state/config/evt_config/...) point at core's tables BY REFERENCE — Init
+-- mutates those tables in place, so the aliases stay live. The FUNCTION aliases are
+-- stable (functions don't change). `_G`/`json` are reassigned at Init, so they're
+-- aliased to module-locals set in DSTP.Init (same GLOBAL reference as core).
+local Core = require("dstp/core")
+
+local _G = nil  -- set in Init() (mirrors core._G; same GLOBAL ref)
 local json = nil -- set in Init()
 
--- State
-local state = {
-    connected = false,
-    connection_errors = 0,
-    last_successful_poll = 0,
-    event_queue = {},
-}
+local state = Core.state
+local config = Core.config
+local COMMAND_PREFIX = Core.COMMAND_PREFIX
+local command_handlers = Core.command_handlers
+local evt_config = Core.evt_config
+local hooked_players = Core.hooked_players
+local event_debounce = Core.event_debounce
+local LandClaims = nil  -- aliased from core in Init (set after require there)
+local world_inst = nil  -- local mirror; events also set core.world_inst
 
-local config = {
-    server_id = nil,
-    shard_id = nil,   -- auto: server_id:master or server_id:caves
-    shard_type = nil,  -- "master" or "caves"
-    backend_url = "http://127.0.0.1:3000",
-    panel_url_base = nil,  -- public URL for browser links; defaults to backend_url
-    poll_interval = 5,
-    max_batch_size = 50,
-    dump_mode = false,  -- when true, events include raw DST data
-    debug_logs = false,  -- when true, Log() prints to server log; errors always print
-}
-
--- Chat command prefix: a message starting with this is treated as a flow command —
--- it still fires chat_message (so flows react) but is NOT broadcast to public chat.
--- We use "!" because the game leaves it alone (it passes through Networking_Say).
-local COMMAND_PREFIX = "!"
-
-local command_handlers = {}
-local evt_config = {}
-local evt_initialized = {}
-local world_inst = nil
-local hooked_players = {}
-local LandClaims = nil  -- dstp/land_claims singleton, set in Init()
+-- Helper aliases (stable function refs from core)
+local Log = Core.Log
+local LogError = Core.LogError
+local LogInfo = Core.LogInfo
+local SafeEncode = Core.SafeEncode
+local SafeDecode = Core.SafeDecode
+local SafeDump = Core.SafeDump
+local FindPlayer = Core.FindPlayer
+local ExecuteCommand = Core.ExecuteCommand
+local ProcessCommands = Core.ProcessCommands
+-- Public API delegates to core (kept on DSTP so modmain/the rest call DSTP.X)
+DSTP.PushEvent = Core.PushEvent
+DSTP.RegisterCommand = Core.RegisterCommand
 
 -- Forward declarations (DST strict mode requires variables to exist before reference)
 local SendPrivateMessage
@@ -54,51 +54,10 @@ local RegisterBossEvents
 local RegisterGriefEvents
 local RegisterGameEvents
 
--------------------------------------------------
--- Logging
---
--- HOT-PATH RULE: always gate Log() calls with `if DEBUG then ... end` so the
--- string concatenation never runs when debug is off. `DEBUG` is a module-local
--- alias of config.debug_logs, updated by DSTP.Init().
---
--- Log()      — debug-only (gated via DEBUG)
--- LogError() — always prints (errors should never be silent)
--- LogInfo()  — always prints (boot banners, critical warnings)
--------------------------------------------------
--- Module-local debug flag. Updated by Init() from mod config.
--- Use `if DEBUG then Log(...) end` around expensive log lines to avoid
--- string concatenation/tostring() cost when debug is off.
+-- Logging + JSON helpers moved to dstp/core (aliased above: Log/LogError/LogInfo/
+-- SafeEncode/SafeDecode). DSTP._DEBUG kept as a public alias of Core.DEBUG, synced
+-- in DSTP.Init, since `if DSTP._DEBUG then` guards are used throughout.
 DSTP._DEBUG = false
-local function Log(msg)
-    if DSTP._DEBUG then
-        print("[DSTP] " .. msg)
-    end
-end
-
-local function LogError(msg)
-    print("[DSTP ERROR] " .. msg)
-end
-
-local function LogInfo(msg)
-    print("[DSTP] " .. msg)
-end
-
--------------------------------------------------
--- JSON helpers
--------------------------------------------------
-local function SafeEncode(data)
-    local ok, result = pcall(json.encode, data)
-    if ok then return result end
-    LogError("JSON encode failed: " .. tostring(result))
-    return nil
-end
-
-local function SafeDecode(str)
-    local ok, result = pcall(json.decode, str)
-    if ok then return result end
-    LogError("JSON decode failed: " .. tostring(result))
-    return nil
-end
 
 -------------------------------------------------
 -- Data collectors
@@ -279,179 +238,9 @@ local function GetAllPlayersData()
     return players
 end
 
--------------------------------------------------
--- Event Queue (with debounce)
--------------------------------------------------
 
--- Debounce config: event_type -> minimum seconds between events
--- Updated remotely via sync response
-local event_debounce = {
-    phase_changed = 1,
-    season_changed = 5,
-    health_delta = 1,
-    hunger_delta = 1,
-    sanity_delta = 1,
-    storm_changed = 5,
-    precipitation = 5,
-}
-local last_event_time = {} -- event_type -> last GetTime()
-
--- Safe dump of a Lua table (handles entities, userdata, circular refs)
-local function SafeDump(obj, depth, seen)
-    if depth and depth > 3 then return "<max depth>" end
-    if obj == nil then return nil end
-    local t = type(obj)
-    if t == "string" or t == "number" or t == "boolean" then return obj end
-    if t == "userdata" then return "<userdata>" end
-    if t == "function" then return "<function>" end
-    if t ~= "table" then return tostring(obj) end
-
-    seen = seen or {}
-    if seen[obj] then return "<circular>" end
-    seen[obj] = true
-
-    local result = {}
-    local count = 0
-    for k, v in pairs(obj) do
-        local key = type(k) == "string" and k or tostring(k)
-        -- Skip internal/heavy fields
-        if key ~= "entity" and key ~= "Transform" and key ~= "AnimState" and key ~= "Physics"
-           and key ~= "SoundEmitter" and key ~= "Network" and key ~= "Light" and key ~= "DynamicShadow"
-           and not key:match("^_") then
-            if count >= 20 then result["..."] = "truncated"; break end
-            result[key] = SafeDump(v, (depth or 0) + 1, seen)
-            count = count + 1
-        end
-    end
-
-    -- Add useful entity info if available
-    if obj.prefab then result["_prefab"] = obj.prefab end
-    if obj.userid then result["_userid"] = obj.userid end
-    if obj.name and type(obj.name) == "string" then result["_name"] = obj.name end
-    if obj.GUID then result["_GUID"] = obj.GUID end
-
-    return result
-end
-
-function DSTP.PushEvent(event_type, data, raw_data)
-    -- Debounce check
-    local debounce = event_debounce[event_type]
-    if debounce then
-        local now = _G.GetTime()
-        local last = last_event_time[event_type] or 0
-        if now - last < debounce then
-            return -- skip, too soon
-        end
-        last_event_time[event_type] = now
-    end
-
-    -- Merge raw DST data into event data so flows have access to everything
-    -- Only merge plain data tables, NOT entity objects (which have GUID/entity/Transform)
-    local merged = data or {}
-    if raw_data and type(raw_data) == "table" and not raw_data.GUID and not raw_data.entity then
-        local ok, dumped = pcall(SafeDump, raw_data)
-        if ok and type(dumped) == "table" then
-            for k, v in pairs(dumped) do
-                if merged[k] == nil then
-                    merged[k] = v
-                end
-            end
-        end
-    end
-
-    local event = {
-        type = event_type,
-        timestamp = _G.GetTime(),
-        data = merged,
-    }
-
-    -- If dump mode is active, also keep the full raw separately
-    if config.dump_mode and raw_data then
-        local ok, dumped = pcall(SafeDump, raw_data)
-        if ok then
-            event.raw = dumped
-        end
-    end
-
-    table.insert(state.event_queue, event)
-    while #state.event_queue > config.max_batch_size * 2 do
-        table.remove(state.event_queue, 1)
-    end
-
-    -- Request an immediate flush so the next scheduled poll fires fast.
-    -- The scheduler in ComputeNextDelay already checks event_queue length, but
-    -- if a poll is currently in-flight this won't help — it just means the
-    -- next reschedule picks 0.5s. That's fine; we avoid spamming here.
-    state.flush_requested = true
-end
-
--------------------------------------------------
--- Command system
--------------------------------------------------
-function DSTP.RegisterCommand(command_type, handler)
-    command_handlers[command_type] = handler
-end
-
-local function ExecuteCommand(cmd)
-    local handler = command_handlers[cmd.type]
-    if not handler then
-        LogError("Unknown command: " .. tostring(cmd.type))
-        return false
-    end
-    local ok, err = pcall(handler, cmd.data or {})
-    if not ok then
-        LogError("Command '" .. cmd.type .. "' failed: " .. tostring(err))
-        return false
-    end
-    return true
-end
-
-local function ProcessCommands(commands)
-    if not commands then return end
-
-    -- A player's _dstp_ui net_string holds a SINGLE value, so multiple
-    -- ui_command in one sync would clobber each other (only the last :set
-    -- survives). Coalesce all ui_command per userid into one batch so the
-    -- client receives them all in a single net_string update.
-    local ui_by_user = {}        -- userid -> { sub_cmd, sub_cmd, ... }
-    local ui_order = {}          -- preserve first-seen userid order
-
-    for _, cmd in ipairs(commands) do
-        if cmd.type == "ui_command" and cmd.data and cmd.data.userid and cmd.data.cmd then
-            local uid = cmd.data.userid
-            if not ui_by_user[uid] then ui_by_user[uid] = {}; table.insert(ui_order, uid) end
-            local c = cmd.data.cmd
-            if c.action == "batch" and c.commands then
-                for _, sub in ipairs(c.commands) do table.insert(ui_by_user[uid], sub) end
-            else
-                table.insert(ui_by_user[uid], c)
-            end
-        else
-            if DSTP._DEBUG then Log("Exec: " .. tostring(cmd.type)) end
-            ExecuteCommand(cmd)
-        end
-    end
-
-    -- Flush one batched ui_command per player.
-    for _, uid in ipairs(ui_order) do
-        local subs = ui_by_user[uid]
-        if #subs == 1 then
-            ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = subs[1] } })
-        elseif #subs > 1 then
-            ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = { action = "batch", commands = subs } } })
-        end
-    end
-end
-
--------------------------------------------------
--- Player helper
--------------------------------------------------
-local function FindPlayer(userid)
-    for _, player in ipairs(_G.AllPlayers) do
-        if player.userid == userid then return player end
-    end
-    return nil
-end
+-- SafeDump / DSTP.PushEvent / the command system (RegisterCommand/Execute/Process)
+-- / FindPlayer all moved to dstp/core and are aliased at the top of this file.
 
 -------------------------------------------------
 -- Built-in commands (player management)
@@ -1461,7 +1250,7 @@ end
 -------------------------------------------------
 -- Game event listeners (by category)
 -------------------------------------------------
--- (evt_config, evt_initialized, world_inst declared at top of module)
+-- (evt_config, world_inst aliased from core at top of module)
 
 -- Per-player events (combat, crafting, inventory, health, gathering)
 RegisterPerPlayerEvents = function(player)
@@ -2402,9 +2191,12 @@ end
 -- Init
 -------------------------------------------------
 function DSTP.Init(mod_env, mod_config)
-    -- Set globals from mod environment
-    _G = mod_env.GLOBAL
-    json = _G.json
+    -- Inject the mod globals into the shared core FIRST, so core._G/json/config are
+    -- populated before any helper (PushEvent/FindPlayer/...) runs. Then mirror them
+    -- to this file's local aliases (same GLOBAL reference).
+    Core.Init(mod_env.GLOBAL, mod_env.GLOBAL.json, nil)
+    _G = Core._G
+    json = Core.json
 
     config.is_auto_id = mod_config.is_auto_id or (mod_config.server_id == "auto")
     config.server_id = mod_config.server_id or "auto"
@@ -2417,7 +2209,8 @@ function DSTP.Init(mod_env, mod_config)
     if mod_config.poll_interval then config.poll_interval = mod_config.poll_interval end
     if mod_config.debug_logs ~= nil then
         config.debug_logs = mod_config.debug_logs
-        DSTP._DEBUG = mod_config.debug_logs
+        Core.DEBUG = mod_config.debug_logs
+        DSTP._DEBUG = mod_config.debug_logs  -- public alias kept in sync with Core.DEBUG
     end
 
     -- Event categories config
@@ -2432,6 +2225,7 @@ function DSTP.Init(mod_env, mod_config)
     LandClaims = _G.require("dstp/land_claims").Init({
         GLOBAL = _G, debug_logs = config.debug_logs,
     })
+    Core.LandClaims = LandClaims  -- share with core (commands will read it from there)
 
     RegisterBuiltinCommands()
 
