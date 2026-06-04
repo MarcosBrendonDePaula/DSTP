@@ -1972,14 +1972,26 @@ RegisterWorldEvents = function(inst)
         DSTP.PushEvent("new_day", { day = world.state.cycles }, world)
     end)
 
-    inst:ListenForEvent("ms_nextphase", function(world)
+    -- Day phase (day/dusk/night). Listen to the REAL notification `phasechanged`
+    -- (clock.lua:396 pushes it with the phase name on a NATURAL transition), not the
+    -- `ms_nextphase` COMMAND event — that only fires when the phase is forced, so
+    -- natural day/dusk/night cycling was being missed.
+    inst:ListenForEvent("phasechanged", function(world, phase)
         if not evt_config.world then return end
-        DSTP.PushEvent("phase_changed", { phase = world.state.phase }, world)
+        DSTP.PushEvent("phase_changed", { phase = phase or world.state.phase }, world)
     end)
 
-    inst:ListenForEvent("ms_setseason", function(world, season)
+    -- Season. `seasontick` fires every tick with the current season name; emit
+    -- season_changed only when it actually CHANGES (compare to the last one we saw,
+    -- mirroring the moonphase pattern). `ms_setseason` was the force-command, so
+    -- natural season rollover never fired.
+    inst:ListenForEvent("seasontick", function(world, data)
         if not evt_config.world then return end
-        DSTP.PushEvent("season_changed", { season = tostring(season) }, season)
+        local season = (data and data.season) or (world.state and world.state.season)
+        if season and inst._dstp_last_season ~= season then
+            inst._dstp_last_season = season
+            DSTP.PushEvent("season_changed", { season = tostring(season) }, data)
+        end
     end)
 
     inst:ListenForEvent("ms_sendlightningstrike", function(world, pt)
@@ -2072,9 +2084,15 @@ RegisterWeatherEvents = function(inst)
         }, data)
     end)
 
-    inst:ListenForEvent("ms_forceprecipitation", function(world, enabled)
+    -- Precipitation. Listen to the REAL `precipitationchanged` (weather.lua:778
+    -- pushes it with the precip-type name — "none"/"rain"/"snow" — when rain
+    -- naturally starts/stops), not the `ms_forceprecipitation` COMMAND event.
+    inst:ListenForEvent("precipitationchanged", function(world, ptype)
         if not evt_config.weather then return end
-        DSTP.PushEvent("precipitation", { enabled = enabled }, enabled)
+        DSTP.PushEvent("precipitation", {
+            type = ptype,
+            enabled = ptype ~= nil and ptype ~= "none",
+        }, ptype)
     end)
 end
 
