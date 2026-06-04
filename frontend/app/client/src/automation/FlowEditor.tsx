@@ -92,6 +92,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   const [catalogFilter, setCatalogFilter] = useState<'all' | 'events' | 'nodes'>('all')
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  // Live preview of the node being dragged from the library, following the cursor
+  // over the canvas. {type, data} + screen position; null when not dragging.
+  const [dragPreview, setDragPreview] = useState<{ item: NodeCatalogItem; x: number; y: number } | null>(null)
+  const draggingItemRef = useRef<NodeCatalogItem | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
 
   // Undo/Redo history
@@ -284,11 +288,23 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   const onNodeDragStart = useCallback((event: React.DragEvent, item: NodeCatalogItem) => {
     event.dataTransfer.setData('application/dstp-node-item', JSON.stringify({ type: item.type, data: item.data || {} }))
     event.dataTransfer.effectAllowed = 'move'
+    draggingItemRef.current = item
+    // Hide the native drag image (a blurry clone) — we render our own ghost.
+    const empty = document.createElement('div')
+    event.dataTransfer.setDragImage(empty, 0, 0)
+  }, [])
+
+  const onNodeDragEnd = useCallback(() => {
+    draggingItemRef.current = null
+    setDragPreview(null)
   }, [])
 
   const onCanvasDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
+    // Follow the cursor with the node ghost.
+    const item = draggingItemRef.current
+    if (item) setDragPreview({ item, x: event.clientX, y: event.clientY })
   }, [])
 
   const onCanvasDrop = useCallback((event: React.DragEvent) => {
@@ -303,8 +319,13 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     try {
       const item = JSON.parse(raw) as NodeCatalogItem
       addCatalogItemAt(item, position)
+      // Re-open the library after a drop so you can keep dropping nodes in a row.
+      setNodeDrawerOpen(true)
     } catch {
       return
+    } finally {
+      draggingItemRef.current = null
+      setDragPreview(null)
     }
   }, [addCatalogItemAt])
 
@@ -462,7 +483,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             onClick={() => setNodeDrawerOpen(false)}
             onKeyDown={e => { if (e.key === 'Escape') setNodeDrawerOpen(false) }}
             onDragOver={onCanvasDragOver}
-            onDrop={e => { onCanvasDrop(e); setNodeDrawerOpen(false) }}
+            onDrop={onCanvasDrop}
             aria-label="Fechar biblioteca de nodes"
           />
           <aside className="absolute right-0 top-[68px] bottom-9 w-[396px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
@@ -513,6 +534,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                       tabIndex={0}
                       draggable
                       onDragStart={event => onNodeDragStart(event, item)}
+                      onDragEnd={onNodeDragEnd}
                       onClick={() => addCatalogItem(item)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCatalogItem(item) } }}
                       className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60 cursor-grab active:cursor-grabbing"
@@ -570,6 +592,27 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           allEdges={edges.map(e => ({ source: e.source, target: e.target }))}
         />
       )}
+
+      {/* Drag ghost — follows the cursor while dragging a node from the library
+          onto the canvas. A light card (icon + label) so we don't run the node's
+          ReactFlow hooks outside the provider. */}
+      {dragPreview && (() => {
+        const color = registryMetaByType[dragPreview.item.type]?.color ?? '#3b82f6'
+        return (
+          <div
+            className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 opacity-80"
+            style={{ left: dragPreview.x, top: dragPreview.y }}
+          >
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-2 min-w-[160px] text-xs shadow-2xl"
+              style={{ background: '#141414', border: `1px solid ${color}66`, boxShadow: `0 0 24px ${color}40` }}
+            >
+              <span className="text-base">{dragPreview.item.icon}</span>
+              <span className="font-semibold text-[11px]" style={{ color }}>{dragPreview.item.label}</span>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
