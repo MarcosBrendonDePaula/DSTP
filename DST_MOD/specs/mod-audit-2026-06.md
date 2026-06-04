@@ -71,20 +71,33 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
 - Nodes clicáveis de texto/ícone/imagem (`ui_widgets.lua:520-536`): `OnControl` +
   `SetClickable` não tornam um widget de HUD focável → cliques não chegam.
 
-## 📋 Gap de eventos — 18 novos viáveis (fonte vanilla confirmada)
+## 📋 Gap de eventos — RESOLVIDO (14 implementados, 4 pulados)
 
-Adicionar de forma controlada, por categoria. Cada um tem o evento DST de origem
-(arquivo:linha vanilla) e payload no relatório das issues.
+**Status (jun/2026):** os 18 candidatos foram validados 1-a-1 contra os scripts
+vanilla extraídos ANTES de fiar (workflow de 18 agentes). A validação pegou **4
+casos que teriam virado listener morto** (a própria classe de bug #5/#6) — esses
+foram **PULADOS** com justificativa. Os 14 restantes foram implementados na
+`events/<categoria>.lua` certa, com o shape de dados real (keyed, nil-guards) e
+debounce/edge-detection onde a fonte dispara por-tick.
 
-| Categoria | Eventos novos | Valor |
-|-----------|---------------|-------|
-| players | `player_new_character`, `player_resurrected`, `player_migrated` | alto/médio |
-| world | `rift_spawned`, `boss_warning` (epicscare) | alto/médio |
-| gathering | `player_pick` (picksomething), `player_mine_chop_start` | alto/baixo |
-| combat | `player_min_health`, `player_block`, `player_attack_miss`, `player_combat_target` | médio/baixo |
-| inventory | `inventory_full`, `trade_received` | médio/baixo |
-| crafting | `recipe_unlocked`, `tech_tree_changed` | médio/baixo |
-| survival | `player_enlightened`, `player_lunacy_normal`, `player_wet` | médio |
+### ✅ Implementados (14) — `feat(events): add 14 audit events (#8-14)`
+| Categoria | Eventos | Nota de implementação |
+|-----------|---------|------------------------|
+| players | `player_new_character` (ms_newplayercharacterspawned, world), `player_resurrected` (ms_respawnedfromghost, unifica ghost+corpse) | data keyed; resurrected nil-guarda reviver |
+| world | `rift_spawned` (ms_riftaddedtopool, data.rift) | |
+| combat | `player_block` (blocked), `player_attack_miss` (onmissother), `boss_warning` (epicscare) | boss_warning é pulso AoE → debounce 3s por-player, gate `bosses` |
+| gathering | `player_pick` (picksomething), `player_mine_chop_start` (working) | mine_chop_start é por-swing → edge-detect por target + nil-guard |
+| inventory | `inventory_full` (inventoryfull) | |
+| crafting | `recipe_unlocked` (unlockrecipe), `tech_tree_changed` (techtreechange) | recipe nil-guarda freebuild; tech `data.level` é MAP de árvores |
+| survival | `player_enlightened` (goenlightened), `player_lunacy_normal` (sanitymodechanged mode==0), `player_wet` (moisturedelta) | wet edge-detect no limiar 'soaked' (>35) |
+
+### ⛔ Pulados (4) — seriam listeners mortos
+| Evento da issue | Por que pulado |
+|-----------------|----------------|
+| `player_min_health` | `minhealth` só dispara em bosses com `SetMinHealth(>0)`; em player real (min=0) vai pro caminho de morte. Nunca dispara no player. |
+| `player_combat_target` | `newcombattarget` dispara na entidade que **adquire** alvo (o MOB que aggra), não no player. Player-scoped = morto. |
+| `trade_received` | `trade` dispara no **NPC receptor** (Pig King etc.), não no player que dá. E o item vai pro NPC, então nem `player_item_get` cobre — exige hook em todo prefab Trader. |
+| `player_migrated` | A fonte da issue (`OnDespawn`) é um **método**, não evento. O real é `ms_playerdespawnandmigrate` no world (4 sites, shape variável). Complexo demais p/ o valor; o `player_disconnected` já existe. |
 
 ## Nota sobre os `ms_*` na lista "emitida"
 
