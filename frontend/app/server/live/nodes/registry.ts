@@ -40,10 +40,12 @@ import { handler as uiMenuHandler } from '@shared/automation/nodes/ui/interactiv
 import { meta as uiRuleMeta } from '@shared/automation/nodes/ui/interactive/ui_rule/meta'
 import { handler as uiRuleHandler } from '@shared/automation/nodes/ui/interactive/ui_rule/exec'
 
-// Triggers have NO exec (entry points matched in evaluateEvent); meta only, for
-// FlowAnalyzer's isTrigger flag.
+// No-exec metas: triggers (entry points matched in evaluateEvent) and wait (its
+// stateful execution lives in the orchestrator, not a handler). Kept for the
+// FlowAnalyzer isTrigger/pausable flags.
 import { meta as triggerMeta } from '@shared/automation/nodes/triggers/game/trigger/meta'
 import { meta as webhookMeta } from '@shared/automation/nodes/triggers/net/webhook/meta'
+import { meta as waitMeta } from '@shared/automation/nodes/logic/merge/wait/meta'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -68,8 +70,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: uiRuleMeta, handler: uiRuleHandler },
 ]
 
-// Trigger metas — no handler (entry points), kept apart from the dispatch ENTRIES.
-const TRIGGER_METAS: NodeMeta[] = [triggerMeta, webhookMeta]
+// No-handler metas (triggers + wait), kept apart from the dispatch ENTRIES.
+const NO_EXEC_METAS: NodeMeta[] = [triggerMeta, webhookMeta, waitMeta]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))
 
@@ -78,7 +80,7 @@ export function getNodeEntry(type: string): BackendNodeEntry | undefined {
   return registry.get(type)
 }
 
-/** All registered metas incl. triggers (for FlowAnalyzer trigger/pausable flags). */
+/** All node metas incl. triggers/wait (for FlowAnalyzer trigger/pausable flags). */
 export function allNodeMetas(): NodeMeta[] {
-  return [...ENTRIES.map(e => e.meta), ...TRIGGER_METAS]
+  return [...ENTRIES.map(e => e.meta), ...NO_EXEC_METAS]
 }

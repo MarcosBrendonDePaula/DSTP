@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { BaseNode, NodeField, NodeSelect, NodeInput } from '../BaseNode'
+import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
 
-export function WaitNode({ id, data, selected }: any) {
+export const ui = function WaitNode({ id, data, selected }: any) {
   const { updateNodeData } = useReactFlow()
 
   const update = useCallback((key: string, value: string) => {

@@ -60,6 +60,8 @@ import { meta as triggerMeta } from '@shared/automation/nodes/triggers/game/trig
 import { ui as triggerUi } from '@shared/automation/nodes/triggers/game/trigger/ui'
 import { meta as webhookMeta } from '@shared/automation/nodes/triggers/net/webhook/meta'
 import { ui as webhookUi } from '@shared/automation/nodes/triggers/net/webhook/ui'
+import { meta as waitMeta } from '@shared/automation/nodes/logic/merge/wait/meta'
+import { ui as waitUi } from '@shared/automation/nodes/logic/merge/wait/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -93,6 +95,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: aiMemoryMeta, ui: aiMemoryUi },
   { meta: triggerMeta, ui: triggerUi },
   { meta: webhookMeta, ui: webhookUi },
+  { meta: waitMeta, ui: waitUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
