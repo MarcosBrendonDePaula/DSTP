@@ -89,8 +89,11 @@ Key files:
 - `app/server/services/DSTStateStore.ts` — in-memory cache (players, shards, command queues)
 - `app/server/routes/dst.routes.ts` — POST /api/dst/sync (DST game calls this)
 - `app/server/db/` — Drizzle schema, repositories (FlowRepository, AutomationLogRepository, FlowMemoryRepository, etc)
+- `app/server/live/nodes/` — backend node registry + `NodeRunContext`/`NodeHandler` contract (see **Node Module System**)
+- `app/shared/automation/nodes/` — the node modules (one folder per type: meta/ui/exec)
 - `app/client/src/live/DSTPanel.tsx` — main admin panel UI
-- `app/client/src/automation/` — React Flow editor, 11 node types, NodeDetailPanel modal
+- `app/client/src/automation/` — React Flow editor, node registry, NodeDetailPanel modal
+- `app/server/services/SyncRecorder.ts` + `services/replay.ts` — dev tool: record real `/dst/sync` traffic and replay it against the engine (`bun run scripts/replay.ts`)
 
 ## Commands
 
@@ -136,14 +139,23 @@ bump `version` in `modinfo.lua` and add a `DST_MOD/CHANGELOG.md` entry first.
 
 ## Node Types
 
+Each node is a **module** (one folder) — see **Node Module System** below.
+
 | Node | Purpose |
 |------|---------|
 | `trigger` | Event-based entry point (40+ DST events across 11 categories) |
-| `condition` | Binary branch (true/false), 6 operators |
-| `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 30+ types) |
+| `webhook` | Entry point fired by an inbound HTTP request (`POST /api/webhook/:serverId/:webhookId`), with optional per-node token + method |
+| `condition` | Binary branch (true/false). Operators: equals, not_equals, greater_than, less_than, contains, **starts_with**, **ends_with**, exists |
+| `switch` | Route by value: N exact-value cases → `case_<i>` handles, else `default` |
+| `filter` | Stop the flow unless a condition passes (single output, halts on fail) |
+| `foreach` | Iterate a list: run the `each` branch per item (`{{loop.item}}`/`{{loop.index}}`) then `done`. Capped at 40 items |
+| `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 50+ subtypes via `action_type`) |
 | `delay` | Wait N ms before continuing (capped at 1h) |
 | `http_request` | External HTTP call (GET/POST with templates) |
 | `set_variable` | Store custom key-value in context |
+| `transform` | Safe value ops without the `script` RCE: upper/lower/trim/length/number/round, add/sub/mul/div, json parse/stringify |
+| `random` | Pick a random list item or integer in [min,max] |
+| `log` | Write a template-resolved, secret-masked debug line to the server log |
 | `script` | JavaScript via `new Function()` (admin-only, runs in Node) |
 | `get_player` | Fetch player data by userid (health, hunger, sanity, position, inventory, **admin**) |
 | `find_player` | Search player by name (partial, strips command prefixes like `/tp`, `#tp`) |
@@ -151,8 +163,73 @@ bump `version` in `modinfo.lua` and add a `DST_MOD/CHANGELOG.md` entry first.
 | `wait` | Multi-trigger merge: waits for N branches, 3 correlation modes, timeout support |
 | `ai_agent` | LLM agent (Vercel AI SDK). Nodes wired to its `tools` handle become callable tools; agentic loop (`stopWhen: stepCountIs`). See **AI Agent Node** below. |
 | `ai_memory` | The AI's own key/value store, used as a tool by `ai_agent` (save/get/list/delete, free-form key). |
+| `ui_*` | In-game UI: `ui_builder`, `ui_panel`, `ui_menu`, `ui_rule`, and primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`) |
 
 All nodes support `alias` for friendly context keys (`{{myAlias.field}}` instead of `{{node_id.field}}`).
+
+## Node Module System
+
+Every flow node is a **self-contained module = one folder** under
+`frontend/app/shared/automation/nodes/<category>/<subcategory>/<type>/`:
+
+```
+<type>/
+  meta.ts   # NodeMeta (SHARED, client+server): type, icon, color, category,
+            #   defaults, outputSchema, aiDescription/aiParamDescriptions, flow
+            #   flags (isTrigger/pausable). ZERO runtime deps (no React, no sqlite).
+  ui.tsx    # export const ui — the React canvas component (FRONTEND only).
+  exec.ts   # export const handler — the execution handler (BACKEND only).
+            #   Absent for triggers/wait (they don't run via the dispatcher).
+```
+
+**Adding a node = create the folder + one import line in each registry.** No more
+hunting ~13 scattered edit points. The registries:
+- `app/server/live/nodes/registry.ts` — imports `meta` + `exec` (handler)
+- `app/client/src/automation/nodes/registry.ts` — imports `meta` + `ui`
+
+Registration is **explicit static import**, NOT a glob: the backend ships as one
+bundled `dist/index.js`, so runtime FS globs (`Bun.Glob`) or `import.meta.glob`
+(unsupported by Bun) would break in production. Static imports are bundle-safe.
+
+**Bundle isolation:** `meta.ts` is the only file imported by BOTH sides. The
+registries import `meta`+`ui` (client) and `meta`+`exec` (server) by exact
+filename, so `ui.tsx` (React) never reaches the backend bundle and `exec.ts`
+(bun:sqlite) never reaches the frontend — even though all three live in one folder.
+
+**Everything derives from the registry** (no hand-maintained per-type lists):
+`nodeTypes`, the palette catalog, create-defaults, output schemas, minimap colors,
+the detail-modal config editor, FlowAnalyzer's isTrigger/pausable flags.
+
+### Execution dispatch (`FlowEngine.processNode`)
+`processNode` is a **dispatcher**: loop-guard → `wait` early-return → registry
+dispatch. The handler receives a `NodeRunContext` (injects `resolve`, `param`,
+`setContext`, `pushCommand`, `findPlayerInServer`, `followOutEdges`,
+`executeHttpRequest`/`Script`, `runFlowAction`, `buildUITree`, `executeAIAgent`,
+`log`, etc.) and returns one of:
+- `'continue'` — engine traces the node, then follows ALL out-edges
+- `'stop'` — traces, does NOT follow edges (`ui_panel` consumes children)
+- `{ followEdges: filterFn }` — traces, then follows only matching edges
+  (`condition` true/false, `switch` cases, `foreach` each/done)
+- `{ wait: FlowNode }` — bubble a paused wait node up
+
+Heavy helpers stay in `FlowEngine` and are injected — handlers stay small.
+
+**`wait` is the lone exception OUTSIDE the registry**: its stateful pause
+(`executeStatefulBranch` + `WorkflowInstanceStore`) lives in the orchestrator, not
+a handler. Triggers (`trigger`/`webhook`) have no `exec` — they're entry points
+matched in `evaluateEvent`.
+
+### The detail modal reuses each node's `ui.tsx`
+`NodeDetailPanel` renders the node's own `ui.tsx` (via a `ConfigOnlyContext` that
+makes `BaseNode` emit just the fields) — single source of truth, so a new node's
+config form works with zero modal edits. The modal renders OUTSIDE `<ReactFlow>`,
+so `ui.tsx` uses the `useNodeDataUpdater()` hook (context updater in the modal,
+`useReactFlow().updateNodeData` on the canvas) instead of `useReactFlow` directly.
+
+### AI tool descriptions live on the node
+`meta.aiDescription` / `meta.aiParamDescriptions` document a node for the
+`ai_agent` (replacing the old central `ACTION_DESCRIPTIONS` map) — each node that
+can be wired as a tool describes itself.
 
 ## AI Agent Node
 
