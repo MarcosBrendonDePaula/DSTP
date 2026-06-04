@@ -29,6 +29,8 @@ import { meta as uiBuilderMeta } from '@shared/automation/nodes/ui/builder/ui_bu
 import { handler as uiBuilderHandler } from '@shared/automation/nodes/ui/builder/ui_builder/exec'
 import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/condition/meta'
 import { handler as conditionHandler } from '@shared/automation/nodes/logic/branch/condition/exec'
+import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch/meta'
+import { handler as switchHandler } from '@shared/automation/nodes/logic/branch/switch/exec'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -63,6 +65,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: scriptMeta, handler: scriptHandler },
   { meta: uiBuilderMeta, handler: uiBuilderHandler },
   { meta: conditionMeta, handler: conditionHandler },
+  { meta: switchMeta, handler: switchHandler },
   { meta: actionMeta, handler: actionHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },

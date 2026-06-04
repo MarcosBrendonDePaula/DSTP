@@ -501,3 +501,44 @@ describe('FlowEngine e2e — capture with multiple triggers', () => {
     engine.stopCapture(SERVER)
   })
 })
+
+describe('FlowEngine e2e — switch', () => {
+  // field {{trigger.prefab}} routed to case_0 (wilson) / case_1 (willow) / default
+  const switchNode = (id: string, field: string, cases: any[]): FlowNode =>
+    ({ id, type: 'switch', data: { field, cases }, position: { x: 0, y: 0 } } as any)
+
+  function build() {
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      switchNode('s', '{{trigger.prefab}}', [{ value: 'wilson' }, { value: 'willow' }]),
+      action('a0', 'announce', { message: 'is wilson' }),
+      action('a1', 'announce', { message: 'is willow' }),
+      action('ad', 'announce', { message: 'unknown' }),
+    ]
+    const edges = [
+      edge('t', 's'),
+      edge('s', 'a0', 'case_0'),
+      edge('s', 'a1', 'case_1'),
+      edge('s', 'ad', 'default'),
+    ]
+    return { nodes, edges }
+  }
+
+  it('routes to the matching case handle', async () => {
+    const { nodes, edges } = build()
+    await run(nodes, edges, { type: 'player_spawn', data: { prefab: 'willow' } })
+    expect(commands.map(c => c.data.message)).toEqual(['is willow'])
+  })
+
+  it('routes to the first case when it matches', async () => {
+    const { nodes, edges } = build()
+    await run(nodes, edges, { type: 'player_spawn', data: { prefab: 'wilson' } })
+    expect(commands.map(c => c.data.message)).toEqual(['is wilson'])
+  })
+
+  it('falls through to default when no case matches', async () => {
+    const { nodes, edges } = build()
+    await run(nodes, edges, { type: 'player_spawn', data: { prefab: 'wendy' } })
+    expect(commands.map(c => c.data.message)).toEqual(['unknown'])
+  })
+})
