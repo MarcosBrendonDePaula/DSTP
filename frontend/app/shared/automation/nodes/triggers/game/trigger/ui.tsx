@@ -83,6 +83,8 @@ export const TRIGGER_EVENTS = [
   { value: 'item_has', label: '❓ Tem Item (resultado)', category: 'economy' },
   { value: 'item_transferred', label: '🔄 Item Transferido', category: 'economy' },
   { value: 'inventory_dump', label: '📋 Inventário Listado', category: 'economy' },
+  { value: 'claim_list_result', label: '🛡 Claims Listadas (resultado)', category: 'economy' },
+  { value: 'claim_check_result', label: '🛡 Claim Consultada (resultado)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'book_read', label: '📚 Book Read', category: 'character' },

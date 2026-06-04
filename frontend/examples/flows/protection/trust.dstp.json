@@ -1,0 +1,22 @@
+{
+  "name": "Proteção — !trust <nome> autoriza um amigo na sua claim (admin)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "chat_message", "alias": "chat" } },
+    { "id": "iscmd", "type": "condition", "position": { "x": 300, "y": 0 }, "data": { "field": "{{chat.message}}", "operator": "starts_with", "value": "!trust" } },
+    { "id": "me", "type": "get_player", "position": { "x": 600, "y": 0 }, "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" } },
+    { "id": "isadmin", "type": "condition", "position": { "x": 900, "y": 0 }, "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" } },
+    { "id": "friend", "type": "find_player", "position": { "x": 1200, "y": 0 }, "data": { "params": { "name": "{{chat.message}}" }, "alias": "friend" } },
+    { "id": "found", "type": "condition", "position": { "x": 1500, "y": 0 }, "data": { "field": "{{friend.userid}}", "operator": "exists", "value": "" } },
+    { "id": "trust", "type": "land_claim", "position": { "x": 1800, "y": 0 }, "data": { "params": { "operation": "trust", "userid": "{{chat.userid}}", "friend": "{{friend.userid}}", "on": "true" } } },
+    { "id": "notify", "type": "action", "position": { "x": 2100, "y": 0 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "{{friend.name}} agora pode mexer na sua área.", "duration": "3" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_iscmd", "source": "trg", "target": "iscmd" },
+    { "id": "e_iscmd_me", "source": "iscmd", "target": "me", "sourceHandle": "true" },
+    { "id": "e_me_admin", "source": "me", "target": "isadmin" },
+    { "id": "e_admin_friend", "source": "isadmin", "target": "friend", "sourceHandle": "true" },
+    { "id": "e_friend_found", "source": "friend", "target": "found" },
+    { "id": "e_found_trust", "source": "found", "target": "trust", "sourceHandle": "true" },
+    { "id": "e_trust_notify", "source": "trust", "target": "notify" }
+  ]
+}

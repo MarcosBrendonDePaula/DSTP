@@ -1,0 +1,18 @@
+{
+  "name": "Proteção — !claim reivindica a área onde você está (admin)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "chat_message", "alias": "chat" } },
+    { "id": "iscmd", "type": "condition", "position": { "x": 300, "y": 0 }, "data": { "field": "{{chat.message}}", "operator": "starts_with", "value": "!claim" } },
+    { "id": "who", "type": "get_player", "position": { "x": 600, "y": 0 }, "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" } },
+    { "id": "isadmin", "type": "condition", "position": { "x": 900, "y": 0 }, "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" } },
+    { "id": "claim", "type": "land_claim", "position": { "x": 1200, "y": 0 }, "data": { "params": { "operation": "add", "userid": "{{chat.userid}}", "radius": "20" } } },
+    { "id": "notify", "type": "action", "position": { "x": 1500, "y": 0 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Área protegida (raio 20). Só você, admins e amigos podem mexer.", "duration": "3" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_iscmd", "source": "trg", "target": "iscmd" },
+    { "id": "e_iscmd_who", "source": "iscmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_claim", "source": "isadmin", "target": "claim", "sourceHandle": "true" },
+    { "id": "e_claim_notify", "source": "claim", "target": "notify" }
+  ]
+}

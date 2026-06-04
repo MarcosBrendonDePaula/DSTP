@@ -301,3 +301,63 @@ end)
 -- Panel access is via chat command `#panel` (admins only).
 -- See HandleBuiltinCommand in scripts/dstp/client.lua.
 -- The old Tab scoreboard button was removed to keep panel opening explicit.
+
+-------------------------------------------------
+-- Land claims — terrain protection (server-side blocking)
+-------------------------------------------------
+-- The claim store + IsProtected live in the dstp/land_claims singleton (also
+-- required by client.lua, so it's the SAME table). These overrides are the only
+-- way to VETO an action: workable:WorkedBy_Internal and burnable:Ignite apply
+-- their effect synchronously in-frame with no veto callback, so we wrap them and
+-- skip the original when the target sits in someone else's claim. A flow can't do
+-- this — it round-trips through the backend, far too slow to block a frame action.
+-- Always installed; with no claims, IsProtected returns false (≈ zero cost).
+local _claims = GLOBAL.require("dstp/land_claims")
+
+local function ClaimPos(inst)
+    if inst and inst.Transform then
+        local x, _, z = inst.Transform:GetWorldPosition()
+        return x, z
+    end
+end
+
+-- workable: blocks hammer / mine / chop / deconstruct on protected structures.
+AddComponentPostInit("workable", function(self)
+    local _WorkedBy_Internal = self.WorkedBy_Internal
+    if not _WorkedBy_Internal then return end
+    function self:WorkedBy_Internal(worker, numworks, ...)
+        local x, z = ClaimPos(self.inst)
+        if x and _claims.IsProtected(x, z, worker) then
+            return  -- protected: ignore the work entirely
+        end
+        return _WorkedBy_Internal(self, worker, numworks, ...)
+    end
+end)
+
+-- burnable: blocks igniting protected structures (player- or world-caused fire).
+AddComponentPostInit("burnable", function(self)
+    local _Ignite = self.Ignite
+    if not _Ignite then return end
+    function self:Ignite(immediate, source, doer, ...)
+        local x, z = ClaimPos(self.inst)
+        if x and _claims.IsProtected(x, z, doer) then
+            return  -- protected: do not catch fire
+        end
+        return _Ignite(self, immediate, source, doer, ...)
+    end
+end)
+
+-- builder: blocks PLACING structures inside someone else's claim. DoBuild's `pt`
+-- is the world placement point (Vector3) for placer recipes; a nil pt means an
+-- inventory craft (a spear, food…) which is NOT grief — so we only guard when a
+-- pt is present. The doer is the builder's inst (self.inst).
+AddComponentPostInit("builder", function(self)
+    local _DoBuild = self.DoBuild
+    if not _DoBuild then return end
+    function self:DoBuild(recname, pt, ...)
+        if pt and pt.x and _claims.IsProtected(pt.x, pt.z, self.inst) then
+            return false  -- protected area: refuse to place the structure
+        end
+        return _DoBuild(self, recname, pt, ...)
+    end
+end)

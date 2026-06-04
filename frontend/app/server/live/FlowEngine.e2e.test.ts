@@ -749,3 +749,37 @@ describe('FlowEngine e2e — call_component + tags', () => {
     expect(commands[0]).toMatchObject({ type: 'remove_tag', data: { userid: 'KU_1', tag: 'fastpicker' } })
   })
 })
+
+describe('FlowEngine e2e — land_claim', () => {
+  const lc = (id: string, params: any): FlowNode =>
+    ({ id, type: 'land_claim', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  it('add → claim_add with owner defaulting to userid and no coords (mod uses pos)', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'add', userid: '{{trigger.userid}}', radius: '25' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({
+      type: 'claim_add',
+      data: { owner: 'KU_7', userid: 'KU_7', radius: 25 },
+    })
+    expect(commands[0].data.x).toBeUndefined()
+    expect(commands[0].data.z).toBeUndefined()
+  })
+
+  it('remove without coords flags at_player so the mod removes the claim under them', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'remove', userid: '{{trigger.userid}}' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_remove', data: { userid: 'KU_7', at_player: true } })
+  })
+
+  it('trust → claim_trust with friend + on flag', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'trust', userid: '{{trigger.userid}}', friend: 'KU_9', on: 'true' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_trust', data: { owner: 'KU_7', friend: 'KU_9', on: true } })
+  })
+
+  it('list → claim_list', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'list' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_list' })
+  })
+})

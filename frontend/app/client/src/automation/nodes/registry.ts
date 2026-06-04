@@ -22,6 +22,8 @@ import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/pl
 import { ui as playerStateUi } from '@shared/automation/nodes/data/player/player_state/ui'
 import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/call_component/meta'
 import { ui as callComponentUi } from '@shared/automation/nodes/data/player/call_component/ui'
+import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
+import { ui as landClaimUi } from '@shared/automation/nodes/data/world/land_claim/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
@@ -92,6 +94,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: findPlayerMeta, ui: findPlayerUi },
   { meta: playerStateMeta, ui: playerStateUi },
   { meta: callComponentMeta, ui: callComponentUi },
+  { meta: landClaimMeta, ui: landClaimUi },
   { meta: memoryMeta, ui: memoryUi },
   { meta: httpMeta, ui: httpUi },
   { meta: scriptMeta, ui: scriptUi },

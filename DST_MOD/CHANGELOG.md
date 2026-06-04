@@ -6,6 +6,25 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [0.6.0]
+
+### Added
+- **Land claims (terrain protection).** A generic server-side protection engine:
+  workable (hammer/mine/chop/deconstruct), burnable (fire) and builder (placing
+  structures) are overridden via `AddComponentPostInit` so any action inside a
+  claim owned by someone else is blocked. Owner, admins and trusted friends pass.
+  Blocking MUST be Lua: these methods apply in-frame with no veto callback, and a
+  flow round-trips through the backend (too slow). Always installed; with no
+  claims, `IsProtected` returns false (≈ zero cost).
+- Claims persist with the world via a real component
+  (`scripts/components/dstp_landclaims.lua`) that delegates to the
+  `dstp/land_claims` singleton — survives restarts, independent of the backend.
+- New commands (the POLICY — who may claim, limits, cost — lives in the flow that
+  calls these): `claim_add` (owner/x/z/radius; x/z default to the player's
+  position), `claim_remove` (by owner or point), `claim_trust` (add/remove a
+  trusted userid), `claim_list` → `claim_list_result` event, `claim_check` →
+  `claim_check_result` event.
+
 ## [0.5.0]
 
 ### Added

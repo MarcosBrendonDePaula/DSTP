@@ -23,6 +23,8 @@ import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/pl
 import { handler as playerStateHandler } from '@shared/automation/nodes/data/player/player_state/exec'
 import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/call_component/meta'
 import { handler as callComponentHandler } from '@shared/automation/nodes/data/player/call_component/exec'
+import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
+import { handler as landClaimHandler } from '@shared/automation/nodes/data/world/land_claim/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
@@ -76,6 +78,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: findPlayerMeta, handler: findPlayerHandler },
   { meta: playerStateMeta, handler: playerStateHandler },
   { meta: callComponentMeta, handler: callComponentHandler },
+  { meta: landClaimMeta, handler: landClaimHandler },
   { meta: memoryMeta, handler: memoryHandler },
   { meta: httpMeta, handler: httpHandler },
   { meta: scriptMeta, handler: scriptHandler },
