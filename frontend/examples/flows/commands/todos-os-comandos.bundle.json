@@ -1,0 +1,575 @@
+{
+  "name": "Comandos (bundle)",
+  "folder": "Comandos",
+  "flows": [
+    {
+      "name": "!curar — cura o próprio player (admin)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!curar"
+          }
+        },
+        {
+          "id": "who",
+          "type": "get_player",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "userid": "{{cmd.userid}}"
+            },
+            "alias": "player"
+          }
+        },
+        {
+          "id": "admin",
+          "type": "condition",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "field": "{{player.admin}}",
+            "operator": "equals",
+            "value": "true"
+          }
+        },
+        {
+          "id": "heal",
+          "type": "action",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "data": {
+            "action_type": "heal",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "amount": "max"
+            }
+          }
+        },
+        {
+          "id": "pm",
+          "type": "action",
+          "position": {
+            "x": 1500,
+            "y": 0
+          },
+          "data": {
+            "action_type": "private_message",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "message": "Você foi curado."
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_who_true",
+          "source": "is",
+          "target": "who",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_who_admin",
+          "source": "who",
+          "target": "admin"
+        },
+        {
+          "id": "e_admin_heal_true",
+          "source": "admin",
+          "target": "heal",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_heal_pm",
+          "source": "heal",
+          "target": "pm"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!dado — rola 1 a 6 e anuncia",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!dado"
+          }
+        },
+        {
+          "id": "roll",
+          "type": "random",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "min": "1",
+              "max": "6"
+            },
+            "alias": "d"
+          }
+        },
+        {
+          "id": "an",
+          "type": "action",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "action_type": "announce",
+            "params": {
+              "message": "{{cmd.name}} rolou um {{d.value}}!"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_roll_true",
+          "source": "is",
+          "target": "roll",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_roll_an",
+          "source": "roll",
+          "target": "an"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!eco <texto> — repete o que vem depois (usa Split)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!eco"
+          }
+        },
+        {
+          "id": "sp",
+          "type": "split",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{cmd.message}}",
+              "separator": "",
+              "trim": "true"
+            },
+            "alias": "p"
+          }
+        },
+        {
+          "id": "pm",
+          "type": "action",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "action_type": "private_message",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "message": "Eco: {{p.rest}}"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_sp_true",
+          "source": "is",
+          "target": "sp",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_sp_pm",
+          "source": "sp",
+          "target": "pm"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!hora — sussurra a fase e o dia atuais",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!hora"
+          }
+        },
+        {
+          "id": "pm",
+          "type": "action",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "action_type": "private_message",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "message": "Agora é {{cmd.phase}}, dia {{cmd.day}} ({{cmd.season}})."
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_pm_true",
+          "source": "is",
+          "target": "pm",
+          "sourceHandle": "true"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!moeda — cara ou coroa (sussurro)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!moeda"
+          }
+        },
+        {
+          "id": "roll",
+          "type": "random",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "min": "0",
+              "max": "1"
+            },
+            "alias": "c"
+          }
+        },
+        {
+          "id": "heads",
+          "type": "condition",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "field": "{{c.value}}",
+            "operator": "equals",
+            "value": "1"
+          }
+        },
+        {
+          "id": "cara",
+          "type": "action",
+          "position": {
+            "x": 1200,
+            "y": -80
+          },
+          "data": {
+            "action_type": "private_message",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "message": "Deu CARA!"
+            }
+          }
+        },
+        {
+          "id": "coroa",
+          "type": "action",
+          "position": {
+            "x": 1200,
+            "y": 80
+          },
+          "data": {
+            "action_type": "private_message",
+            "params": {
+              "userid": "{{cmd.userid}}",
+              "message": "Deu COROA!"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_roll_true",
+          "source": "is",
+          "target": "roll",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_roll_heads",
+          "source": "roll",
+          "target": "heads"
+        },
+        {
+          "id": "e_heads_cara_true",
+          "source": "heads",
+          "target": "cara",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_heads_coroa_false",
+          "source": "heads",
+          "target": "coroa",
+          "sourceHandle": "false"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!quem — anuncia quem perguntou (exemplo simples)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!quem"
+          }
+        },
+        {
+          "id": "an",
+          "type": "action",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "action_type": "announce",
+            "params": {
+              "message": "{{cmd.name}} perguntou quem está online."
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_an_true",
+          "source": "is",
+          "target": "an",
+          "sourceHandle": "true"
+        }
+      ],
+      "folderPath": "Comandos"
+    },
+    {
+      "name": "!sos — pede ajuda (anuncia o nome de quem chamou)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "command",
+            "alias": "cmd"
+          }
+        },
+        {
+          "id": "is",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cmd.message}}",
+            "operator": "starts_with",
+            "value": "!sos"
+          }
+        },
+        {
+          "id": "an",
+          "type": "action",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "action_type": "announce",
+            "params": {
+              "message": "[SOS] {{cmd.name}} está pedindo ajuda!"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_is",
+          "source": "trg",
+          "target": "is"
+        },
+        {
+          "id": "e_is_an_true",
+          "source": "is",
+          "target": "an",
+          "sourceHandle": "true"
+        }
+      ],
+      "folderPath": "Comandos"
+    }
+  ]
+}

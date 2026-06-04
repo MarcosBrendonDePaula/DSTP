@@ -1,0 +1,77 @@
+{
+  "name": "!dado — rola 1 a 6 e anuncia",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!dado"
+      }
+    },
+    {
+      "id": "roll",
+      "type": "random",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "params": {
+          "min": "1",
+          "max": "6"
+        },
+        "alias": "d"
+      }
+    },
+    {
+      "id": "an",
+      "type": "action",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "action_type": "announce",
+        "params": {
+          "message": "{{cmd.name}} rolou um {{d.value}}!"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_roll_true",
+      "source": "is",
+      "target": "roll",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_roll_an",
+      "source": "roll",
+      "target": "an"
+    }
+  ]
+}

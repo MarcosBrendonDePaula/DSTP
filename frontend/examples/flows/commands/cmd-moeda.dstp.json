@@ -1,0 +1,118 @@
+{
+  "name": "!moeda — cara ou coroa (sussurro)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!moeda"
+      }
+    },
+    {
+      "id": "roll",
+      "type": "random",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "params": {
+          "min": "0",
+          "max": "1"
+        },
+        "alias": "c"
+      }
+    },
+    {
+      "id": "heads",
+      "type": "condition",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "field": "{{c.value}}",
+        "operator": "equals",
+        "value": "1"
+      }
+    },
+    {
+      "id": "cara",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": -80
+      },
+      "data": {
+        "action_type": "private_message",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "message": "Deu CARA!"
+        }
+      }
+    },
+    {
+      "id": "coroa",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 80
+      },
+      "data": {
+        "action_type": "private_message",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "message": "Deu COROA!"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_roll_true",
+      "source": "is",
+      "target": "roll",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_roll_heads",
+      "source": "roll",
+      "target": "heads"
+    },
+    {
+      "id": "e_heads_cara_true",
+      "source": "heads",
+      "target": "cara",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_heads_coroa_false",
+      "source": "heads",
+      "target": "coroa",
+      "sourceHandle": "false"
+    }
+  ]
+}

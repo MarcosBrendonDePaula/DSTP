@@ -1,0 +1,57 @@
+{
+  "name": "!sos — pede ajuda (anuncia o nome de quem chamou)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!sos"
+      }
+    },
+    {
+      "id": "an",
+      "type": "action",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "action_type": "announce",
+        "params": {
+          "message": "[SOS] {{cmd.name}} está pedindo ajuda!"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_an_true",
+      "source": "is",
+      "target": "an",
+      "sourceHandle": "true"
+    }
+  ]
+}

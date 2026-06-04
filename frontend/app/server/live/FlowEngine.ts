@@ -1188,7 +1188,7 @@ export class FlowEngine {
       player_ghost: 'players', player_respawn: 'players', player_disconnected: 'players',
       structure_burnt: 'griefing', structure_hammered: 'griefing',
       container_opened: 'griefing', container_closed: 'griefing',
-      chat_message: 'chat',
+      chat_message: 'chat', command: 'chat',
       new_day: 'world', phase_changed: 'world', season_changed: 'world',
       moon_phase_changed: 'world', earthquake: 'world', sinkhole_warn: 'world',
       world_save: 'world', player_teleported: 'world',

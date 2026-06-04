@@ -1,0 +1,58 @@
+{
+  "name": "!hora — sussurra a fase e o dia atuais",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!hora"
+      }
+    },
+    {
+      "id": "pm",
+      "type": "action",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "action_type": "private_message",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "message": "Agora é {{cmd.phase}}, dia {{cmd.day}} ({{cmd.season}})."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_pm_true",
+      "source": "is",
+      "target": "pm",
+      "sourceHandle": "true"
+    }
+  ]
+}
