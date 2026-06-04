@@ -17,3 +17,4 @@ dist/
 
 # Local relay dev binary (built from the dstp-relay repo)
 relay-dev/
+.audit/
