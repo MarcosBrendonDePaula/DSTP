@@ -12,6 +12,7 @@ export const TRIGGER_EVENTS = [
   { value: 'player_disconnected', label: '🔌 Player Disconnected', category: 'players' },
   { value: 'player_new_character', label: '🆕 Novo Personagem (1º spawn)', category: 'players' },
   { value: 'player_resurrected', label: '⛧ Player Ressuscitado', category: 'players' },
+  { value: 'player_migrated', label: '🚇 Player Migrou (caves↔surface)', category: 'players' },
   // Griefing (anti-grief detection)
   { value: 'structure_burnt', label: '🔥 Structure Burnt', category: 'griefing' },
   { value: 'structure_hammered', label: '🔨 Structure Hammered', category: 'griefing' },
@@ -27,6 +28,8 @@ export const TRIGGER_EVENTS = [
   { value: 'player_hit_other', label: '🩸 Player Acertou Alguém', category: 'combat' },
   { value: 'player_block', label: '🛡 Player Bloqueou (armadura)', category: 'combat' },
   { value: 'player_attack_miss', label: '💨 Player Errou o Golpe', category: 'combat' },
+  { value: 'player_min_health', label: '💔 Player Quase Morreu (buff)', category: 'combat' },
+  { value: 'player_combat_target', label: '🎯 Mob Mirou um Player (aggro)', category: 'combat' },
   // Crafting
   { value: 'player_craft', label: '🔨 Player Craft', category: 'crafting' },
   { value: 'player_build', label: '🏗 Player Build', category: 'crafting' },
@@ -39,6 +42,7 @@ export const TRIGGER_EVENTS = [
   { value: 'player_unequip', label: '🎒 Player Unequip', category: 'inventory' },
   { value: 'player_item_get', label: '📥 Player Recebeu Item', category: 'inventory' },
   { value: 'inventory_full', label: '🚫 Inventário Cheio', category: 'inventory' },
+  { value: 'trade_received', label: '🤝 NPC Recebeu Troca (deu item)', category: 'inventory' },
   // Health
   { value: 'health_delta', label: '❤ Health Change', category: 'health' },
   { value: 'hunger_delta', label: '🍖 Hunger Change', category: 'health' },

@@ -361,3 +361,18 @@ AddComponentPostInit("builder", function(self)
         return _DoBuild(self, recname, pt, ...)
     end
 end)
+
+-- Non-player event hooks. newcombattarget (aggro) fires on the MOB, and trade fires
+-- on the NPC/structure RECEIVER — neither is a player, so they can't ride the per-
+-- player fan-out. We attach a ListenForEvent to EVERY combat/trader entity here; the
+-- module (events/nonplayer.lua) filters hard (combat: only mob→player aggro) and gates
+-- on evt_config, so with those categories off it's a cheap early-return. The hooks are
+-- published on core by Events.Init (already run inside dstp.Init above); read them
+-- dynamically so load order can't matter.
+local _evcore = GLOBAL.require("dstp/core")
+AddComponentPostInit("combat", function(self)
+    if _evcore.HookCombatComponent then _evcore.HookCombatComponent(self) end
+end)
+AddComponentPostInit("trader", function(self)
+    if _evcore.HookTraderComponent then _evcore.HookTraderComponent(self) end
+end)

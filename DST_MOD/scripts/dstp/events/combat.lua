@@ -114,6 +114,21 @@ function M.RegisterForPlayer(player, uid, pname)
             duration = data and data.duration or 0,
         }, data)
     end)
+
+    -- Player hit the death-floor with a death-preventing buff ("minhealth",
+    -- health.lua:578). NOTE: in vanilla this only fires if something called
+    -- health:SetMinHealth(>0) on the player (life-giving amulet, certain buffs, or
+    -- c_setminhealth) — players default to min=0 (HP 0 = death path), so it's a
+    -- "clutch / saved from death" signal that fires only when such a buff is active.
+    player:ListenForEvent("minhealth", function(inst, data)
+        if not evt_config.combat then return end
+        local afflicter = data and data.afflicter
+        DSTP.PushEvent("player_min_health", {
+            userid = uid, name = pname,
+            cause = data and (type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab)) or nil,
+            afflicter = afflicter and afflicter.prefab or nil,
+        }, data)
+    end)
 end
 
 return M

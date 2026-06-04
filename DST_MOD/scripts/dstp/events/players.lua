@@ -117,6 +117,22 @@ function M.RegisterWorld(inst)
             mode = data and data.mode or "unknown",
         }, data)
     end)
+
+    -- A player is HOPPING SHARDS (overworld<->caves), not truly leaving. DST
+    -- "ms_playerdespawnandmigrate" fires on TheWorld with { player, portalid, worldid,
+    -- ... } (keyed) — lets the panel show "moved to caves" instead of "left". (This was
+    -- previously skipped because the issue named a method, not this event.)
+    inst:ListenForEvent("ms_playerdespawnandmigrate", function(world, data)
+        if not evt_config.players then return end
+        local p = data and data.player
+        if not p then return end
+        DSTP.PushEvent("player_migrated", {
+            userid = p.userid,
+            name = p.name,
+            to_world = data and data.worldid or nil,
+            portal = data and data.portalid or nil,
+        }, data)
+    end)
 end
 
 return M

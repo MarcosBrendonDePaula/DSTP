@@ -35,7 +35,7 @@ for (const mod of [
   // events submodules (must precede the 'events' facade):
   'events/players', 'events/combat', 'events/crafting', 'events/inventory', 'events/health',
   'events/survival', 'events/gathering', 'events/exploration', 'events/griefing', 'events/character',
-  'events/world', 'events/weather', 'events/boss', 'events/grief_world',
+  'events/world', 'events/weather', 'events/boss', 'events/grief_world', 'events/nonplayer',
   'events',  // facade — requires all of the above
   'chat', 'http',
 ]) {
@@ -119,9 +119,29 @@ D(`
   assert(pl["picksomething"], "player_pick listener not registered")
   assert(pl["working"], "player_mine_chop_start listener not registered")
   assert(pl["respawnfromcorpse"] or pl["ms_respawnedfromghost"], "player_resurrected listener not registered")
+  assert(pl["minhealth"], "player_min_health listener not registered")
   -- new world events:
   assert(listeners["ms_riftaddedtopool"], "rift_spawned world listener not registered")
   assert(listeners["ms_newplayercharacterspawned"], "player_new_character world listener not registered")
+  assert(listeners["ms_playerdespawnandmigrate"], "player_migrated world listener not registered")
+
+  -- non-player component hooks (combat/trader) — exercised directly (modmain's
+  -- AddComponentPostInit isn't run here). Each fakes a mob/NPC inst + a player target.
+  local Core2 = _DSTP_MODULES["dstp/core"]
+  assert(type(Core2.HookCombatComponent)=="function", "HookCombatComponent not published on core")
+  assert(type(Core2.HookTraderComponent)=="function", "HookTraderComponent not published on core")
+  local mobListeners = {}
+  local fakeMob = { inst = { prefab="hound", GUID=99,
+    HasTag = function(_, t) return false end,
+    ListenForEvent = function(_, ev) mobListeners[ev] = true end } }
+  Core2.HookCombatComponent(fakeMob)
+  assert(mobListeners["newcombattarget"], "player_combat_target hook didn't attach newcombattarget")
+  local npcListeners = {}
+  local fakeNpc = { inst = { prefab="pigking", GUID=100,
+    HasTag = function() return false end,
+    ListenForEvent = function(_, ev) npcListeners[ev] = true end } }
+  Core2.HookTraderComponent(fakeNpc)
+  assert(npcListeners["trade"], "trade_received hook didn't attach trade")
 
   local Core = _DSTP_MODULES["dstp/core"]
   assert(type(DSTP)=="table" and type(DSTP.Init)=="function", "DSTP public API broken")
