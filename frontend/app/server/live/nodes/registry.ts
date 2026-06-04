@@ -31,6 +31,8 @@ import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/con
 import { handler as conditionHandler } from '@shared/automation/nodes/logic/branch/condition/exec'
 import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch/meta'
 import { handler as switchHandler } from '@shared/automation/nodes/logic/branch/switch/exec'
+import { meta as foreachMeta } from '@shared/automation/nodes/logic/loop/foreach/meta'
+import { handler as foreachHandler } from '@shared/automation/nodes/logic/loop/foreach/exec'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -66,6 +68,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: uiBuilderMeta, handler: uiBuilderHandler },
   { meta: conditionMeta, handler: conditionHandler },
   { meta: switchMeta, handler: switchHandler },
+  { meta: foreachMeta, handler: foreachHandler },
   { meta: actionMeta, handler: actionHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },

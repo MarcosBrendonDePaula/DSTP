@@ -30,6 +30,8 @@ import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/con
 import { ui as conditionUi } from '@shared/automation/nodes/logic/branch/condition/ui'
 import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch/meta'
 import { ui as switchUi } from '@shared/automation/nodes/logic/branch/switch/ui'
+import { meta as foreachMeta } from '@shared/automation/nodes/logic/loop/foreach/meta'
+import { ui as foreachUi } from '@shared/automation/nodes/logic/loop/foreach/ui'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -82,6 +84,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: uiBuilderMeta, ui: uiBuilderUi },
   { meta: conditionMeta, ui: conditionUi },
   { meta: switchMeta, ui: switchUi },
+  { meta: foreachMeta, ui: foreachUi },
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },

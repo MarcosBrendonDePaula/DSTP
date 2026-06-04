@@ -542,3 +542,52 @@ describe('FlowEngine e2e — switch', () => {
     expect(commands.map(c => c.data.message)).toEqual(['unknown'])
   })
 })
+
+describe('FlowEngine e2e — foreach', () => {
+  const forEach = (id: string, list: string): FlowNode =>
+    ({ id, type: 'foreach', data: { params: { list } }, position: { x: 0, y: 0 } } as any)
+  const setVarNode = (id: string, params: any): FlowNode =>
+    ({ id, type: 'set_variable', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  it('runs the each branch once per item with {{loop.item}}', async () => {
+    // trigger writes a list into context via set_variable, foreach iterates it,
+    // each item announces its value.
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      setVarNode('v', { items: '{{trigger.names}}' }),
+      forEach('f', '{{v.items}}'),
+      action('a', 'announce', { message: 'hi {{loop.item}}' }),
+      action('d', 'announce', { message: 'done' }),
+    ]
+    const edges = [
+      edge('t', 'v'), edge('v', 'f'),
+      edge('f', 'a', 'each'),
+      edge('f', 'd', 'done'),
+    ]
+    await run(nodes, edges, { type: 'player_spawn', data: { names: ['Wilson', 'Willow', 'Wendy'] } })
+    expect(commands.map(c => c.data.message)).toEqual(['hi Wilson', 'hi Willow', 'hi Wendy', 'done'])
+  })
+
+  it('skips the each branch for an empty list but still runs done', async () => {
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      forEach('f', '{{trigger.empty}}'),
+      action('a', 'announce', { message: 'each' }),
+      action('d', 'announce', { message: 'done' }),
+    ]
+    const edges = [edge('t', 'f'), edge('f', 'a', 'each'), edge('f', 'd', 'done')]
+    await run(nodes, edges, { type: 'player_spawn', data: { empty: [] } })
+    expect(commands.map(c => c.data.message)).toEqual(['done'])
+  })
+
+  it('exposes {{loop.index}} per iteration', async () => {
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      forEach('f', '{{trigger.list}}'),
+      action('a', 'announce', { message: 'i={{loop.index}}' }),
+    ]
+    const edges = [edge('t', 'f'), edge('f', 'a', 'each')]
+    await run(nodes, edges, { type: 'player_spawn', data: { list: ['a', 'b'] } })
+    expect(commands.map(c => c.data.message)).toEqual(['i=0', 'i=1'])
+  })
+})
