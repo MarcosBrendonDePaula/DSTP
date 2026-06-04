@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { nodeTypes, TRIGGER_EVENTS } from './nodes'
 import { ACTION_TYPES } from './nodes/actions/actionTypes'
-import { registryDefaults, registryCatalog, registryTypes, registryMetaByType } from './nodes/registry'
+import { registryDefaults, registryCatalog, registryMetaByType } from './nodes/registry'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 
 export interface CaptureData {
@@ -79,39 +79,10 @@ const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
   },
 }))
 
-const NODE_CATALOG: NodeCatalogItem[] = [
-  { type: 'webhook', label: 'Webhook', description: 'Dispara o fluxo por uma request HTTP externa.', category: 'Gatilhos', icon: '🪝', accent: 'text-green-400', data: { params: { method: 'ANY', token: '' } } },
-  { type: 'condition', label: 'Condition', description: 'Divide o fluxo em verdadeiro/falso.', category: 'Logica', icon: '?', accent: 'text-yellow-400' },
-  { type: 'wait', label: 'Wait / Merge', description: 'Espera outros eventos ou junta caminhos.', category: 'Logica', icon: '↔', accent: 'text-pink-400' },
-  { type: 'delay', label: 'Delay', description: 'Pausa a execucao por um tempo.', category: 'Logica', icon: '⏱', accent: 'text-gray-400' },
-  { type: 'http_request', label: 'HTTP', description: 'Chama uma API externa.', category: 'Acoes', icon: '🌐', accent: 'text-cyan-400' },
-  { type: 'script', label: 'Script', description: 'Executa codigo customizado.', category: 'Acoes', icon: '{}', accent: 'text-orange-400' },
-  { type: 'ai_agent', label: 'AI Agent', description: 'IA que usa nos conectados como ferramentas (porta tools).', category: 'IA', icon: '🤖', accent: 'text-fuchsia-400' },
-  { type: 'ai_memory', label: 'AI Memory', description: 'Memoria key-value que a IA usa como ferramenta (save/get/list/delete).', category: 'IA', icon: '🧠', accent: 'text-fuchsia-400' },
-  { type: 'get_player', label: 'Get Player', description: 'Busca dados de um jogador por userid.', category: 'Dados', icon: '👤', accent: 'text-teal-400' },
-  { type: 'find_player', label: 'Find Player', description: 'Localiza jogador por nome.', category: 'Dados', icon: '⌕', accent: 'text-teal-400' },
-  { type: 'set_variable', label: 'Variable', description: 'Grava valor no contexto do fluxo.', category: 'Dados', icon: 'x=', accent: 'text-purple-400' },
-  { type: 'memory', label: 'Memory', description: 'Le ou escreve memoria persistente.', category: 'Dados', icon: '▣', accent: 'text-amber-400' },
-  { type: 'ui_menu', label: 'Menu', description: 'Abre menu interativo para jogador.', category: 'UI', icon: '▤', accent: 'text-indigo-300' },
-  { type: 'ui_rule', label: 'HUD Rule', description: 'Instala regra dinamica de HUD.', category: 'UI', icon: '▥', accent: 'text-indigo-300' },
-  { type: 'ui_builder', label: 'UI Builder', description: 'Monta uma UI por arvore visual.', category: 'UI', icon: '✦', accent: 'text-violet-300' },
-  { type: 'ui_panel', label: 'Panel', description: 'Container visual de UI.', category: 'UI Primitivos', icon: '▢', accent: 'text-violet-300' },
-  { type: 'ui_col', label: 'Column', description: 'Agrupa filhos na vertical.', category: 'UI Primitivos', icon: '↕', accent: 'text-violet-300' },
-  { type: 'ui_row', label: 'Row', description: 'Agrupa filhos na horizontal.', category: 'UI Primitivos', icon: '↔', accent: 'text-violet-300' },
-  { type: 'ui_tabs', label: 'Tabs', description: 'Cria abas de UI.', category: 'UI Primitivos', icon: '▦', accent: 'text-violet-300' },
-  { type: 'ui_text', label: 'Text', description: 'Texto dinamico.', category: 'UI Primitivos', icon: 'T', accent: 'text-violet-300' },
-  { type: 'ui_icon', label: 'Icon', description: 'Icone por prefab.', category: 'UI Primitivos', icon: '◈', accent: 'text-violet-300' },
-  { type: 'ui_button', label: 'Button', description: 'Botao com callback.', category: 'UI Primitivos', icon: '●', accent: 'text-violet-300' },
-  { type: 'ui_bar', label: 'Bar', description: 'Barra de progresso.', category: 'UI Primitivos', icon: '▰', accent: 'text-violet-300' },
-  { type: 'ui_spacer', label: 'Spacer', description: 'Espacamento fixo.', category: 'UI Primitivos', icon: '␣', accent: 'text-violet-300' },
-]
-
-// Migrated nodes' palette entries come from the registry; drop their legacy
-// hardcoded entries so each node appears once.
-const NODE_CATALOG_MERGED: NodeCatalogItem[] = [
-  ...NODE_CATALOG.filter(item => !registryTypes.has(item.type)),
-  ...registryCatalog,
-]
+// All node-type palette entries now come from the registry (one per module).
+// TRIGGER_CATALOG (game events) and ACTION_NODE_CATALOG (action subtypes) are
+// separate — those are not node modules.
+const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
 export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -289,38 +260,12 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   }, [setEdges])
 
   const createNode = useCallback((type: string, position?: XYPosition, dataOverride?: Record<string, any>): Node => {
-    const defaults: Record<string, any> = {
-      trigger: {},
-      condition: {},
-      action: { action_type: '', params: {} },
-      delay: { delay_ms: '3000' },
-      get_player: { params: { userid: '' } },
-      find_player: { params: { name: '' } },
-      http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
-      set_variable: { action_type: 'set_variable', params: {} },
-      script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
-      wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
-      memory: { action: 'read', params: { key: '' } },
-      ui_menu: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
-      ui_rule: { action_type: 'rule_install', preset: 'vital', vital: 'health', anchor: 'bottom', x: 0, y: 80, params: { userid: '{{trigger.userid}}', rules: JSON.stringify([{ id: 'health_bar', when: { event: 'healthdelta' }, do: [{ action: 'update_widget', id: 'health_bar_w', type: 'progress_bar', value: '{{player.health_current}}', max: '{{player.health_max}}', label: 'HP', color: [0.2, 0.9, 0.2, 1], anchor: 'bottom', x: 0, y: 80, width: 220, height: 16 }] }]) } },
-      ui_builder: { params: { userid: '{{trigger.userid}}', id: 'ui' }, tree: { type: 'panel', title: 'Painel', children: [] } },
-      ui_panel: { params: { userid: '{{trigger.userid}}', id: 'ui', title: '', gap: '8', anchor: 'center' } },
-      ui_col: { params: { gap: '8' } },
-      ui_row: { params: { gap: '8' } },
-      ui_tabs: { params: { active: '0' } },
-      ui_text: { params: { text: 'Texto', size: '18' } },
-      ui_icon: { params: { prefab: 'log', size: '56' } },
-      ui_button: { params: { text: 'Comprar', callback: 'click' } },
-      ui_bar: { params: { value: '1', max: '1' } },
-      ui_spacer: { params: { height: '8' } },
-      // Migrated nodes' defaults come from the registry and override these.
-      ...registryDefaults,
-    }
+    // Initial node.data comes from the node's registry meta.defaults.
     return {
       id: genId(),
       type,
       position: position || { x: 250 + Math.random() * 100, y: 100 + nodes.length * 120 },
-      data: { ...(defaults[type] || {}), ...(dataOverride || {}) },
+      data: { ...(registryDefaults[type] || {}), ...(dataOverride || {}) },
     }
   }, [nodes.length])
 
