@@ -11,6 +11,8 @@ local SafeEncode, SafeDecode, ProcessCommands, LogError
 local GetServerInfo, GetAllPlayersData, RefreshClientTable
 -- HotToggleEvents comes from core (set by chat.Init); read dynamically.
 local function HotToggleEvents(req) if core.HotToggleEvents then core.HotToggleEvents(req) end end
+-- SetWatchKeys (key_pressed watch set) lives on core; read dynamically.
+local function SetWatchKeys(list) if core.SetWatchKeys then core.SetWatchKeys(list) end end
 
 local function ComputeNextDelay()
     -- Events in queue → flush ASAP. With the relay buffering pushed commands
@@ -74,6 +76,10 @@ local function DoPoll()
                     -- Hot-toggle event categories from backend
                     if data.enable_events then
                         HotToggleEvents(data.enable_events)
+                    end
+                    -- Update the key_pressed watch set (which keys clients listen for)
+                    if data.watch_keys then
+                        SetWatchKeys(data.watch_keys)
                     end
                     -- Update debounce times from backend
                     if data.debounce then

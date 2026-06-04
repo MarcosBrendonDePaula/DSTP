@@ -30,6 +30,7 @@ function makeHost() {
     getServerGroups: () => groups,
     emitState: (delta) => { states.push(delta) },
     requestEventToggle: (serverId, category, enabled) => { toggles.push({ serverId, category, enabled }) },
+    requestWatchKeys: () => {},
   }
   return { host, commands, states, toggles, groups }
 }
@@ -148,6 +149,29 @@ describe('FlowEngine e2e — trigger → action', () => {
     engine.evaluateEvent(SERVER, { type: 'player_death', data: {} })
     await new Promise(r => setTimeout(r, 20))
     expect(commands).toHaveLength(0)
+  })
+})
+
+describe('FlowEngine e2e — key_pressed trigger (key match)', () => {
+  const keyFlow = () => [
+    trigger('t', 'key_pressed', { params: { key: 'H' } }),
+    action('a', 'announce', { message: 'apertou H' }),
+  ]
+
+  it('fires when the pressed key matches the trigger key', async () => {
+    await run(keyFlow(), [edge('t', 'a')], { type: 'key_pressed', data: { key: 'H', userid: 'u1' } })
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({ type: 'announce', data: { message: 'apertou H' } })
+  })
+
+  it('does NOT fire when a different key is pressed', async () => {
+    await run(keyFlow(), [edge('t', 'a')], { type: 'key_pressed', data: { key: 'J', userid: 'u1' } })
+    expect(commands).toHaveLength(0)
+  })
+
+  it('matches case-insensitively (lowercase event key)', async () => {
+    await run(keyFlow(), [edge('t', 'a')], { type: 'key_pressed', data: { key: 'h', userid: 'u1' } })
+    expect(commands).toHaveLength(1)
   })
 })
 

@@ -65,6 +65,7 @@ export async function replaySyncs(serverId: string, recording: RecordedSync[]): 
     },
     emitState: () => {},
     requestEventToggle: () => {},
+    requestWatchKeys: () => {},
   }
 
   const engine = new FlowEngine(host)

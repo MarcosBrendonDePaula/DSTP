@@ -277,6 +277,31 @@ function Core.SendPrivateMessage(player, message)
     end
 end
 
+-- key_pressed: SERVER half. The backend ships the watch set (which keys any flow
+-- listens for) on /dst/sync; http.lua calls this. We fan it out to EVERY player's
+-- dstp.keys net_string (JSON array) — the CLIENT half (keys.lua) reads it and
+-- rebuilds its TheInput filter. The set is server-wide (same for everyone). Cached
+-- in Core.current_watch_keys so late-joiners get it on spawn.
+Core.current_watch_keys = nil  -- last JSON string pushed (for new players)
+function Core.SetWatchKeys(list)
+    if type(list) ~= "table" then list = {} end
+    local json_str = Core.json and Core.json.encode(list) or "[]"
+    Core.current_watch_keys = json_str
+    for _, player in ipairs(Core._G.AllPlayers or {}) do
+        Core.PushWatchKeysTo(player)
+    end
+    if Core.DEBUG then Core.Log("watch_keys -> " .. json_str) end
+end
+
+-- Push the cached watch set to one player's dstp.keys net_string (used by SetWatchKeys
+-- for everyone, and on player spawn for late-joiners).
+function Core.PushWatchKeysTo(player)
+    if not player or not Core.current_watch_keys then return end
+    if player.player_classified and player.player_classified._dstp_keys then
+        player.player_classified._dstp_keys:set(Core.current_watch_keys)
+    end
+end
+
 -------------------------------------------------
 -- Init — inject the mod globals + config (called once by client.lua's DSTP.Init,
 -- BEFORE any submodule's Init(core), so core._G/json/config are populated).

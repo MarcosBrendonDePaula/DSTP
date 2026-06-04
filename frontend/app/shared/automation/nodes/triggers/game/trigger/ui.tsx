@@ -115,6 +115,23 @@ export const TRIGGER_EVENTS = [
   { value: 'fish_caught', label: '🐟 Fish Caught', category: 'exploration' },
   { value: 'boat_entered', label: '⛵ Boat Entered', category: 'exploration' },
   { value: 'boat_exited', label: '⛵ Boat Exited', category: 'exploration' },
+  // Input — NOT a DST event category. Key presses ride a separate watch_keys
+  // channel: the backend tells the client which keys to watch (set the key below).
+  { value: 'key_pressed', label: '⌨ Tecla Pressionada', category: 'input' },
+]
+
+// Keys offerable to the key_pressed trigger. Must match what the mod's keys.lua can
+// map to a DST KEY_* constant. Strings are what travel on the wire (uppercase).
+export const WATCHABLE_KEYS = [
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(k => ({ value: k, label: k })),
+  ...Array.from({ length: 12 }, (_, i) => ({ value: `F${i + 1}`, label: `F${i + 1}` })),
+  ...'0123456789'.split('').map(k => ({ value: k, label: k })),
+  { value: 'SPACE', label: 'Espaço' },
+  { value: 'TAB', label: 'Tab' },
+  { value: 'UP', label: '↑ Cima' },
+  { value: 'DOWN', label: '↓ Baixo' },
+  { value: 'LEFT', label: '← Esquerda' },
+  { value: 'RIGHT', label: '→ Direita' },
 ]
 
 export const ui = function TriggerNode({ id, data, selected }: any) {
@@ -137,6 +154,15 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
           options={TRIGGER_EVENTS}
         />
       </NodeField>
+      {data.event_type === 'key_pressed' && (
+        <NodeField label="Tecla">
+          <NodeSelect
+            value={data.params?.key || ''}
+            onChange={(key: string) => updateNodeData(id, { ...data, params: { ...(data.params || {}), key } })}
+            options={WATCHABLE_KEYS}
+          />
+        </NodeField>
+      )}
       {selectedEvent && (
         <div className="text-[9px] text-gray-500 mt-1">
           Categoria: {selectedEvent.category}

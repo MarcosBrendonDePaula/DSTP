@@ -59,6 +59,9 @@ function M.RegisterWorld(inst)
         inst:DoTaskInTime(0, function()
             if not player:IsValid() then return end
             if core.RegisterPerPlayerEvents then core.RegisterPerPlayerEvents(player) end
+            -- Seed the key_pressed watch set on this (possibly late-joining) player,
+            -- so a client connecting after the set was last pushed still gets it.
+            if core.PushWatchKeysTo then core.PushWatchKeysTo(player) end
             -- First-run: nudge the owner to set up the panel (once). Small delay
             -- so the client table (admin flag) is populated.
             inst:DoTaskInTime(2, function() MaybeNotifyOwnerSetup(player) end)

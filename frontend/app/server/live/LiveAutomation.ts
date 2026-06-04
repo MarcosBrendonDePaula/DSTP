@@ -40,6 +40,7 @@ const _headlessHost: EngineHost = {
   getServerGroups: () => dstStateStore.getServerGroups(),
   emitState: (delta) => { Object.assign(_headlessState, delta) },
   requestEventToggle: (serverId, cat, en) => dstStateStore.requestEventToggleForServer(serverId, cat, en),
+  requestWatchKeys: (serverId, keys) => dstStateStore.requestWatchKeysForServer(serverId, keys),
 }
 
 function _getEngine(): FlowEngine {
@@ -122,6 +123,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       getServerGroups: () => dstStateStore.getServerGroups(),
       emitState: (delta) => this.setState(delta as any),
       requestEventToggle: (serverId, cat, en) => dstStateStore.requestEventToggleForServer(serverId, cat, en),
+      requestWatchKeys: (serverId, keys) => dstStateStore.requestWatchKeysForServer(serverId, keys),
     }
     engine.setHost(directHost)
     this._engine = engine
@@ -196,6 +198,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
 
     invalidateAnalysis(flow.id)
     this._ensureEngine().ensureEventCategories(flow)
+    this._ensureEngine().collectWatchKeys(flow.server_id)  // key_pressed watch set
     this.syncState(flow.server_id)
     return { success: true }
   }
@@ -204,6 +207,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     invalidateAnalysis(payload.flow_id)
     WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
     this.flowRepo(payload.server_id).delete(payload.flow_id)
+    this._ensureEngine().collectWatchKeys(payload.server_id)  // shrink watch set if a key flow went away
     this.syncState(payload.server_id)
     return { success: true }
   }
@@ -213,6 +217,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
     }
     this.flowRepo(payload.server_id).toggle(payload.flow_id, payload.enabled)
+    this._ensureEngine().collectWatchKeys(payload.server_id)  // (re)compute after enable/disable
     this.syncState(payload.server_id)
     return { success: true }
   }

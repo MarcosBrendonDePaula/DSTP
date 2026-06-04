@@ -32,3 +32,4 @@ real do evento (validado contra os listeners em `DST_MOD/scripts/dstp/events/`).
 | `player-enlightened` | `player_enlightened` | Mensagem de sabor ao entrar em lunacy/iluminação. |
 | `player-lunacy-normal` | `player_lunacy_normal` | Mensagem ao sair da lunacy de volta ao normal. |
 | `player-wet` | `player_wet` | Avisa o player quando fica encharcado (edge no limiar). |
+| `key-pressed` | `key_pressed` | Tecla (H) mostra um toast. O backend diz ao cliente quais teclas vigiar (watch dinâmico), então só dispara RPC pras teclas que algum flow usa. Escolha a tecla no próprio node Trigger. |

@@ -20,6 +20,7 @@ function makeHost() {
     getServerGroups: () => [],
     emitState: () => {},
     requestEventToggle: (serverId, category, enabled) => { toggles.push({ serverId, category, enabled }) },
+    requestWatchKeys: () => {},
   }
   return { host, toggles }
 }
@@ -99,6 +100,10 @@ describe('ensureEventCategories — existing behavior still holds', () => {
     expect(categoriesFor('totally_made_up_event').size).toBe(0)
   })
 
+  it('key_pressed activates NO category (it is not a DST event category)', () => {
+    expect(categoriesFor('key_pressed').size).toBe(0)
+  })
+
   it('a flow with no trigger activates nothing', () => {
     engine.ensureEventCategories({ server_id: 'srv', nodes: [{ id: 'a', type: 'action', data: {} }], edges: [] })
     expect(toggles.length).toBe(0)
@@ -109,7 +114,9 @@ describe('catalog ↔ categoryMap integrity', () => {
   // Categories that are NOT real DST event categories (no Lua listener gates on
   // them): synthetic/result/UI events the engine emits internally. These catalog
   // entries are intentionally absent from ensureEventCategories' map.
-  const NON_LISTENER_CATEGORIES = new Set(['economy', 'ui'])
+  // 'input' (key_pressed) is NOT a DST event category — keys ride the parallel
+  // watch_keys channel, not evt_config. So key_pressed must NOT be in categoryMap.
+  const NON_LISTENER_CATEGORIES = new Set(['economy', 'ui', 'input'])
   // `tick` is a synthetic heartbeat (world category in the catalog) with no DST
   // listener; ui_callback is an in-game RPC, not a server-side event toggle.
   const SYNTHETIC = new Set(['tick', 'ui_callback'])

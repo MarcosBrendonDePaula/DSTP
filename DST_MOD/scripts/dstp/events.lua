@@ -34,6 +34,7 @@ local World       = require("dstp/events/world")
 local Weather     = require("dstp/events/weather")
 local Boss        = require("dstp/events/boss")
 local GriefWorld  = require("dstp/events/grief_world")
+local NonPlayer   = require("dstp/events/nonplayer")  -- combat/trader hooks (non-player entities)
 
 -- Per-player fan-out order = original registration order (players -> combat -> ...).
 local PER_PLAYER = {
@@ -116,10 +117,15 @@ function Events.Init(c)
     Weather.Init(c)
     Boss.Init(c)
     GriefWorld.Init(c)
+    NonPlayer.Init(c)
 
     -- Publish the per-player entry on core so players.lua's lifecycle listener can
     -- drive registration (on ms_playerspawn) without a circular require.
     core.RegisterPerPlayerEvents = RegisterPerPlayerEvents
+    -- Publish the non-player component hooks so modmain's AddComponentPostInit can
+    -- attach them (combat→newcombattarget, trader→trade) without importing internals.
+    core.HookCombatComponent = NonPlayer.HookCombat
+    core.HookTraderComponent = NonPlayer.HookTrader
     return Events
 end
 
