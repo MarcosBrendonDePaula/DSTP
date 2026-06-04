@@ -26,7 +26,7 @@ D(`_DSTP_MODULES = {}
    end`, 'shim')
 
 // Load the real submodules. Add new ones here as they're extracted.
-for (const mod of ['core', 'collectors', 'commands']) {
+for (const mod of ['core', 'collectors', 'commands', 'events']) {
   D(`_DSTP_MODULES["dstp/${mod}"] = (function()\n${dstp(`${mod}.lua`)}\nend)()`, `load ${mod}`)
 }
 // Stub land_claims (its own logic is tested elsewhere).
@@ -54,7 +54,30 @@ D(`
   }
   local calls = {}
   local env = { GLOBAL = GLOBAL, AddPrefabPostInit = function(name, fn) calls["postinit_"..name] = fn end }
-  DSTP.Init(env, { server_id="test", backend_url="http://x", debug_logs=false, events={ players=true, chat=true } })
+  DSTP.Init(env, { server_id="test", backend_url="http://x", debug_logs=false, events={ players=true, world=true, chat=true } })
+
+  -- Fire the world postinit → RegisterGameEvents → many inst:ListenForEvent calls.
+  local listeners = {}
+  GLOBAL.TheWorld.meta = { session_identifier = "SESSIONID1234" }
+  local _ran0 = false
+  local worldInst = {
+    ismastersim = true, state = { cycles = 1, season = "autumn", phase = "day" }, components = {},
+    HasTag = function() return false end,
+    ListenForEvent = function(_, ev) listeners[ev] = true end,
+    -- run a DoTaskInTime(0) callback immediately (simulate the 1-frame defer); but
+    -- only the FIRST level (the poll scheduler re-arms itself → would recurse).
+    DoTaskInTime = function(_, t, fn) if t == 0 and not _ran0 then _ran0 = true; if fn then fn() end end end,
+    AddComponent = function() end,
+    DoPeriodicTask = function() end,
+  }
+  GLOBAL.TheWorld = worldInst  -- the deferred init reads _G.TheWorld.meta
+  worldInst.meta = { session_identifier = "SESSIONID1234" }
+  assert(calls["postinit_world"], "no world postinit")
+  calls["postinit_world"](worldInst)
+  assert(listeners["ms_cyclecomplete"], "new_day listener not registered")
+  assert(listeners["phasechanged"], "phase_changed listener (the #1 fix) not registered")
+  assert(listeners["seasontick"], "season_changed listener not registered")
+  assert(worldInst == _DSTP_MODULES["dstp/core"].world_inst, "core.world_inst not shared")
 
   local Core = _DSTP_MODULES["dstp/core"]
   assert(type(DSTP)=="table" and type(DSTP.Init)=="function", "DSTP public API broken")
