@@ -28,6 +28,9 @@ export interface EngineHost {
   emitState(delta: Record<string, any>): void
   // request activation of an event category (today: dstStateStore.requestEventToggleForServer)
   requestEventToggle(serverId: string, category: string, enabled: boolean): void
+  // set the FULL set of keys the client should watch for the key_pressed trigger
+  // (today: dstStateStore.requestWatchKeysForServer). NOT a category — a parallel channel.
+  requestWatchKeys(serverId: string, keys: string[]): void
 }
 
 // Shared storage between flows — Script nodes can read/write via context.store
@@ -160,9 +163,15 @@ export class FlowEngine {
       // points. From here on a matched node is just "the trigger" for the flow.
       const triggers = (flow.nodes as FlowNode[]).filter(n => n.type === 'trigger' || n.type === 'webhook')
       for (const trigger of triggers) {
-        const matches = trigger.type === 'webhook'
+        let matches = trigger.type === 'webhook'
           ? (event.type === 'webhook' && event.webhookId === trigger.id)
           : (trigger.data.event_type === event.type)
+        // key_pressed needs an EXTRA match on the specific key, so a flow watching
+        // 'H' doesn't fire on 'J' (case-insensitive). Same shape as webhook's id match.
+        if (matches && event.type === 'key_pressed') {
+          const want = String(this.param(trigger, 'key') ?? '').toUpperCase()
+          matches = want !== '' && want === String(event.data?.key ?? '').toUpperCase()
+        }
         if (matches) {
           const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
           if (analysis.isSimple) {
@@ -1186,17 +1195,22 @@ export class FlowEngine {
     const categoryMap: Record<string, string> = {
       player_spawn: 'players', player_left: 'players', player_death: 'players',
       player_ghost: 'players', player_respawn: 'players', player_disconnected: 'players',
+      player_new_character: 'players', player_resurrected: 'players', player_migrated: 'players',
       structure_burnt: 'griefing', structure_hammered: 'griefing',
       container_opened: 'griefing', container_closed: 'griefing',
       chat_message: 'chat', command: 'chat',
       new_day: 'world', phase_changed: 'world', season_changed: 'world',
       moon_phase_changed: 'world', earthquake: 'world', sinkhole_warn: 'world',
-      world_save: 'world', player_teleported: 'world',
+      world_save: 'world', player_teleported: 'world', rift_spawned: 'world',
       player_kill: 'combat', player_attacked: 'combat',
       player_attack_other: 'combat', player_hit_other: 'combat',
+      player_block: 'combat', player_attack_miss: 'combat',
+      player_min_health: 'combat', player_combat_target: 'combat',
+      boss_warning: 'bosses',
       player_on_fire: 'survival', player_fire_out: 'survival',
-      player_item_get: 'inventory',
+      player_item_get: 'inventory', inventory_full: 'inventory', trade_received: 'inventory',
       player_craft: 'crafting', player_build: 'crafting',
+      recipe_unlocked: 'crafting', tech_tree_changed: 'crafting',
       player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory', player_unequip: 'inventory',
       storm_changed: 'weather', precipitation: 'weather', lightning_strike: 'weather',
       boss_event: 'bosses', boss_killed: 'bosses', fire_started: 'bosses',
@@ -1206,7 +1220,9 @@ export class FlowEngine {
       player_freezing: 'survival', player_cooled: 'survival',
       player_overheating: 'survival', player_warm: 'survival',
       player_mounted: 'survival', player_dismounted: 'survival',
+      player_enlightened: 'survival', player_lunacy_normal: 'survival', player_wet: 'survival',
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
+      player_pick: 'gathering', player_mine_chop_start: 'gathering',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
       recipe_learned: 'character', book_read: 'character', character_transform: 'character',
       player_sleep_start: 'character', player_sleep_end: 'character',
@@ -1220,9 +1236,30 @@ export class FlowEngine {
         needed.add(categoryMap[node.data.event_type])
       }
     }
+    // NOTE: key_pressed is intentionally NOT in categoryMap. Keys are not a DST
+    // event category (no Lua listener gates on them) — they're a parallel channel
+    // reconciled by collectWatchKeys() below.
 
     for (const cat of needed) {
       this.host.requestEventToggle(flow.server_id, cat, true)
     }
+  }
+
+  // Scan ALL enabled flows of a server for key_pressed triggers and tell the host
+  // the FULL set of keys the client should watch. Unlike ensureEventCategories
+  // (per-flow, additive), this is server-wide and recomputed from scratch on every
+  // save/delete/toggle — so removing a key flow shrinks the watch set. The host
+  // (DSTStateStore) only re-sends to the game when the set actually changes.
+  collectWatchKeys(serverId: string) {
+    const keys = new Set<string>()
+    for (const flow of this.flowRepo(serverId).findEnabled()) {
+      for (const node of (flow.nodes as FlowNode[]) || []) {
+        if (node.type === 'trigger' && node.data.event_type === 'key_pressed') {
+          const k = String(this.param(node, 'key') ?? '').toUpperCase().trim()
+          if (k !== '') keys.add(k)
+        }
+      }
+    }
+    this.host.requestWatchKeys(serverId, [...keys])
   }
 }

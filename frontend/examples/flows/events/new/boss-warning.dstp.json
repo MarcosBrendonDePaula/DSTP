@@ -1,0 +1,12 @@
+{
+  "name": "Evento — aviso de boss se aproximando (PM + toast)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "boss_warning", "alias": "warn" } },
+    { "id": "pm", "type": "action", "position": { "x": 320, "y": -80 }, "data": { "action_type": "private_message", "params": { "userid": "{{warn.userid}}", "message": "Cuidado, {{warn.name}}! {{warn.scarer}} esta vindo na sua direcao. Prepare-se em {{warn.duration}}s." } } },
+    { "id": "toast", "type": "action", "position": { "x": 320, "y": 80 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{warn.userid}}", "text": "PERIGO: {{warn.scarer}} se aproximando!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_pm", "source": "trg", "target": "pm" },
+    { "id": "e_trg_toast", "source": "trg", "target": "toast" }
+  ]
+}

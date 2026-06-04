@@ -89,7 +89,7 @@ export function AutomationPage() {
 
   const justCreatedRef = useRef<string | null>(null)
 
-  const createNewFlow = () => {
+  const createNewFlow = (folder = '') => {
     const id = `flow_${Date.now()}`
     justCreatedRef.current = id
     setEditingFlow(id)
@@ -98,7 +98,7 @@ export function AutomationPage() {
     setEditorEdges([])
     setOriginalCreatedAt(null)
     setFlowEnabled(true)
-    setFlowFolder('')
+    setFlowFolder(folder)   // new flow lands in the open/selected folder, not always root
   }
 
   const editFlow = (flow: any) => {
@@ -459,7 +459,7 @@ export function AutomationPage() {
           title="Variáveis de ambiente criptografadas (API keys, tokens)"
         >🔑 Environments</button>
         <button
-          onClick={createNewFlow}
+          onClick={() => createNewFlow()}
           className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
         >+ Novo Fluxo</button>
         {urlServer && <AccountMenu serverId={urlServer} />}
@@ -545,7 +545,7 @@ export function AutomationPage() {
               <div className="text-2xl mb-2">⚡</div>
               <p className="text-gray-500 text-sm mb-4">Nenhuma automação criada</p>
               <button
-                onClick={createNewFlow}
+                onClick={() => createNewFlow()}
                 className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
               >Criar primeiro fluxo</button>
             </div>
@@ -578,6 +578,7 @@ export function AutomationPage() {
                 onRenameFolder={(path) => setFolderPrompt({ mode: 'rename', path })}
                 onExportFolder={exportFolder}
                 onToggleFolder={toggleFolder}
+                onNewFlow={createNewFlow}
                 renderFlow={(flow: any) => (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
                     <div className="flex items-center gap-3">

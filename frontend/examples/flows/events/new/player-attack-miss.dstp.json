@@ -1,0 +1,14 @@
+{
+  "name": "Evento — provocação ao errar um golpe (diversão)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_attack_miss", "alias": "miss" } },
+    { "id": "pvp", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{miss.target_is_player}}", "operator": "equals", "value": "true" } },
+    { "id": "taunt_pvp", "type": "action", "position": { "x": 640, "y": -80 }, "data": { "action_type": "private_message", "params": { "userid": "{{miss.userid}}", "message": "Errou o ataque em {{miss.target}}! Mira melhor da proxima vez." } } },
+    { "id": "taunt_mob", "type": "action", "position": { "x": 640, "y": 100 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{miss.userid}}", "text": "Whiff! Voce errou o {{miss.target}}." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_pvp", "source": "trg", "target": "pvp" },
+    { "id": "e_pvp_pvp", "source": "pvp", "target": "taunt_pvp", "sourceHandle": "true" },
+    { "id": "e_pvp_mob", "source": "pvp", "target": "taunt_mob", "sourceHandle": "false" }
+  ]
+}

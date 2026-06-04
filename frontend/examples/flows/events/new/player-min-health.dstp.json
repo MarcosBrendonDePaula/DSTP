@@ -1,0 +1,18 @@
+{
+  "name": "Combate — salvo na unha (HP zerou mas sobreviveu por buff)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_min_health", "alias": "ev" } },
+    { "id": "has_afflicter", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{ev.afflicter}}", "operator": "exists", "value": "" } },
+    { "id": "pm_mob", "type": "action", "position": { "x": 640, "y": -120 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Voce escapou da morte! {{ev.afflicter}} quase te matou (causa: {{ev.cause}}). Tome cuidado." } } },
+    { "id": "toast", "type": "action", "position": { "x": 960, "y": -120 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "SALVO NA UNHA! Cuidado com {{ev.afflicter}}" } } },
+    { "id": "pm_env", "type": "action", "position": { "x": 640, "y": 120 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Voce escapou da morte! Causa: {{ev.cause}}. Recupere a vida antes de continuar." } } },
+    { "id": "announce", "type": "action", "position": { "x": 960, "y": 0 }, "data": { "action_type": "announce", "params": { "message": "{{ev.name}} sobreviveu por um triz e ainda esta de pe!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_cond", "source": "trg", "target": "has_afflicter" },
+    { "id": "e_cond_pmmob", "source": "has_afflicter", "target": "pm_mob", "sourceHandle": "true" },
+    { "id": "e_pmmob_toast", "source": "pm_mob", "target": "toast" },
+    { "id": "e_cond_pmenv", "source": "has_afflicter", "target": "pm_env", "sourceHandle": "false" },
+    { "id": "e_trg_announce", "source": "trg", "target": "announce" }
+  ]
+}

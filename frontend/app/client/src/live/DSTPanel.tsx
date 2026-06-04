@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveDSTP } from '@server/live/LiveDSTP'
+import { useServerRoom } from './useServerRoom'
 import { AccountMenu } from '../components/AccountMenu'
 
 // ─── Confirm Dialog Hook ─────────────────────────────
@@ -973,9 +974,15 @@ export function DSTPanel() {
 
   const urlServer = useMemo(() => new URLSearchParams(window.location.search).get('server'), [])
   const state = dstp.$state
-  const serverIds: string[] = state.serverIds || []
+  const serverIds: string[] = state.serverIds || []   // the global list stays on the component
   const selectedServer = urlServer || serverIds[0] || null
-  const serverInfo = selectedServer ? state[`server:${selectedServer}`] : null
+
+  // Per-server data now comes from the isolated room, not the shared singleton state.
+  const room = useServerRoom(dstp, selectedServer)
+  // Fall back to an empty object while the room is still populating (just after join),
+  // so the panel renders (gated on serverIds) without crashing on serverInfo.X before
+  // the room data arrives. Online/shards/etc. fill in a beat later.
+  const serverInfo = room.server || {}
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [inventoryPlayer, setInventoryPlayer] = useState<any>(null)
@@ -983,12 +990,12 @@ export function DSTPanel() {
   const [announceMsg, setAnnounceMsg] = useState('')
   const [activeTab, setActiveTab] = useState<'all' | 'master' | 'caves'>('all')
 
-  const playersMap = selectedServer ? (state[`players:${selectedServer}`] || {}) : {}
+  const playersMap = room.players || {}
   const allPlayers = Object.values(playersMap) as any[]
   const players = activeTab === 'all' ? allPlayers : allPlayers.filter((p: any) => p.shard_type === activeTab)
 
-  const allEvents = state.events || []
-  const serverEvents = selectedServer ? allEvents.filter((e: any) => e.server_id === selectedServer) : allEvents
+  // The room already holds only THIS server's events (no cross-server filter needed).
+  const serverEvents = room.events || []
   const filteredEvents = activeTab === 'all' ? serverEvents : serverEvents.filter((e: any) => e.shard_type === activeTab)
 
   const shards = serverInfo?.shards || []
@@ -1034,8 +1041,12 @@ export function DSTPanel() {
     sendPlayerCmd(type, player, extraData)
   }
 
-  // No server selected OR server doesn't exist yet → landing page
-  if (!urlServer || !serverInfo) {
+  // No server selected, or the selected server isn't in the (instant, singleton)
+  // serverIds list → landing page. We gate on serverIds, NOT serverInfo: serverInfo
+  // comes from the per-server room which populates a beat after join, so gating on it
+  // would flash "not found" while the room loads. The room data fills in once joined.
+  const serverExists = !!selectedServer && serverIds.includes(selectedServer)
+  if (!urlServer || !serverExists) {
     return <LandingPage dstp={dstp} serverIds={serverIds} requestedServer={urlServer} />
   }
 

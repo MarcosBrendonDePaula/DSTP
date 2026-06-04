@@ -1,0 +1,10 @@
+{
+  "name": "Input — tecla H mostra um toast com a hora do servidor",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_pressed", "params": { "key": "H" }, "alias": "key" } },
+    { "id": "toast", "type": "action", "position": { "x": 320, "y": 0 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{key.userid}}", "text": "Apertou H! Atalho de tecla funcionando." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_toast", "source": "trg", "target": "toast" }
+  ]
+}

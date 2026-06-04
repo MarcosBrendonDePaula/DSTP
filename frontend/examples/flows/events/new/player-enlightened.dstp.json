@@ -1,0 +1,12 @@
+{
+  "name": "Evento — jogador iluminado (lunacy): aviso de clima e mensagem de sabor",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_enlightened", "alias": "ev" } },
+    { "id": "announce", "type": "action", "position": { "x": 320, "y": 0 }, "data": { "action_type": "announce", "params": { "message": "{{ev.name}} foi tocado pela Lua e atingiu a Iluminacao. A sanidade nas Luas Cheias se inverte por perto." } } },
+    { "id": "warn", "type": "action", "position": { "x": 640, "y": 0 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Voce esta Iluminado. Sombras nao te assombram, mas a luz lunar distorce o que voce ve. Mantenha o foco." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_announce", "source": "trg", "target": "announce" },
+    { "id": "e_announce_warn", "source": "announce", "target": "warn" }
+  ]
+}

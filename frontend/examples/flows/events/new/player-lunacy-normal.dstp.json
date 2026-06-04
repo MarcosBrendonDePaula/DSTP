@@ -1,0 +1,12 @@
+{
+  "name": "Survival — saiu da lunacy → mensagem de boas-vindas de volta ao normal",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_lunacy_normal", "alias": "ev" } },
+    { "id": "pm", "type": "action", "position": { "x": 320, "y": -60 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Sua mente clareou. Voce saiu da lunacy e voltou ao normal." } } },
+    { "id": "toast", "type": "action", "position": { "x": 320, "y": 80 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "Lunacy encerrada - sanidade normal" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_pm", "source": "trg", "target": "pm" },
+    { "id": "e_trg_toast", "source": "trg", "target": "toast" }
+  ]
+}

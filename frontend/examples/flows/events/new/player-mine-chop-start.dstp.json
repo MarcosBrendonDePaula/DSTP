@@ -1,0 +1,12 @@
+{
+  "name": "Coleta — registra quando um jogador comeca a cortar/minerar",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_mine_chop_start", "alias": "ev" } },
+    { "id": "logit", "type": "log", "position": { "x": 320, "y": -80 }, "data": { "params": { "message": "{{ev.name}} comecou a trabalhar em {{ev.target}}" } } },
+    { "id": "notify", "type": "action", "position": { "x": 320, "y": 80 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "Trabalhando: {{ev.target}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_logit", "source": "trg", "target": "logit" },
+    { "id": "e_trg_notify", "source": "trg", "target": "notify" }
+  ]
+}

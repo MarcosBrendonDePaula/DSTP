@@ -18,6 +18,13 @@ interface ShardEntry {
   requested_events: Record<string, boolean> | null
   debounce: Record<string, number>
   requested_debounce: Record<string, number> | null
+  // Dynamic key-watch set (for the key_pressed trigger). Unlike enable_events
+  // (a request-once delta), keys are a FULL SET: the backend always knows the
+  // complete desired watch set from the enabled flows, so removing/disabling a
+  // key flow can shrink it. requested_keys is the pending set to deliver;
+  // last_keys is what was last delivered (we only re-send on change).
+  requested_keys: string[] | null
+  last_keys: string[]
 }
 
 export interface ServerGroup {
@@ -35,7 +42,7 @@ class DSTStateStore {
   version: number = 0
 
   // Called by REST route when a DST shard syncs
-  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number> } {
+  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: string[] } {
     let entry = this.shards.get(shard_id)
     if (!entry) {
       entry = {
@@ -44,6 +51,7 @@ class DSTStateStore {
         last_seen: 0, online: true,
         active_events: {}, requested_events: null,
         debounce: {}, requested_debounce: null,
+        requested_keys: null, last_keys: [],
       }
       this.shards.set(shard_id, entry)
     }
@@ -76,7 +84,7 @@ class DSTStateStore {
     this.commandQueues.set(shard_id, [])
 
     // Check for pending requests
-    const result: { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number> } = { commands: queue }
+    const result: { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: string[] } = { commands: queue }
     if (entry.requested_events) {
       result.enable_events = entry.requested_events
       entry.requested_events = null
@@ -84,6 +92,11 @@ class DSTStateStore {
     if (entry.requested_debounce) {
       result.debounce = entry.requested_debounce
       entry.requested_debounce = null
+    }
+    if (entry.requested_keys) {
+      result.watch_keys = entry.requested_keys
+      entry.last_keys = entry.requested_keys
+      entry.requested_keys = null
     }
 
     return result
@@ -130,6 +143,17 @@ class DSTStateStore {
     const all: any[] = []
     for (const shard of this.shards.values()) {
       all.push(...shard.events)
+    }
+    return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
+  }
+
+  // Events for ONE server only (its shards merged). Used by the per-server room so a
+  // panel viewing server A never receives server B's events on the wire (vs the global
+  // getAllEvents, which leaked everything through the shared singleton state).
+  getEventsForServer(server_id: string): any[] {
+    const all: any[] = []
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) all.push(...shard.events)
     }
     return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
   }
@@ -212,6 +236,33 @@ class DSTStateStore {
         this.requestEventToggle(shard.shard_id, category, enabled)
       }
     }
+  }
+
+  // Set the FULL key-watch set for all shards of a server (the key_pressed
+  // trigger). Reconciled by full set: a key dropped from `keys` (because its flow
+  // was deleted/disabled) shrinks the watch set. Only flags a re-send when the
+  // sorted/deduped set actually differs from what was last delivered, so a steady
+  // state produces no traffic.
+  requestWatchKeysForServer(server_id: string, keys: string[]) {
+    const next = [...new Set(keys.map(k => String(k).toUpperCase()))].sort()
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        const current = [...shard.last_keys].sort()
+        if (next.length !== current.length || next.some((k, i) => k !== current[i])) {
+          shard.requested_keys = next
+        }
+      }
+    }
+  }
+
+  // Get the current key-watch set for a server (last delivered).
+  getWatchKeys(server_id: string): string[] {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) {
+        return [...(shard.requested_keys || shard.last_keys)]
+      }
+    }
+    return []
   }
 
   // Set debounce for a specific event type on all shards of a server

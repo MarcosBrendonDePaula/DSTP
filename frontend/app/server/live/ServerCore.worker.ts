@@ -45,6 +45,9 @@ const rpcHost: EngineHost = {
   requestEventToggle: (sid, category, enabled) => {
     self.postMessage({ type: 'rpc', method: 'requestEventToggle', args: [sid, category, enabled] })
   },
+  requestWatchKeys: (sid, keys) => {
+    self.postMessage({ type: 'rpc', method: 'requestWatchKeys', args: [sid, keys] })
+  },
 }
 
 function ensureEngine(): FlowEngine {

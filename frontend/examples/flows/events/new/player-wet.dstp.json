@@ -1,0 +1,18 @@
+{
+  "name": "Sobrevivência — avisa o jogador quando fica encharcado",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_wet", "alias": "ev" } },
+    { "id": "gotwet", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{ev.wet}}", "operator": "equals", "value": "true" } },
+    { "id": "soaked", "type": "condition", "position": { "x": 640, "y": -80 }, "data": { "field": "{{ev.moisture}}", "operator": "greater_than", "value": "70" } },
+    { "id": "pm_soaked", "type": "action", "position": { "x": 960, "y": -140 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Voce esta encharcado! Procure abrigo e uma fogueira para secar antes de congelar." } } },
+    { "id": "pm_wet", "type": "action", "position": { "x": 960, "y": 0 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Voce se molhou. Fique de olho na umidade para nao perder calor." } } },
+    { "id": "toast", "type": "action", "position": { "x": 960, "y": 140 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "Molhado: umidade {{ev.moisture}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_gotwet", "source": "trg", "target": "gotwet" },
+    { "id": "e_gotwet_soaked", "source": "gotwet", "target": "soaked", "sourceHandle": "true" },
+    { "id": "e_gotwet_toast", "source": "gotwet", "target": "toast", "sourceHandle": "true" },
+    { "id": "e_soaked_pm", "source": "soaked", "target": "pm_soaked", "sourceHandle": "true" },
+    { "id": "e_soaked_pm_wet", "source": "soaked", "target": "pm_wet", "sourceHandle": "false" }
+  ]
+}

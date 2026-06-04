@@ -24,6 +24,8 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 local UIWidgets = nil
 -- Client-side rules engine (loaded on client only)
 local RulesEngine = nil
+-- Client-side key capture (loaded on client only, for the key_pressed trigger)
+local Keys = nil
 
 -- Generate ID from world session_identifier if auto
 local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
@@ -50,6 +52,21 @@ AddModRPCHandler(modname, "UICallback", function(player, callback_name, widget_i
             callback_name = callback_name,  -- alias for rules/schema consistency
             widget_id = widget_id or "",
             callback_data = data,
+        })
+    end
+end)
+
+-- key_pressed: client → server → backend event queue. The client (keys.lua) only
+-- sends this for keys in the backend-provided watch set, on the down edge. Mirror
+-- of UICallback: validate, then PushEvent so a flow's key_pressed trigger fires.
+AddModRPCHandler(modname, "KeyPressed", function(player, key, down)
+    if player and type(key) == "string" and key ~= "" then
+        local dstp_mod = require("dstp/client")
+        dstp_mod.PushEvent("key_pressed", {
+            userid = player.userid,
+            name = player.name or "unknown",
+            key = key,
+            down = (down == true),
         })
     end
 end)
@@ -86,6 +103,11 @@ AddPrefabPostInit("player_classified", function(inst)
 
     -- UI Widget system (server → client per-player)
     inst._dstp_ui = GLOBAL.net_string(inst.GUID, "dstp.ui", "dstp_ui_dirty")
+
+    -- key_pressed watch set (server → client): which keys this client should watch.
+    -- Declared on BOTH sides in a stable order (netvar positional rule). The server
+    -- sets the same JSON array on every player; the client rebuilds its TheInput filter.
+    inst._dstp_keys = GLOBAL.net_string(inst.GUID, "dstp.keys", "dstp_keys_dirty")
 
     -- Client: show PM in chat / auto-open URLs
     if not GLOBAL.TheWorld.ismastersim then
@@ -152,6 +174,31 @@ AddPrefabPostInit("player_classified", function(inst)
             else
                 UIWidgets.ProcessCommand(cmd)
             end
+        end)
+
+        -- Client: apply the key-watch set the backend shipped. Lazy-init the Keys
+        -- module on first delivery, injecting the RPC sender (keys.lua owns no
+        -- MOD_RPC reference). The handler only fires for watched keys, on the down
+        -- edge, and not while typing — all in keys.lua.
+        inst:ListenForEvent("dstp_keys_dirty", function()
+            local raw = inst._dstp_keys:value()
+            if not Keys then
+                Keys = GLOBAL.require("dstp/keys")
+                Keys.Init({
+                    GLOBAL = GLOBAL,
+                    SendRPC = function(key, down)
+                        if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyPressed"] then
+                            SendModRPCToServer(MOD_RPC[modname]["KeyPressed"], key, down)
+                        end
+                    end,
+                })
+            end
+            local list = {}
+            if raw and raw ~= "" then
+                local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, raw)
+                if ok and type(parsed) == "table" then list = parsed end
+            end
+            Keys.SetWatchKeys(list)
         end)
     end
 end)
@@ -360,4 +407,19 @@ AddComponentPostInit("builder", function(self)
         end
         return _DoBuild(self, recname, pt, ...)
     end
+end)
+
+-- Non-player event hooks. newcombattarget (aggro) fires on the MOB, and trade fires
+-- on the NPC/structure RECEIVER — neither is a player, so they can't ride the per-
+-- player fan-out. We attach a ListenForEvent to EVERY combat/trader entity here; the
+-- module (events/nonplayer.lua) filters hard (combat: only mob→player aggro) and gates
+-- on evt_config, so with those categories off it's a cheap early-return. The hooks are
+-- published on core by Events.Init (already run inside dstp.Init above); read them
+-- dynamically so load order can't matter.
+local _evcore = GLOBAL.require("dstp/core")
+AddComponentPostInit("combat", function(self)
+    if _evcore.HookCombatComponent then _evcore.HookCombatComponent(self) end
+end)
+AddComponentPostInit("trader", function(self)
+    if _evcore.HookTraderComponent then _evcore.HookTraderComponent(self) end
 end)

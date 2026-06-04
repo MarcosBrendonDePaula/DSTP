@@ -12,7 +12,7 @@ const SERVER = `__test_aimem_${Date.now()}`
 const FLOW = 'flow_aimem'
 
 const noopHost: EngineHost = {
-  pushCommand: () => {}, getServerGroups: () => [], emitState: () => {}, requestEventToggle: () => {},
+  pushCommand: () => {}, getServerGroups: () => [], emitState: () => {}, requestEventToggle: () => {}, requestWatchKeys: () => {},
 }
 
 // runAiMemory(serverId, context, args) — private; reach it via cast.

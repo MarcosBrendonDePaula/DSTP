@@ -1,0 +1,14 @@
+{
+  "name": "Evento — avisa caves/superficie quando alguem migra (nao 'saiu')",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_migrated", "alias": "ev" } },
+    { "id": "route", "type": "switch", "position": { "x": 320, "y": 0 }, "data": { "field": "{{ev.to_world}}", "cases": [ { "value": "2" } ] } },
+    { "id": "to_caves", "type": "action", "position": { "x": 680, "y": -80 }, "data": { "action_type": "announce", "params": { "message": "{{ev.name}} desceu pras cavernas." } } },
+    { "id": "to_surface", "type": "action", "position": { "x": 680, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "{{ev.name}} subiu pra superficie." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_route", "source": "trg", "target": "route" },
+    { "id": "e_route_caves", "source": "route", "target": "to_caves", "sourceHandle": "case_0" },
+    { "id": "e_route_surface", "source": "route", "target": "to_surface", "sourceHandle": "default" }
+  ]
+}

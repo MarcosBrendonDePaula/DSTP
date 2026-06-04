@@ -1,0 +1,16 @@
+{
+  "name": "Mundo — fenda (rift) abriu: anuncia tipo e coordenadas 🌌",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "rift_spawned", "alias": "rift" } },
+    { "id": "kind", "type": "switch", "position": { "x": 320, "y": 0 }, "data": { "field": "{{rift.rift_prefab}}", "cases": [{ "value": "lunarrift_portal" }, { "value": "shadowrift_portal" }] } },
+    { "id": "lunar", "type": "action", "position": { "x": 700, "y": -120 }, "data": { "action_type": "announce", "params": { "message": "Uma Fenda Lunar se abriu em ({{rift.x}}, {{rift.z}}). Preparem-se para os Brilhantes!" } } },
+    { "id": "shadow", "type": "action", "position": { "x": 700, "y": 60 }, "data": { "action_type": "announce", "params": { "message": "Uma Fenda das Sombras se abriu em ({{rift.x}}, {{rift.z}}). Cuidado com as Criaturas das Sombras!" } } },
+    { "id": "other", "type": "action", "position": { "x": 700, "y": 240 }, "data": { "action_type": "announce", "params": { "message": "Uma fenda ({{rift.rift_prefab}}) se abriu em ({{rift.x}}, {{rift.z}}) no shard {{rift.shard_type}}." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_kind", "source": "trg", "target": "kind" },
+    { "id": "e_kind_lunar", "source": "kind", "target": "lunar", "sourceHandle": "case_0" },
+    { "id": "e_kind_shadow", "source": "kind", "target": "shadow", "sourceHandle": "case_1" },
+    { "id": "e_kind_other", "source": "kind", "target": "other", "sourceHandle": "default" }
+  ]
+}

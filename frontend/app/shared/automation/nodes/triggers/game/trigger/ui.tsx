@@ -10,6 +10,9 @@ export const TRIGGER_EVENTS = [
   { value: 'player_ghost', label: '👻 Player Ghost', category: 'players' },
   { value: 'player_respawn', label: '✨ Player Respawn', category: 'players' },
   { value: 'player_disconnected', label: '🔌 Player Disconnected', category: 'players' },
+  { value: 'player_new_character', label: '🆕 Novo Personagem (1º spawn)', category: 'players' },
+  { value: 'player_resurrected', label: '⛧ Player Ressuscitado', category: 'players' },
+  { value: 'player_migrated', label: '🚇 Player Migrou (caves↔surface)', category: 'players' },
   // Griefing (anti-grief detection)
   { value: 'structure_burnt', label: '🔥 Structure Burnt', category: 'griefing' },
   { value: 'structure_hammered', label: '🔨 Structure Hammered', category: 'griefing' },
@@ -23,15 +26,23 @@ export const TRIGGER_EVENTS = [
   { value: 'player_attacked', label: '🛡 Player Attacked', category: 'combat' },
   { value: 'player_attack_other', label: '⚔ Player Atacou Alguém', category: 'combat' },
   { value: 'player_hit_other', label: '🩸 Player Acertou Alguém', category: 'combat' },
+  { value: 'player_block', label: '🛡 Player Bloqueou (armadura)', category: 'combat' },
+  { value: 'player_attack_miss', label: '💨 Player Errou o Golpe', category: 'combat' },
+  { value: 'player_min_health', label: '💔 Player Quase Morreu (buff)', category: 'combat' },
+  { value: 'player_combat_target', label: '🎯 Mob Mirou um Player (aggro)', category: 'combat' },
   // Crafting
   { value: 'player_craft', label: '🔨 Player Craft', category: 'crafting' },
   { value: 'player_build', label: '🏗 Player Build', category: 'crafting' },
+  { value: 'recipe_unlocked', label: '🔓 Receita Desbloqueada', category: 'crafting' },
+  { value: 'tech_tree_changed', label: '🔬 Tech Tree Mudou (prototipador)', category: 'crafting' },
   // Inventory
   { value: 'player_equip', label: '🎒 Player Equip', category: 'inventory' },
   { value: 'player_pickup', label: '📦 Player Pickup', category: 'inventory' },
   { value: 'player_drop', label: '📦 Player Drop', category: 'inventory' },
   { value: 'player_unequip', label: '🎒 Player Unequip', category: 'inventory' },
   { value: 'player_item_get', label: '📥 Player Recebeu Item', category: 'inventory' },
+  { value: 'inventory_full', label: '🚫 Inventário Cheio', category: 'inventory' },
+  { value: 'trade_received', label: '🤝 NPC Recebeu Troca (deu item)', category: 'inventory' },
   // Health
   { value: 'health_delta', label: '❤ Health Change', category: 'health' },
   { value: 'hunger_delta', label: '🍖 Hunger Change', category: 'health' },
@@ -42,6 +53,8 @@ export const TRIGGER_EVENTS = [
   { value: 'player_harvest', label: '🌿 Player Harvest', category: 'gathering' },
   { value: 'player_action_start', label: '▶ Começou Ação (colher/pick)', category: 'gathering' },
   { value: 'player_startfire', label: '🔥 Player Start Fire', category: 'gathering' },
+  { value: 'player_pick', label: '🌸 Player Colheu (do chão)', category: 'gathering' },
+  { value: 'player_mine_chop_start', label: '⛏ Começou a Minerar/Cortar', category: 'gathering' },
   // World
   { value: 'new_day', label: '🌅 New Day', category: 'world' },
   { value: 'phase_changed', label: '🌙 Phase Changed', category: 'world' },
@@ -50,6 +63,7 @@ export const TRIGGER_EVENTS = [
   { value: 'earthquake', label: '🌍 Earthquake', category: 'world' },
   { value: 'sinkhole_warn', label: '🕳 Sinkhole Warning', category: 'world' },
   { value: 'world_save', label: '💾 World Save', category: 'world' },
+  { value: 'rift_spawned', label: '🌑 Rift Aberto (lunar/sombrio)', category: 'world' },
   { value: 'tick', label: '⏲ Tick (heartbeat ~1s)', category: 'world' },
   { value: 'player_teleported', label: '🌀 Player Teleported', category: 'world' },
   // Weather
@@ -62,6 +76,7 @@ export const TRIGGER_EVENTS = [
   { value: 'fire_started', label: '🔥 Fire Started', category: 'bosses' },
   { value: 'hound_warning', label: '🐺 Hound Warning', category: 'bosses' },
   { value: 'hound_attack', label: '🐺 Hound Attack', category: 'bosses' },
+  { value: 'boss_warning', label: '😱 Boss Perto (rugido)', category: 'bosses' },
   // Survival
   { value: 'player_eat', label: '🍽 Player Eat', category: 'survival' },
   { value: 'player_insane', label: '😵 Player Insane', category: 'survival' },
@@ -76,6 +91,9 @@ export const TRIGGER_EVENTS = [
   { value: 'player_dismounted', label: '🐂 Player Dismounted', category: 'survival' },
   { value: 'player_on_fire', label: '🔥 Player Pegando Fogo', category: 'survival' },
   { value: 'player_fire_out', label: '💧 Player Apagou o Fogo', category: 'survival' },
+  { value: 'player_enlightened', label: '🌕 Player Iluminado (lunacy)', category: 'survival' },
+  { value: 'player_lunacy_normal', label: '🌑 Player Saiu da Lunacy', category: 'survival' },
+  { value: 'player_wet', label: '💦 Player Molhado/Secou', category: 'survival' },
   // UI
   { value: 'ui_callback', label: '🖱 UI Callback (button click)', category: 'ui' },
   // Economy / inventory results (emitted back by inventory commands)
@@ -97,6 +115,23 @@ export const TRIGGER_EVENTS = [
   { value: 'fish_caught', label: '🐟 Fish Caught', category: 'exploration' },
   { value: 'boat_entered', label: '⛵ Boat Entered', category: 'exploration' },
   { value: 'boat_exited', label: '⛵ Boat Exited', category: 'exploration' },
+  // Input — NOT a DST event category. Key presses ride a separate watch_keys
+  // channel: the backend tells the client which keys to watch (set the key below).
+  { value: 'key_pressed', label: '⌨ Tecla Pressionada', category: 'input' },
+]
+
+// Keys offerable to the key_pressed trigger. Must match what the mod's keys.lua can
+// map to a DST KEY_* constant. Strings are what travel on the wire (uppercase).
+export const WATCHABLE_KEYS = [
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(k => ({ value: k, label: k })),
+  ...Array.from({ length: 12 }, (_, i) => ({ value: `F${i + 1}`, label: `F${i + 1}` })),
+  ...'0123456789'.split('').map(k => ({ value: k, label: k })),
+  { value: 'SPACE', label: 'Espaço' },
+  { value: 'TAB', label: 'Tab' },
+  { value: 'UP', label: '↑ Cima' },
+  { value: 'DOWN', label: '↓ Baixo' },
+  { value: 'LEFT', label: '← Esquerda' },
+  { value: 'RIGHT', label: '→ Direita' },
 ]
 
 export const ui = function TriggerNode({ id, data, selected }: any) {
@@ -119,6 +154,15 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
           options={TRIGGER_EVENTS}
         />
       </NodeField>
+      {data.event_type === 'key_pressed' && (
+        <NodeField label="Tecla">
+          <NodeSelect
+            value={data.params?.key || ''}
+            onChange={(key: string) => updateNodeData(id, { ...data, params: { ...(data.params || {}), key } })}
+            options={WATCHABLE_KEYS}
+          />
+        </NodeField>
+      )}
       {selectedEvent && (
         <div className="text-[9px] text-gray-500 mt-1">
           Categoria: {selectedEvent.category}

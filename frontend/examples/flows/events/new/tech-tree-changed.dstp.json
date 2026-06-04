@@ -1,0 +1,14 @@
+{
+  "name": "Crafting — alcançou Ciência nível 2 (perto da Máquina de Ciência)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "tech_tree_changed", "alias": "tech" } },
+    { "id": "is_sci2", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{tech.science}}", "operator": "greater_than", "value": "1" } },
+    { "id": "tip", "type": "action", "position": { "x": 640, "y": -60 }, "data": { "action_type": "private_message", "params": { "userid": "{{tech.userid}}", "message": "Voce alcancou Ciencia nivel 2! Agora da pra fabricar itens mais avancados perto da Maquina de Ciencia." } } },
+    { "id": "announce", "type": "action", "position": { "x": 640, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "{{tech.name}} desbloqueou Ciencia nivel 2!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_is_sci2", "source": "trg", "target": "is_sci2" },
+    { "id": "e_is_sci2_tip", "source": "is_sci2", "target": "tip", "sourceHandle": "true" },
+    { "id": "e_is_sci2_announce", "source": "is_sci2", "target": "announce", "sourceHandle": "true" }
+  ]
+}

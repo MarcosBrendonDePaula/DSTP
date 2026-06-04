@@ -19,6 +19,7 @@ type Props = {
   onRenameFolder?: (path: string) => void
   onExportFolder?: (path: string) => void
   onToggleFolder?: (path: string, enabled: boolean) => void
+  onNewFlow?: (folderPath: string) => void
   renderFlow: (flow: FlowLike) => React.ReactNode
 }
 
@@ -40,7 +41,7 @@ const childFoldersOf = (n: TreeNode) => [...n.folders.values()].sort((a, b) => (
 
 export function FlowExplorer({
   flows, folders = [], search,
-  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, onExportFolder, onToggleFolder, renderFlow,
+  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, onExportFolder, onToggleFolder, onNewFlow, renderFlow,
 }: Props) {
   const tree = useMemo(() => buildTree(flows, folders), [flows, folders])
   const [cwd, setCwd] = useState('')            // current folder path ("" = root)
@@ -161,6 +162,13 @@ export function FlowExplorer({
                 </span>
               )
             })}
+            {onNewFlow && (
+              <button
+                onClick={() => onNewFlow(cwd)}
+                className="ml-auto px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/20 hover:bg-purple-500/25"
+                title={cwd ? `Criar fluxo em "${cwd}"` : 'Criar fluxo na raiz'}
+              >+ Novo fluxo{cwd ? ' aqui' : ''}</button>
+            )}
           </div>
         )}
 
@@ -255,6 +263,7 @@ export function FlowExplorer({
         <>
           <div className="fixed inset-0 z-[80]" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
           <div className="fixed z-[81] min-w-[160px] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl py-1 text-xs text-gray-200" style={{ left: menu.x, top: menu.y }}>
+            {onNewFlow && <button onClick={() => { onNewFlow(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">➕ Novo fluxo aqui</button>}
             <button onClick={() => { onCreateSubfolder?.(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📁 Nova subpasta</button>
             <button onClick={() => { setCwd(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📂 Abrir</button>
             {onToggleFolder && <button onClick={() => { onToggleFolder(menu.path, true); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⏻ Ligar todos</button>}

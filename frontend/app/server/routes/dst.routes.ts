@@ -29,7 +29,7 @@ export function handleDstSync(data: any) {
     debounce,
   )
 
-  try { (require("../live/LiveDSTP") as any).notifyLiveDSTP?.() } catch {}
+  try { (require("../live/LiveDSTP") as any).notifyLiveDSTP?.(server_id) } catch {}
 
   if (events && events.length > 0) {
     const eventRepo = new EventHistoryRepository(server_id)

@@ -1,0 +1,12 @@
+{
+  "name": "Crafting — parabeniza quem aprende uma nova receita 🎓",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "recipe_unlocked", "alias": "ev" } },
+    { "id": "pm", "type": "action", "position": { "x": 320, "y": -80 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Parabens! Voce aprendeu a receita: {{ev.recipe}}" } } },
+    { "id": "announce", "type": "action", "position": { "x": 320, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "{{ev.name}} desbloqueou uma nova receita: {{ev.recipe}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_pm", "source": "trg", "target": "pm" },
+    { "id": "e_trg_announce", "source": "trg", "target": "announce" }
+  ]
+}

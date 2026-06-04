@@ -71,20 +71,41 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
 - Nodes clicáveis de texto/ícone/imagem (`ui_widgets.lua:520-536`): `OnControl` +
   `SetClickable` não tornam um widget de HUD focável → cliques não chegam.
 
-## 📋 Gap de eventos — 18 novos viáveis (fonte vanilla confirmada)
+## 📋 Gap de eventos — RESOLVIDO (18/18 implementados)
 
-Adicionar de forma controlada, por categoria. Cada um tem o evento DST de origem
-(arquivo:linha vanilla) e payload no relatório das issues.
+**Status (jun/2026):** os 18 candidatos foram validados 1-a-1 contra os scripts
+vanilla extraídos ANTES de fiar (workflow de 18 agentes). A validação pegou **4
+casos que teriam virado listener morto** (a própria classe de bug #5/#6) se feitos
+do jeito ingênuo — esses foram refeitos na entidade CERTA (world / component-hook).
+Todos com o shape de dados real (keyed, nil-guards) e debounce/edge-detection onde a
+fonte dispara por-tick. **Exemplos** de flow para cada um em
+`frontend/examples/flows/events/new/`.
 
-| Categoria | Eventos novos | Valor |
-|-----------|---------------|-------|
-| players | `player_new_character`, `player_resurrected`, `player_migrated` | alto/médio |
-| world | `rift_spawned`, `boss_warning` (epicscare) | alto/médio |
-| gathering | `player_pick` (picksomething), `player_mine_chop_start` | alto/baixo |
-| combat | `player_min_health`, `player_block`, `player_attack_miss`, `player_combat_target` | médio/baixo |
-| inventory | `inventory_full`, `trade_received` | médio/baixo |
-| crafting | `recipe_unlocked`, `tech_tree_changed` | médio/baixo |
-| survival | `player_enlightened`, `player_lunacy_normal`, `player_wet` | médio |
+### ✅ Implementados (14) — `feat(events): add 14 audit events (#8-14)`
+| Categoria | Eventos | Nota de implementação |
+|-----------|---------|------------------------|
+| players | `player_new_character` (ms_newplayercharacterspawned, world), `player_resurrected` (ms_respawnedfromghost, unifica ghost+corpse) | data keyed; resurrected nil-guarda reviver |
+| world | `rift_spawned` (ms_riftaddedtopool, data.rift) | |
+| combat | `player_block` (blocked), `player_attack_miss` (onmissother), `boss_warning` (epicscare) | boss_warning é pulso AoE → debounce 3s por-player, gate `bosses` |
+| gathering | `player_pick` (picksomething), `player_mine_chop_start` (working) | mine_chop_start é por-swing → edge-detect por target + nil-guard |
+| inventory | `inventory_full` (inventoryfull) | |
+| crafting | `recipe_unlocked` (unlockrecipe), `tech_tree_changed` (techtreechange) | recipe nil-guarda freebuild; tech `data.level` é MAP de árvores |
+| survival | `player_enlightened` (goenlightened), `player_lunacy_normal` (sanitymodechanged mode==0), `player_wet` (moisturedelta) | wet edge-detect no limiar 'soaked' (>35) |
+
+### ✅ Os 4 "difíceis" — depois implementados na fonte CERTA (18/18)
+Inicialmente pulados por seriam listener morto se feitos do jeito ingênuo (player-
+scoped). Depois implementados na entidade correta, a pedido:
+| Evento | Onde dispara de verdade → como foi feito |
+|--------|-------------------------------------------|
+| `player_min_health` | `minhealth` no player — per-player em `combat.lua`. Raro (só com `SetMinHealth(>0)` ativo, ex. life-giving amulet); documentado como sinal de "salvo na unha". |
+| `player_combat_target` | `newcombattarget` dispara no **MOB que aggra**, não no player. `AddComponentPostInit("combat")` → `events/nonplayer.lua` `HookCombat`, emite só quando o alvo é player (mob→player aggro). |
+| `trade_received` | `trade` dispara no **NPC receptor**. `AddComponentPostInit("trader")` → `HookTrader`, emite `{receiver, giver, item}`. |
+| `player_migrated` | `ms_playerdespawnandmigrate` no **TheWorld** (não o método `OnDespawn` da issue) — world listener em `players.lua`. |
+
+`events/nonplayer.lua` é o módulo dos eventos hookados por componente (entidades
+não-player); a fachada publica `core.HookCombatComponent`/`HookTraderComponent` e o
+modmain anexa com 2 `AddComponentPostInit`. Ambos gateiam em `evt_config` e filtram
+forte → com a categoria off, é um early-return barato.
 
 ## Nota sobre os `ms_*` na lista "emitida"
 

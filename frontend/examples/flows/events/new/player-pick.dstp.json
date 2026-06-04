@@ -1,0 +1,18 @@
+{
+  "name": "Coleta — colher planta rara (mandrágora) premia e conta o total",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_pick", "alias": "pick" } },
+    { "id": "is_rare", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{pick.loot}}", "operator": "equals", "value": "mandrake" } },
+    { "id": "tally", "type": "memory", "position": { "x": 640, "y": -80 }, "data": { "params": { "operation": "increment", "key": "mandrakes:{{pick.userid}}", "amount": "{{pick.count}}" }, "alias": "tally" } },
+    { "id": "reward", "type": "action", "position": { "x": 960, "y": -160 }, "data": { "action_type": "give_item", "params": { "userid": "{{pick.userid}}", "prefab": "goldnugget", "count": "1" } } },
+    { "id": "toast", "type": "action", "position": { "x": 960, "y": -20 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{pick.userid}}", "text": "Mandragora colhida! Total: {{tally.value}}" } } },
+    { "id": "log", "type": "log", "position": { "x": 640, "y": 120 }, "data": { "params": { "message": "{{pick.name}} colheu {{pick.count}}x {{pick.loot}} de {{pick.source}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_israre", "source": "trg", "target": "is_rare" },
+    { "id": "e_trg_log", "source": "trg", "target": "log" },
+    { "id": "e_israre_tally", "source": "is_rare", "target": "tally", "sourceHandle": "true" },
+    { "id": "e_tally_reward", "source": "tally", "target": "reward" },
+    { "id": "e_tally_toast", "source": "tally", "target": "toast" }
+  ]
+}
