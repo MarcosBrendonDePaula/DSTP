@@ -8,6 +8,7 @@ import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
 import { FlowTree } from './FlowTree'
+import { PromptModal, ConfirmModal } from './FlowModal'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
@@ -26,6 +27,8 @@ export function AutomationPage() {
   const [flowFolder, setFlowFolder] = useState('')
   const [showEnvironments, setShowEnvironments] = useState(false)
   const [flowSearch, setFlowSearch] = useState('')
+  const [showNewFolder, setShowNewFolder] = useState(false)
+  const [folderWarning, setFolderWarning] = useState<string | null>(null)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -171,15 +174,14 @@ export function AutomationPage() {
     return [...set].sort()
   }, [flows, folderPaths])
 
-  const createFolder = async () => {
-    const path = window.prompt('Nome da pasta (use "/" para aninhar, ex: Loja/Eventos):')
-    if (path && path.trim()) await auto.createFolder({ server_id: urlServer, path: path.trim() })
+  const createFolder = async (path: string) => {
+    await auto.createFolder({ server_id: urlServer, path })
   }
 
   const deleteFolder = async (path: string) => {
     const res: any = await auto.deleteFolder({ server_id: urlServer, path })
     if (res && res.success === false && res.reason === 'not_empty') {
-      alert(`Não dá para excluir "${path}": ainda tem ${res.count} fluxo(s) dentro. Mova-os antes.`)
+      setFolderWarning(`Não dá para excluir a pasta "${path}": ainda tem ${res.count} fluxo(s) dentro.\nMova-os para outra pasta antes de excluir.`)
     }
   }
 
@@ -400,6 +402,24 @@ export function AutomationPage() {
       {showEnvironments && urlServer && (
         <EnvironmentsModal serverId={urlServer} onClose={() => setShowEnvironments(false)} />
       )}
+      {showNewFolder && (
+        <PromptModal
+          title="Nova pasta"
+          label='Caminho (use "/" para aninhar, ex: Loja/Eventos)'
+          placeholder="Loja/Eventos"
+          confirmLabel="Criar"
+          onConfirm={createFolder}
+          onClose={() => setShowNewFolder(false)}
+        />
+      )}
+      {folderWarning && (
+        <ConfirmModal
+          title="Pasta não vazia"
+          message={folderWarning}
+          confirmLabel="Entendi"
+          onClose={() => setFolderWarning(null)}
+        />
+      )}
 
       <div className="flex gap-4">
         {/* Flows list */}
@@ -436,7 +456,7 @@ export function AutomationPage() {
                   className="flex-1 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
                 />
                 <button
-                  onClick={createFolder}
+                  onClick={() => setShowNewFolder(true)}
                   className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 whitespace-nowrap transition-colors"
                   title="Criar uma pasta (pode ficar vazia)"
                 >📁 Nova pasta</button>
