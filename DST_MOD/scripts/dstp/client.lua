@@ -555,6 +555,105 @@ local function RegisterBuiltinCommands()
         end
     end)
 
+    -- ── Player state control (real components, master sim) ──
+    -- Each gates on the component existing, like heal/feed above. Admin gating is
+    -- done in the FLOW (backend), not here.
+
+    DSTP.RegisterCommand("set_temperature", function(data)
+        local player = FindPlayer(data.userid)
+        local v = _G.tonumber(data.value)
+        if player and player.components.temperature and v then
+            player.components.temperature:SetTemperature(v)
+        end
+    end)
+
+    DSTP.RegisterCommand("set_moisture", function(data)
+        local player = FindPlayer(data.userid)
+        local p = _G.tonumber(data.percent)
+        if player and player.components.moisture and p then
+            player.components.moisture:SetPercent(math.max(0, math.min(1, p)))
+        end
+    end)
+
+    DSTP.RegisterCommand("ignite", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.burnable then
+            player.components.burnable:Ignite()
+        end
+    end)
+
+    DSTP.RegisterCommand("extinguish", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.burnable then
+            player.components.burnable:Extinguish()
+        end
+    end)
+
+    DSTP.RegisterCommand("freeze", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.freezable then
+            player.components.freezable:Freeze(_G.tonumber(data.duration))
+        end
+    end)
+
+    DSTP.RegisterCommand("unfreeze", function(data)
+        local player = FindPlayer(data.userid)
+        if player and player.components.freezable then
+            player.components.freezable:Unfreeze()
+        end
+    end)
+
+    DSTP.RegisterCommand("set_player_speed", function(data)
+        local player = FindPlayer(data.userid)
+        local m = _G.tonumber(data.multiplier)
+        if player and player.components.locomotor and m then
+            if m == 1 then
+                player.components.locomotor:RemoveExternalSpeedMultiplier(player, "dstp_speed")
+            else
+                player.components.locomotor:SetExternalSpeedMultiplier(player, "dstp_speed", m)
+            end
+        end
+    end)
+
+    -- Vitals: percent (0..1 via SetPercent) OR exact value.
+    DSTP.RegisterCommand("set_health", function(data)
+        local player = FindPlayer(data.userid)
+        local h = player and player.components.health
+        if not h then return end
+        local p = _G.tonumber(data.percent)
+        local v = _G.tonumber(data.value)
+        if p then h:SetPercent(math.max(0, math.min(1, p)))
+        elseif v then h:SetVal(v) end
+    end)
+
+    DSTP.RegisterCommand("set_hunger", function(data)
+        local player = FindPlayer(data.userid)
+        local hu = player and player.components.hunger
+        if not hu then return end
+        local p = _G.tonumber(data.percent)
+        local v = _G.tonumber(data.value)
+        if p then hu:SetPercent(math.max(0, math.min(1, p)))
+        elseif v then hu.current = math.max(0, math.min(hu.max, v)); hu:DoDelta(0) end
+    end)
+
+    DSTP.RegisterCommand("set_sanity", function(data)
+        local player = FindPlayer(data.userid)
+        local s = player and player.components.sanity
+        if not s then return end
+        local p = _G.tonumber(data.percent)
+        local v = _G.tonumber(data.value)
+        if p then s:SetPercent(math.max(0, math.min(1, p)))
+        elseif v then s.current = math.max(0, math.min(s.max, v)); s:DoDelta(0) end
+    end)
+
+    DSTP.RegisterCommand("set_max_health", function(data)
+        local player = FindPlayer(data.userid)
+        local v = _G.tonumber(data.value)
+        if player and player.components.health and v and v > 0 then
+            player.components.health:SetMaxHealth(v)
+        end
+    end)
+
     DSTP.RegisterCommand("give_item", function(data)
         local player = FindPlayer(data.userid)
         if player and data.prefab then

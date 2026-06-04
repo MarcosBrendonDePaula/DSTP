@@ -657,3 +657,62 @@ describe('FlowEngine e2e — basic primitives', () => {
     expect(commands[0].data.message).toBe('hello KU_1')
   })
 })
+
+describe('FlowEngine e2e — player_state', () => {
+  const ps = (id: string, params: any): FlowNode =>
+    ({ id, type: 'player_state', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  async function fire(params: any) {
+    // Clear prior flows so a previous fire() in the same test doesn't also match
+    // the chat_message event (run() leaves the flow in the shared db).
+    const repo = new FlowRepository(SERVER)
+    for (const f of repo.findAll()) repo.delete(f.id)
+    commands.length = 0
+    const nodes = [trigger('t', 'chat_message'), ps('p', { userid: '{{trigger.userid}}', ...params })]
+    await run(nodes, [edge('t', 'p')], { type: 'chat_message', data: { userid: 'KU_1' } })
+  }
+
+  it('temperature → set_temperature with value', async () => {
+    await fire({ attribute: 'temperature', value: '40' })
+    expect(commands[0]).toEqual({ serverId: SERVER, type: 'set_temperature', data: { userid: 'KU_1', value: 40 } })
+  })
+
+  it('moisture → set_moisture with percent', async () => {
+    await fire({ attribute: 'moisture', value: '0.5' })
+    expect(commands[0]).toMatchObject({ type: 'set_moisture', data: { userid: 'KU_1', percent: 0.5 } })
+  })
+
+  it('fire on → ignite, fire off → extinguish', async () => {
+    await fire({ attribute: 'fire', mode: 'on' })
+    expect(commands[0]).toMatchObject({ type: 'ignite', data: { userid: 'KU_1' } })
+    commands.length = 0
+    await fire({ attribute: 'fire', mode: 'off' })
+    expect(commands[0]).toMatchObject({ type: 'extinguish', data: { userid: 'KU_1' } })
+  })
+
+  it('freeze on → freeze, off → unfreeze', async () => {
+    await fire({ attribute: 'freeze', mode: 'on', value: '5' })
+    expect(commands[0]).toMatchObject({ type: 'freeze', data: { userid: 'KU_1', duration: 5 } })
+    commands.length = 0
+    await fire({ attribute: 'freeze', mode: 'off' })
+    expect(commands[0]).toMatchObject({ type: 'unfreeze', data: { userid: 'KU_1' } })
+  })
+
+  it('speed → set_player_speed with multiplier', async () => {
+    await fire({ attribute: 'speed', value: '2' })
+    expect(commands[0]).toMatchObject({ type: 'set_player_speed', data: { userid: 'KU_1', multiplier: 2 } })
+  })
+
+  it('health percent vs value modes', async () => {
+    await fire({ attribute: 'health', mode: 'percent', value: '0.5' })
+    expect(commands[0]).toMatchObject({ type: 'set_health', data: { userid: 'KU_1', percent: 0.5 } })
+    commands.length = 0
+    await fire({ attribute: 'health', mode: 'value', value: '88' })
+    expect(commands[0]).toMatchObject({ type: 'set_health', data: { userid: 'KU_1', value: 88 } })
+  })
+
+  it('position → teleport with x/z', async () => {
+    await fire({ attribute: 'position', x: '10', z: '-5' })
+    expect(commands[0]).toMatchObject({ type: 'teleport', data: { userid: 'KU_1', x: 10, z: -5 } })
+  })
+})

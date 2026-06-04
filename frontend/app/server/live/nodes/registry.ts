@@ -19,6 +19,8 @@ import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_
 import { handler as getPlayerHandler } from '@shared/automation/nodes/data/player/get_player/exec'
 import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
 import { handler as findPlayerHandler } from '@shared/automation/nodes/data/player/find_player/exec'
+import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/player_state/meta'
+import { handler as playerStateHandler } from '@shared/automation/nodes/data/player/player_state/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
@@ -70,6 +72,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: setVarMeta, handler: setVarHandler },
   { meta: getPlayerMeta, handler: getPlayerHandler },
   { meta: findPlayerMeta, handler: findPlayerHandler },
+  { meta: playerStateMeta, handler: playerStateHandler },
   { meta: memoryMeta, handler: memoryHandler },
   { meta: httpMeta, handler: httpHandler },
   { meta: scriptMeta, handler: scriptHandler },
