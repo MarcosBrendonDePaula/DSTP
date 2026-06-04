@@ -47,6 +47,8 @@ import { meta as randomMeta } from '@shared/automation/nodes/data/random/random/
 import { handler as randomHandler } from '@shared/automation/nodes/data/random/random/exec'
 import { meta as transformMeta } from '@shared/automation/nodes/data/transform/transform/meta'
 import { handler as transformHandler } from '@shared/automation/nodes/data/transform/transform/exec'
+import { meta as splitMeta } from '@shared/automation/nodes/data/transform/split/meta'
+import { handler as splitHandler } from '@shared/automation/nodes/data/transform/split/exec'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -90,6 +92,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: logMeta, handler: logHandler },
   { meta: randomMeta, handler: randomHandler },
   { meta: transformMeta, handler: transformHandler },
+  { meta: splitMeta, handler: splitHandler },
   { meta: actionMeta, handler: actionHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },

@@ -46,6 +46,8 @@ import { meta as randomMeta } from '@shared/automation/nodes/data/random/random/
 import { ui as randomUi } from '@shared/automation/nodes/data/random/random/ui'
 import { meta as transformMeta } from '@shared/automation/nodes/data/transform/transform/meta'
 import { ui as transformUi } from '@shared/automation/nodes/data/transform/transform/ui'
+import { meta as splitMeta } from '@shared/automation/nodes/data/transform/split/meta'
+import { ui as splitUi } from '@shared/automation/nodes/data/transform/split/ui'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -106,6 +108,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: logMeta, ui: logUi },
   { meta: randomMeta, ui: randomUi },
   { meta: transformMeta, ui: transformUi },
+  { meta: splitMeta, ui: splitUi },
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },

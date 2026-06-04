@@ -27,6 +27,11 @@ local config = {
     debug_logs = false,  -- when true, Log() prints to server log; errors always print
 }
 
+-- Chat command prefix: a message starting with this is treated as a flow command —
+-- it still fires chat_message (so flows react) but is NOT broadcast to public chat.
+-- We use "!" because the game leaves it alone (it passes through Networking_Say).
+local COMMAND_PREFIX = "!"
+
 local command_handlers = {}
 local evt_config = {}
 local evt_initialized = {}
@@ -2332,12 +2337,21 @@ HookChat = function()
                 return -- suppress: do not broadcast, do not push event
             end
 
+            -- A message that starts with the command prefix ("!") is a flow command:
+            -- still emit chat_message (so flows react), but DON'T broadcast it to
+            -- public chat (silent). Other players never see "!comprar lança".
+            local is_command = type(message) == "string"
+                and (message:match("^%s*(.-)%s*$") or message):sub(1, #COMMAND_PREFIX) == COMMAND_PREFIX
+
             DSTP.PushEvent("chat_message", {
                 userid = userid,
                 name = name,
                 message = message,
                 prefab = prefab,
+                is_command = is_command,
             }, { guid = guid, userid = userid, name = name, prefab = prefab, message = message, colour = colour })
+
+            if is_command then return end  -- suppress broadcast, event already pushed
             return OldNetworkSay(guid, userid, name, prefab, message, colour, ...)
         end
     end
