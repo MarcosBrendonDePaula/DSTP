@@ -33,7 +33,22 @@ Um único fluxo, trigger **`ui_callback`**, roteado pelo `callback` do botão cl
   (outono/inverno/primavera/verão); a aba Vender é fixa.
 - **`buy:<prefab>`** → `transform after ":"` extrai o prefab do callback → checa
   saldo → debita (preço fixo 10) → `give_item` → `ui_set` atualiza o saldo ao vivo.
-- **`sell:<prefab>`** → extrai o prefab → `remove_item` → credita (+5) → `ui_set`.
+- **`sell:<prefab>`** → extrai o prefab → `remove_item` (token `sell`). **Não
+  credita aqui** — só PEDE a remoção. O crédito acontece no `shop-sell-confirm`.
+
+### Venda é atômica (não dá pra vender o que não tem)
+
+O `remove_item` é **assíncrono**: o mod remove **só se o player tiver o item** e
+responde com um evento `item_removed { success, token }`. Por isso a venda é em
+**dois fluxos**:
+
+1. `shop-full` (`sell:<prefab>`) → manda `remove_item` com `token: "sell"` e para.
+2. **`shop-sell-confirm`** (trigger `item_removed`) → checa `token == sell` e
+   `success == true` → só então credita +5 e atualiza a carteira/loja (`ui_set`).
+
+Se o player não tem o item, `success` é `false` → **nada é creditado**. (Creditar
+no `shop-full` direto, sem esperar a confirmação, era um bug: pagava por item
+inexistente.)
 
 O botão **"Abrir Loja"** (callback `open`) vem da carteira (`wallet-open`), que abre
 no `player_spawn`. Então: entra → vê a carteira → clica → loja abre. Toda a lógica

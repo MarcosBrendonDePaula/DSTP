@@ -1548,87 +1548,7 @@
           "userid": "{{cb.userid}}",
           "prefab": "{{item.value}}",
           "count": "1",
-          "token": "{{cb.callback}}"
-        }
-      }
-    },
-    {
-      "id": "sell_read",
-      "type": "memory",
-      "position": {
-        "x": 1120,
-        "y": 300
-      },
-      "data": {
-        "action": "read",
-        "params": {
-          "flow": "shop",
-          "key": "coins:{{cb.userid}}"
-        },
-        "alias": "bal"
-      }
-    },
-    {
-      "id": "sell_norm",
-      "type": "transform",
-      "position": {
-        "x": 1380,
-        "y": 300
-      },
-      "data": {
-        "params": {
-          "value": "{{bal.value}}",
-          "operation": "number"
-        },
-        "alias": "coins"
-      }
-    },
-    {
-      "id": "sell_credit",
-      "type": "transform",
-      "position": {
-        "x": 1640,
-        "y": 300
-      },
-      "data": {
-        "params": {
-          "value": "{{coins.value}}",
-          "operation": "add",
-          "operand": "5"
-        },
-        "alias": "newbal"
-      }
-    },
-    {
-      "id": "sell_write",
-      "type": "memory",
-      "position": {
-        "x": 1900,
-        "y": 300
-      },
-      "data": {
-        "action": "write",
-        "params": {
-          "flow": "shop",
-          "key": "coins:{{cb.userid}}",
-          "value": "{{newbal.value}}"
-        }
-      }
-    },
-    {
-      "id": "sell_set",
-      "type": "action",
-      "position": {
-        "x": 2160,
-        "y": 300
-      },
-      "data": {
-        "action_type": "ui_set",
-        "params": {
-          "userid": "{{cb.userid}}",
-          "id": "shop",
-          "node": "saldo_txt",
-          "text": "{{newbal.value}}"
+          "token": "sell"
         }
       }
     }
@@ -1753,31 +1673,6 @@
       "id": "e_sell_item_sell_remove",
       "source": "sell_item",
       "target": "sell_remove"
-    },
-    {
-      "id": "e_sell_remove_sell_read",
-      "source": "sell_remove",
-      "target": "sell_read"
-    },
-    {
-      "id": "e_sell_read_sell_norm",
-      "source": "sell_read",
-      "target": "sell_norm"
-    },
-    {
-      "id": "e_sell_norm_sell_credit",
-      "source": "sell_norm",
-      "target": "sell_credit"
-    },
-    {
-      "id": "e_sell_credit_sell_write",
-      "source": "sell_credit",
-      "target": "sell_write"
-    },
-    {
-      "id": "e_sell_write_sell_set",
-      "source": "sell_write",
-      "target": "sell_set"
     }
   ]
 }

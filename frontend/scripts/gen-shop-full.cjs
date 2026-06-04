@@ -83,16 +83,14 @@ E('isbuy', 'buy_item', 'true'); E('buy_item', 'buy_read'); E('buy_read', 'buy_no
 E('buy_can', 'buy_charge', 'true'); E('buy_can', 'buy_broke', 'false')
 E('buy_charge', 'buy_write'); E('buy_write', 'buy_give'); E('buy_give', 'buy_set')
 
-// SELL branch: prefab = after(callback, "sell:"); remove 1, credit +5
+// SELL branch (ASYNC): only REQUEST the atomic removal — do NOT credit here.
+// remove_item is async: the mod removes only if the player has the item and
+// replies with an `item_removed { success }` event. Crediting must wait for that
+// confirmation, otherwise selling an item you don't have would still pay you.
+// The credit happens in a SECOND flow triggered by item_removed (see below).
 N('sell_item', 'transform', { params: { value: '{{cb.callback}}', operation: 'after', operand: 'sell:' }, alias: 'item' }, 600, 300)
-N('sell_remove', 'action', { action_type: 'remove_item', params: { userid: '{{cb.userid}}', prefab: '{{item.value}}', count: '1', token: '{{cb.callback}}' } }, 860, 300)
-N('sell_read', 'memory', { action: 'read', params: { flow: 'shop', key: 'coins:{{cb.userid}}' }, alias: 'bal' }, 1120, 300)
-N('sell_norm', 'transform', { params: { value: '{{bal.value}}', operation: 'number' }, alias: 'coins' }, 1380, 300)
-N('sell_credit', 'transform', { params: { value: '{{coins.value}}', operation: 'add', operand: '5' }, alias: 'newbal' }, 1640, 300)
-N('sell_write', 'memory', { action: 'write', params: { flow: 'shop', key: 'coins:{{cb.userid}}', value: '{{newbal.value}}' } }, 1900, 300)
-N('sell_set', 'action', { action_type: 'ui_set', params: { userid: '{{cb.userid}}', id: 'shop', node: 'saldo_txt', text: '{{newbal.value}}' } }, 2160, 300)
-E('issell', 'sell_item', 'true'); E('sell_item', 'sell_remove'); E('sell_remove', 'sell_read')
-E('sell_read', 'sell_norm'); E('sell_norm', 'sell_credit'); E('sell_credit', 'sell_write'); E('sell_write', 'sell_set')
+N('sell_remove', 'action', { action_type: 'remove_item', params: { userid: '{{cb.userid}}', prefab: '{{item.value}}', count: '1', token: 'sell' } }, 860, 300)
+E('issell', 'sell_item', 'true'); E('sell_item', 'sell_remove')
 
 const flow = { name: 'Loja completa — carteira + abas Comprar/Vender + itens por estacao (ui_callback)', nodes, edges }
 fs.writeFileSync(path.join(__dirname, '../examples/flows/shop/shop-full.dstp.json'), JSON.stringify(flow, null, 2))

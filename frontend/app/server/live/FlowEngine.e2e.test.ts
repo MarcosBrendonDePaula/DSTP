@@ -806,11 +806,35 @@ describe('FlowEngine e2e — shop-full (one-flow shop)', () => {
     expect(set!.data.cmd).toMatchObject({ id: 'shop', node: 'saldo_txt' })
   })
 
-  it('sell:log removes the item and credits the balance', async () => {
+  it('sell:log only REQUESTS removal (token sell) — does NOT credit yet', async () => {
     await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'sell:log', season: 'autumn' } })
     const rm = commands.find(c => c.type === 'remove_item')
     expect(rm).toBeDefined()
-    expect(rm!.data).toMatchObject({ userid: 'KU_1', prefab: 'log' })
+    expect(rm!.data).toMatchObject({ userid: 'KU_1', prefab: 'log', token: 'sell' })
+    // no memory write / ui_set credit happens in this flow — that waits for item_removed
+  })
+})
+
+describe('FlowEngine e2e — shop-sell-confirm (atomic sell)', () => {
+  const confirm = JSON.parse(readFileSync(join(import.meta.dir, '../../../examples/flows/shop/shop-sell-confirm.dstp.json'), 'utf8'))
+  const Repo = require('../db').FlowMemoryRepository
+
+  it('credits +5 only when the mod confirms removal (success=true, token=sell)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: true, token: 'sell' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(15)
+  })
+
+  it('does NOT credit when the player lacked the item (success=false)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: false, token: 'sell' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(10)
+  })
+
+  it('ignores item_removed from other flows (token != sell)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: true, token: 'other' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(10)
   })
 })
 

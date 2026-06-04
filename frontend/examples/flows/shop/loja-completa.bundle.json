@@ -1,5 +1,5 @@
 {
-  "name": "Loja completa (bundle: loja + carteira + dar moeda)",
+  "name": "Loja completa (bundle: loja + carteira + dar moeda + confirma venda)",
   "flows": [
     {
       "name": "Loja completa — carteira + abas Comprar/Vender + itens por estacao (ui_callback)",
@@ -1551,87 +1551,7 @@
               "userid": "{{cb.userid}}",
               "prefab": "{{item.value}}",
               "count": "1",
-              "token": "{{cb.callback}}"
-            }
-          }
-        },
-        {
-          "id": "sell_read",
-          "type": "memory",
-          "position": {
-            "x": 1120,
-            "y": 300
-          },
-          "data": {
-            "action": "read",
-            "params": {
-              "flow": "shop",
-              "key": "coins:{{cb.userid}}"
-            },
-            "alias": "bal"
-          }
-        },
-        {
-          "id": "sell_norm",
-          "type": "transform",
-          "position": {
-            "x": 1380,
-            "y": 300
-          },
-          "data": {
-            "params": {
-              "value": "{{bal.value}}",
-              "operation": "number"
-            },
-            "alias": "coins"
-          }
-        },
-        {
-          "id": "sell_credit",
-          "type": "transform",
-          "position": {
-            "x": 1640,
-            "y": 300
-          },
-          "data": {
-            "params": {
-              "value": "{{coins.value}}",
-              "operation": "add",
-              "operand": "5"
-            },
-            "alias": "newbal"
-          }
-        },
-        {
-          "id": "sell_write",
-          "type": "memory",
-          "position": {
-            "x": 1900,
-            "y": 300
-          },
-          "data": {
-            "action": "write",
-            "params": {
-              "flow": "shop",
-              "key": "coins:{{cb.userid}}",
-              "value": "{{newbal.value}}"
-            }
-          }
-        },
-        {
-          "id": "sell_set",
-          "type": "action",
-          "position": {
-            "x": 2160,
-            "y": 300
-          },
-          "data": {
-            "action_type": "ui_set",
-            "params": {
-              "userid": "{{cb.userid}}",
-              "id": "shop",
-              "node": "saldo_txt",
-              "text": "{{newbal.value}}"
+              "token": "sell"
             }
           }
         }
@@ -1756,31 +1676,6 @@
           "id": "e_sell_item_sell_remove",
           "source": "sell_item",
           "target": "sell_remove"
-        },
-        {
-          "id": "e_sell_remove_sell_read",
-          "source": "sell_remove",
-          "target": "sell_read"
-        },
-        {
-          "id": "e_sell_read_sell_norm",
-          "source": "sell_read",
-          "target": "sell_norm"
-        },
-        {
-          "id": "e_sell_norm_sell_credit",
-          "source": "sell_norm",
-          "target": "sell_credit"
-        },
-        {
-          "id": "e_sell_credit_sell_write",
-          "source": "sell_credit",
-          "target": "sell_write"
-        },
-        {
-          "id": "e_sell_write_sell_set",
-          "source": "sell_write",
-          "target": "sell_set"
         }
       ]
     },
@@ -2060,6 +1955,190 @@
           "id": "e_write_update",
           "source": "write",
           "target": "update"
+        }
+      ]
+    },
+    {
+      "name": "Loja — confirma venda: credita +5 SÓ quando o item foi removido de verdade",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "item_removed",
+            "alias": "sold"
+          }
+        },
+        {
+          "id": "fromshop",
+          "type": "condition",
+          "position": {
+            "x": 280,
+            "y": 0
+          },
+          "data": {
+            "field": "{{sold.token}}",
+            "operator": "equals",
+            "value": "sell"
+          }
+        },
+        {
+          "id": "ok",
+          "type": "condition",
+          "position": {
+            "x": 560,
+            "y": 0
+          },
+          "data": {
+            "field": "{{sold.success}}",
+            "operator": "equals",
+            "value": "true"
+          }
+        },
+        {
+          "id": "read",
+          "type": "memory",
+          "position": {
+            "x": 840,
+            "y": 0
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{sold.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "norm",
+          "type": "transform",
+          "position": {
+            "x": 860,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "number"
+            },
+            "alias": "coins"
+          }
+        },
+        {
+          "id": "credit",
+          "type": "transform",
+          "position": {
+            "x": 1120,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{coins.value}}",
+              "operation": "add",
+              "operand": "5"
+            },
+            "alias": "newbal"
+          }
+        },
+        {
+          "id": "write",
+          "type": "memory",
+          "position": {
+            "x": 1380,
+            "y": 0
+          },
+          "data": {
+            "action": "write",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{sold.userid}}",
+              "value": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "set",
+          "type": "action",
+          "position": {
+            "x": 1640,
+            "y": -60
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{sold.userid}}",
+              "id": "shop",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "wallet",
+          "type": "action",
+          "position": {
+            "x": 1640,
+            "y": 80
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{sold.userid}}",
+              "id": "wallet",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_fromshop",
+          "source": "trg",
+          "target": "fromshop"
+        },
+        {
+          "id": "e_fromshop_ok",
+          "source": "fromshop",
+          "target": "ok",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_ok_read",
+          "source": "ok",
+          "target": "read",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_read_norm",
+          "source": "read",
+          "target": "norm"
+        },
+        {
+          "id": "e_norm_credit",
+          "source": "norm",
+          "target": "credit"
+        },
+        {
+          "id": "e_credit_write",
+          "source": "credit",
+          "target": "write"
+        },
+        {
+          "id": "e_write_set",
+          "source": "write",
+          "target": "set"
+        },
+        {
+          "id": "e_write_wallet",
+          "source": "write",
+          "target": "wallet"
         }
       ]
     }
