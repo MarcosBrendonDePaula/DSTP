@@ -5,7 +5,30 @@
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
 import { EventSchemaRepository } from '../db'
+import { buildServerRoomState } from './serverRoomState'
 import type { DSTPanel as _Client } from '@client/src/live/DSTPanel'
+
+// Per-server subscriber instances. Since LiveDSTP is NOT a singleton, each connection
+// has its own instance + its own reactive $state. A connection subscribes (joinServerRoom)
+// to exactly ONE server, so mirroring that server's data into the instance's $state
+// reaches ONLY that connection — reactive on the client AND isolated (no cross-server
+// leak), without rooms or polling.
+const _subscribers = new Map<string, Set<LiveDSTP>>()
+
+// Push ONE server's current data to the instances subscribed to it (no-op if none).
+export function pushServerData(serverId: string) {
+  const subs = _subscribers.get(serverId)
+  if (!subs || subs.size === 0) return
+  const snap = buildServerRoomState(serverId)
+  if (!snap) return
+  for (const inst of subs) {
+    try { (inst as any).setState(snap) } catch { /* ignore */ }
+  }
+}
+
+export function pushAllServerData() {
+  for (const serverId of _subscribers.keys()) pushServerData(serverId)
+}
 
 // ─── State ───────────────────────────────────────────
 // Flat keys for efficient STATE_DELTA:
@@ -20,16 +43,31 @@ interface DSTPState {
   [key: string]: any
 }
 
-let _instance: LiveDSTP | null = null
+// Notify panels of a state change: push the changed server's data into its isolated
+// room. The server-id list ($state) is refreshed by each instance's own 5s timer +
+// mount. No singleton instance needed — rooms are addressed globally via the roomManager.
+export function notifyLiveDSTP(serverId?: string) {
+  if (serverId) pushServerData(serverId)
+  else pushAllServerData()
+}
 
-export function notifyLiveDSTP() {
-  _instance?.pushStoreUpdate()
+// Global timer so per-server room state stays fresh even for servers no single panel
+// is actively viewing-change (e.g. player moves). pushServerData is a no-op for rooms
+// with no members, so this is cheap. Runs once for the process, not per connection.
+let _roomTimer: NodeJS.Timeout | null = null
+function ensureRoomTimer() {
+  if (_roomTimer) return
+  _roomTimer = setInterval(() => pushAllServerData(), 2000)
 }
 
 export class LiveDSTP extends LiveComponent<DSTPState> {
   static componentName = 'LiveDSTP'
-  static singleton = true
+  // NOT a singleton: one instance per panel connection, so each connection has its own
+  // componentId and can join its server's room cleanly (a singleton shares one
+  // componentId across connections, which breaks per-connection room membership).
   static publicActions = [
+    'joinServerRoom',
+    'leaveServerRoom',
     'sendCommand',
     'sendPlayerCommand',
     'broadcastCommand',
@@ -46,88 +84,62 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
   }
 
   private _refreshTimer?: NodeJS.Timeout
-  private _lastVersion: number = -1
+  private _lastIdsKey: string = ''
+  private _subscribedServer: string | null = null
 
   protected onMount() {
-    _instance = this
+    // NOT a singleton anymore: each panel connection gets its own instance. We only
+    // keep the GLOBAL server-id list on the component $state (low-sensitivity); all
+    // per-server DATA (players/events/...) goes through the isolated per-server rooms.
+    ensureRoomTimer()
     this.pushStoreUpdate()
     this._refreshTimer = setInterval(() => this.pushStoreUpdate(), 5000)
   }
 
   protected onDestroy() {
     if (this._refreshTimer) clearInterval(this._refreshTimer)
-    if (_instance === this) _instance = null
+    if (this._subscribedServer) _subscribers.get(this._subscribedServer)?.delete(this)
   }
 
+  // Push ONLY the global server-id list to this connection. Per-server data is isolated
+  // in rooms (pushServerData). This is the entire singleton-fan-out we used to leak,
+  // reduced to a non-sensitive id array.
   pushStoreUpdate() {
-    if (dstStateStore.version === this._lastVersion) return
-    this._lastVersion = dstStateStore.version
-
-    const groups = dstStateStore.getServerGroups()
-    const delta: Partial<DSTPState> = {}
-
-    const newIds = groups.map(g => g.server_id)
-    const oldIds: string[] = this.state.serverIds || []
-
-    if (JSON.stringify(newIds) !== JSON.stringify(oldIds)) {
-      delta.serverIds = newIds
-    }
-
-    for (const g of groups) {
-      const serverKey = `server:${g.server_id}`
-      const playersKey = `players:${g.server_id}`
-
-      // Server info with shard details
-      delta[serverKey] = {
-        server_id: g.server_id,
-        name: g.name || g.server_id,
-        online: g.online,
-        last_seen: g.last_seen,
-        player_count: g.all_players.length,
-        active_events: dstStateStore.getActiveEvents(g.server_id),
-        debounce: dstStateStore.getDebounce(g.server_id),
-        shards: g.shards.map(s => ({
-          shard_id: s.shard_id,
-          shard_type: s.shard_type,
-          online: s.online,
-          day: s.server?.day,
-          season: s.server?.season,
-          phase: s.server?.phase,
-          is_cave: s.server?.is_cave,
-          max_players: s.server?.max_players,
-          time_scale: s.server?.time_scale,
-          player_count: s.players.length,
-        })),
-      }
-
-      // Players merged from all shards, keyed by userid
-      const playersMap: Record<string, any> = {}
-      for (const p of g.all_players) {
-        playersMap[p.userid] = p
-      }
-      delta[playersKey] = playersMap
-    }
-
-    // Clean removed servers
-    for (const oldId of oldIds) {
-      if (!newIds.includes(oldId)) {
-        delta[`server:${oldId}`] = null
-        delta[`players:${oldId}`] = null
-      }
-    }
-
-    // Events
-    const newEvents = dstStateStore.getAllEvents()
-    if (newEvents.length !== (this.state.events?.length || 0)) {
-      delta.events = newEvents
-    }
-
-    if (Object.keys(delta).length > 0) {
-      this.setState(delta)
-    }
+    const newIds = dstStateStore.getServerGroups().map(g => g.server_id)
+    const key = JSON.stringify(newIds)
+    if (key === this._lastIdsKey) return
+    this._lastIdsKey = key
+    this.setState({ serverIds: newIds } as Partial<DSTPState>)
   }
 
   // ─── Public Actions ────────────────────────────────
+
+  // The client can't join a room directly ("Room requires server-side join via
+  // component action") — it calls this. We join THIS connection to the server's room
+  // and seed it with the current state. From then on pushServerData() broadcasts only
+  // to this room's members, so a panel viewing server A never receives B's data.
+  // Subscribe THIS connection's instance to a server. Since LiveDSTP is no longer a
+  // singleton, each connection has its own instance + its own $state, so mirroring a
+  // server's data into this.setState reaches ONLY this connection — reactive on the
+  // client (no polling) AND isolated (no cross-server leak). We register the instance
+  // and push the current snapshot; pushServerData() fans live updates to subscribers.
+  async joinServerRoom(payload: { server_id: string }) {
+    const serverId = payload?.server_id
+    if (!serverId) return { ok: false as const }
+    this._subscribedServer = serverId
+    if (!_subscribers.has(serverId)) _subscribers.set(serverId, new Set())
+    _subscribers.get(serverId)!.add(this)
+    const snap = buildServerRoomState(serverId)
+    if (snap) this.setState(snap as Partial<DSTPState>)
+    return { ok: true as const }
+  }
+
+  async leaveServerRoom(payload: { server_id: string }) {
+    const serverId = payload?.server_id
+    if (serverId) _subscribers.get(serverId)?.delete(this)
+    if (this._subscribedServer === serverId) this._subscribedServer = null
+    return { ok: true as const }
+  }
 
   // Send command to a specific shard
   async sendCommand(payload: { shard_id: string; type: string; data?: Record<string, any> }) {
@@ -184,8 +196,9 @@ export class LiveDSTP extends LiveComponent<DSTPState> {
   }
 
   async refresh() {
-    this._lastVersion = -1
+    this._lastIdsKey = ''   // force a re-push of the server-id list
     this.pushStoreUpdate()
+    pushAllServerData()
     return { success: true }
   }
 }

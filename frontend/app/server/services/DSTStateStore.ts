@@ -147,6 +147,17 @@ class DSTStateStore {
     return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
   }
 
+  // Events for ONE server only (its shards merged). Used by the per-server room so a
+  // panel viewing server A never receives server B's events on the wire (vs the global
+  // getAllEvents, which leaked everything through the shared singleton state).
+  getEventsForServer(server_id: string): any[] {
+    const all: any[] = []
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) all.push(...shard.events)
+    }
+    return all.sort((a, b) => a.received_at - b.received_at).slice(-500)
+  }
+
   // Subscribers notified whenever a command is enqueued. Used by the relay
   // WS endpoint to push commands to the relay proactively (before the next
   // mod poll arrives), so the relay can answer the poll locally with <5ms

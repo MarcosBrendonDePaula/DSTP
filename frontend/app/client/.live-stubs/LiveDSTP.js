@@ -5,6 +5,8 @@ export class LiveDSTP {
     events: [],
   }
   static publicActions = [
+    'joinServerRoom',
+    'leaveServerRoom',
     'sendCommand',
     'sendPlayerCommand',
     'broadcastCommand',
