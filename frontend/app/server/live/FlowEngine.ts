@@ -12,6 +12,8 @@ import { resolveValue, evaluateCondition as evalCondition, stripCommandPrefix } 
 import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 import { installVaultAccessors, maskSecrets } from './vault-context'
 import { executeAIAgent } from './ai/executeAIAgent'
+import { getNodeEntry } from './nodes/registry'
+import type { NodeRunContext } from './nodes/types'
 
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
@@ -253,6 +255,41 @@ export class FlowEngine {
     return null
   }
 
+  // Build the capability bag a migrated node handler (exec.ts) runs against. All
+  // the engine internals a handler might need are bound here so the handler never
+  // reaches into FlowEngine directly. Heavy helpers (runFlowAction, buildUITree,
+  // executeAIAgent…) stay methods of the engine and are just exposed.
+  private buildRunContext(
+    node: FlowNode,
+    nodes: FlowNode[],
+    edges: FlowEdge[],
+    context: Record<string, any>,
+    serverId: string,
+    executedActions: string[],
+    setContext: (nodeId: string, value: any) => void,
+    stopAtWait: boolean,
+    followOutEdges: (filter?: (edge: FlowEdge) => boolean) => Promise<FlowNode | null>,
+  ): NodeRunContext {
+    return {
+      node, nodes, edges, context, serverId, executedActions, stopAtWait,
+      resolve: (tpl) => this.resolveValue(tpl, context),
+      param: (key, def) => this.param(node, key, def),
+      setContext: (value) => setContext(node.id, value),
+      findPlayerInServer: (predicate) => this.findPlayerInServer(serverId, predicate),
+      evaluateCondition: () => this.evaluateCondition(node, context),
+      followOutEdges,
+      pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
+      runFlowAction: () => this.runFlowAction(serverId, node, context),
+      executeHttpRequest: () => this.executeHttpRequest(node, context),
+      executeSetVariable: () => this.executeSetVariable(node, context),
+      executeScript: () => this.executeScript(node, context, serverId),
+      runAiMemory: (args) => this.runAiMemory(serverId, context, args),
+      buildUITree: () => this.buildUITree(node, nodes, edges, context),
+      resolveTree: (tree) => this.resolveTree(tree, context),
+      executeAIAgent: () => this.runAiAgentNode(node, nodes, edges, context, serverId),
+    }
+  }
+
   // ─── Flow Execution with Context ────────────────────
   // Each node registers its output in context[node_id]
   // Downstream nodes can reference via {{node_id.field}}
@@ -318,6 +355,26 @@ export class FlowEngine {
         }
       }
       return null
+    }
+
+    // ── Registry dispatch (new) ──
+    // If this node type has a migrated module, run its handler and let the engine
+    // centralize tracing + edge-following. Unmigrated types fall through to the
+    // legacy if/else below. `wait` is intentionally NOT in the registry — its
+    // stateful pause/early-return lives in the orchestrator (see line above).
+    const entry = node.type !== 'wait' ? getNodeEntry(node.type) : undefined
+    if (entry) {
+      const rc = this.buildRunContext(node, nodes, edges, context, serverId, executedActions, setContext, stopAtWait, followOutEdges)
+      try {
+        const result = await entry.handler(rc)
+        this.traceCompleted(serverId, node.id, inputSnapshot, context)
+        if (typeof result === 'object' && result.wait) return result.wait
+        if (result === 'stop') return null
+        return await followOutEdges()
+      } catch (nodeErr: any) {
+        this.pushTrace(serverId, node.id, 'error', inputSnapshot, null, nodeErr.message, context)
+        throw nodeErr
+      }
     }
 
     try {
@@ -459,38 +516,7 @@ export class FlowEngine {
       } else if (node.type === 'ai_agent') {
         // Agentic loop: the tools are the nodes wired into this node's `tools`
         // input handle. The model fills params; we execute the real node.
-        const output = await executeAIAgent(node, nodes, edges, context, {
-          resolve: (tpl, ctx) => this.resolveValue(tpl, ctx),
-          runTool: (toolNode, args, ctx) => {
-            // ai_memory: the AI's own key/value store. It picks operation + key
-            // (free-form, e.g. "player:joe:house" or "server:pvp") + value.
-            if (toolNode.type === 'ai_memory') {
-              return this.runAiMemory(serverId, ctx, args)
-            }
-            // Merge: AI-provided args override the node's configured params, then
-            // run it through the SAME action pipeline (resolveValue + coerce +
-            // pushCommand). A scoped clone keeps the original node untouched.
-            const merged: FlowNode = { ...toolNode, data: { ...toolNode.data, params: { ...(toolNode.data?.params || {}), ...args } } }
-            const tt = merged.data.action_type || merged.type
-            if (tt === 'http_request') return this.executeHttpRequest(merged, ctx)
-            if (tt === 'set_variable') return this.executeSetVariable(merged, ctx)
-            if (tt === 'script') return this.executeScript(merged, ctx, serverId)
-            this.runFlowAction(serverId, merged, ctx)
-            return { executed: true, action: tt }
-          },
-          // Conversation history, persisted per-flow under "aichat:<scopeKey>".
-          loadHistory: (scopeKey: string) => {
-            const flowId = String(context._flowId || '')
-            if (!flowId) return []
-            const v = new FlowMemoryRepository(serverId).get(flowId, `aichat:${scopeKey}`)
-            return Array.isArray(v) ? v : []
-          },
-          saveHistory: (scopeKey: string, turns: any[]) => {
-            const flowId = String(context._flowId || '')
-            if (!flowId) return
-            new FlowMemoryRepository(serverId).set(flowId, `aichat:${scopeKey}`, turns)
-          },
-        })
+        const output = await this.runAiAgentNode(node, nodes, edges, context, serverId)
         setContext(node.id, output)
         this.traceCompleted(serverId, node.id, inputSnapshot, context)
         executedActions.push('ai_agent')
@@ -1090,6 +1116,52 @@ export class FlowEngine {
     }
 
     this.host.pushCommand(serverId, actionType, actionData)
+  }
+
+  // ─── AI Agent node ─────────────────────────────────
+  // Runs the agentic loop. Tools are the nodes wired to this node's `tools` input;
+  // the model fills params and we execute the real node via the same pipeline.
+  // Extracted so both the legacy processNode branch and the registry handler share
+  // one implementation.
+  private runAiAgentNode(
+    node: FlowNode,
+    nodes: FlowNode[],
+    edges: FlowEdge[],
+    context: Record<string, any>,
+    serverId: string,
+  ): Promise<any> {
+    return executeAIAgent(node, nodes, edges, context, {
+      resolve: (tpl, ctx) => this.resolveValue(tpl, ctx),
+      runTool: (toolNode, args, ctx) => {
+        // ai_memory: the AI's own key/value store. It picks operation + key
+        // (free-form, e.g. "player:joe:house" or "server:pvp") + value.
+        if (toolNode.type === 'ai_memory') {
+          return this.runAiMemory(serverId, ctx, args)
+        }
+        // Merge: AI-provided args override the node's configured params, then
+        // run it through the SAME action pipeline (resolveValue + coerce +
+        // pushCommand). A scoped clone keeps the original node untouched.
+        const merged: FlowNode = { ...toolNode, data: { ...toolNode.data, params: { ...(toolNode.data?.params || {}), ...args } } }
+        const tt = merged.data.action_type || merged.type
+        if (tt === 'http_request') return this.executeHttpRequest(merged, ctx)
+        if (tt === 'set_variable') return this.executeSetVariable(merged, ctx)
+        if (tt === 'script') return this.executeScript(merged, ctx, serverId)
+        this.runFlowAction(serverId, merged, ctx)
+        return { executed: true, action: tt }
+      },
+      // Conversation history, persisted per-flow under "aichat:<scopeKey>".
+      loadHistory: (scopeKey: string) => {
+        const flowId = String(context._flowId || '')
+        if (!flowId) return []
+        const v = new FlowMemoryRepository(serverId).get(flowId, `aichat:${scopeKey}`)
+        return Array.isArray(v) ? v : []
+      },
+      saveHistory: (scopeKey: string, turns: any[]) => {
+        const flowId = String(context._flowId || '')
+        if (!flowId) return
+        new FlowMemoryRepository(serverId).set(flowId, `aichat:${scopeKey}`, turns)
+      },
+    })
   }
 
   // ─── HTTP Request node ─────────────────────────────
