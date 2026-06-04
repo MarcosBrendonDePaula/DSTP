@@ -11,16 +11,17 @@
 import type { NodeMeta } from '@shared/automation/nodeMeta'
 import type { NodeHandler } from './types'
 
+import { meta as delayMeta } from '@shared/automation/nodes/delay/meta'
+import { handler as delayHandler } from '@shared/automation/nodes/delay/exec'
+
 export interface BackendNodeEntry {
   meta: NodeMeta
   handler: NodeHandler
 }
 
-// ── Registered node modules (grows one line per migrated node) ──
-// e.g. import { meta as delayMeta } from '@shared/automation/nodes/delay/meta'
-//      import { handler as delayHandler } from '@shared/automation/nodes/delay/exec'
+// ── Registered node modules (one entry per migrated node) ──
 const ENTRIES: BackendNodeEntry[] = [
-  // (none yet — added during migration)
+  { meta: delayMeta, handler: delayHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))
