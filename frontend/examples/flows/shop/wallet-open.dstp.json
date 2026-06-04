@@ -16,7 +16,8 @@
             { "type": "row", "gap": 8, "children": [
               { "type": "icon", "prefab": "goldnugget", "size": 40 },
               { "type": "text", "id": "saldo_txt", "text": "{{coins.value}}", "size": 30, "color": [1, 0.85, 0.2, 1] }
-            ] }
+            ] },
+            { "type": "button", "text": "Abrir Loja", "callback": "open", "width": 150, "height": 36 }
           ]
         }
       }

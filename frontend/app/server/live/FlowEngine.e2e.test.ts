@@ -781,6 +781,39 @@ describe('FlowEngine e2e — wallet (live money HUD)', () => {
   })
 })
 
+describe('FlowEngine e2e — shop-full (one-flow shop)', () => {
+  const shop = JSON.parse(readFileSync(join(import.meta.dir, '../../../examples/flows/shop/shop-full.dstp.json'), 'utf8'))
+
+  it('open in winter builds the shop tree with the winter buy tab', async () => {
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'open', season: 'winter' } })
+    const ui = commands.find(c => c.type === 'ui_command')
+    expect(ui).toBeDefined()
+    expect(ui!.data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'shop' })
+    const json = JSON.stringify(ui!.data.cmd.tree)
+    expect(json).toContain('Inverno')         // panel title for winter
+    expect(json).toContain('buy:heatrock')    // a winter-only item callback
+    expect(json).toContain('sell:log')        // sell tab present
+  })
+
+  it('buy:spear (with funds) debits and gives the item; extracts prefab from callback', async () => {
+    // seed a balance so the buy passes the funds check
+    new (require('../db').FlowMemoryRepository)(SERVER).set('shop', 'coins:KU_1', 50)
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'buy:spear', season: 'autumn' } })
+    const give = commands.find(c => c.type === 'give_item')
+    expect(give).toBeDefined()
+    expect(give!.data).toMatchObject({ userid: 'KU_1', prefab: 'spear' })
+    const set = commands.find(c => c.type === 'ui_command' && c.data.cmd.action === 'set')
+    expect(set!.data.cmd).toMatchObject({ id: 'shop', node: 'saldo_txt' })
+  })
+
+  it('sell:log removes the item and credits the balance', async () => {
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'sell:log', season: 'autumn' } })
+    const rm = commands.find(c => c.type === 'remove_item')
+    expect(rm).toBeDefined()
+    expect(rm!.data).toMatchObject({ userid: 'KU_1', prefab: 'log' })
+  })
+})
+
 describe('FlowEngine e2e — land_claim', () => {
   const lc = (id: string, params: any): FlowNode =>
     ({ id, type: 'land_claim', data: { params }, position: { x: 0, y: 0 } } as any)

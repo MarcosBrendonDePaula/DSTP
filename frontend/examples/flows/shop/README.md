@@ -3,10 +3,35 @@
 Loja com saldo virtual de moedas guardado no node `memory` (namespace `shop`,
 chave `coins:<userid>`). Os dois fluxos **compartilham** esse namespace.
 
-| Fluxo | Comando | Efeito |
+| Fluxo | Gatilho | Efeito |
 |-------|---------|--------|
-| `shop-give-coins` | `!moedas` (admin) | Soma +100 ao saldo do jogador |
-| `shop-buy-spear` | `!comprar lanca` | Gasta 50 do saldo e entrega uma `spear` |
+| **`shop-full`** | `ui_callback` | **Loja completa num fluxo:** carteira + abas Comprar/Vender + itens que mudam por estação. Abre com o botão "Abrir Loja" da carteira. |
+| `wallet-open` | `player_spawn` | Abre a carteira (ícone de ouro + saldo + botão "Abrir Loja") no canto |
+| `wallet-give` | `!dar` (admin) | Credita +100 e atualiza a carteira ao vivo |
+| `shop-give-coins` | `!moedas` (admin) | Soma +100 ao saldo (versão simples por chat) |
+| `shop-buy-spear` | `!comprar lanca` | Gasta 50 e entrega uma `spear` (versão simples por chat) |
+
+## Loja completa (`shop-full`)
+
+Um único fluxo, trigger **`ui_callback`**, roteado pelo `callback` do botão clicado:
+
+- **`open`** → lê o saldo → `switch {{cb.season}}` escolhe o catálogo da estação →
+  `ui_builder` monta o painel **Loja** com a carteira no topo e **abas**
+  Comprar/Vender. A aba Comprar **muda os itens conforme a estação**
+  (outono/inverno/primavera/verão); a aba Vender é fixa.
+- **`buy:<prefab>`** → `transform after ":"` extrai o prefab do callback → checa
+  saldo → debita (preço fixo 10) → `give_item` → `ui_set` atualiza o saldo ao vivo.
+- **`sell:<prefab>`** → extrai o prefab → `remove_item` → credita (+5) → `ui_set`.
+
+O botão **"Abrir Loja"** (callback `open`) vem da carteira (`wallet-open`), que abre
+no `player_spawn`. Então: entra → vê a carteira → clica → loja abre. Toda a lógica
+de comprar/vender/sazonal vive no `shop-full`; só a abertura mora na carteira
+(um fluxo = um trigger, e abrir + clicar são gatilhos distintos).
+
+> O `transform` ganhou as operações **`after` / `before` / `replace`** para extrair
+> o prefab do callback (`buy:spear` → `spear`) — o engine não tem split de string.
+
+Requer o mod **v0.6.0+** (UI tree, tabs, botões com callback).
 
 ## Como funciona
 
