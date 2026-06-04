@@ -11,6 +11,18 @@ chave `coins:<userid>`). Os dois fluxos **compartilham** esse namespace.
 | `shop-give-coins` | `!moedas` (admin) | Soma +100 ao saldo (versão simples por chat) |
 | `shop-buy-spear` | `!comprar lanca` | Gasta 50 e entrega uma `spear` (versão simples por chat) |
 
+## Importar tudo de uma vez
+
+**`loja-completa.bundle.json`** — um único arquivo que instala os 3 fluxos da loja
+de uma vez (`shop-full` + `wallet-open` + `wallet-give`). O importador reconhece o
+formato `{ "flows": [...] }` e cria cada um como fluxo novo (vêm **desabilitados** —
+ligue-os depois de importar). Use o botão "↑ Importar" e escolha esse arquivo.
+
+> Por que são 3 fluxos e não 1? Cada fluxo tem **um** trigger, e a loja reage a
+> eventos diferentes: abrir a carteira = `player_spawn`, usar a loja = `ui_callback`,
+> dar moeda = `chat_message`. A lógica da loja toda vive num fluxo (`shop-full`); os
+> outros dois só fazem o "liga" (abrir + abastecer). O bundle junta tudo num arquivo.
+
 ## Loja completa (`shop-full`)
 
 Um único fluxo, trigger **`ui_callback`**, roteado pelo `callback` do botão clicado:

@@ -1,0 +1,2067 @@
+{
+  "name": "Loja completa (bundle: loja + carteira + dar moeda)",
+  "flows": [
+    {
+      "name": "Loja completa — carteira + abas Comprar/Vender + itens por estacao (ui_callback)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "ui_callback",
+            "alias": "cb"
+          }
+        },
+        {
+          "id": "isopen",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": -200
+          },
+          "data": {
+            "field": "{{cb.callback}}",
+            "operator": "equals",
+            "value": "open"
+          }
+        },
+        {
+          "id": "isbuy",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{cb.callback}}",
+            "operator": "starts_with",
+            "value": "buy:"
+          }
+        },
+        {
+          "id": "issell",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 300
+          },
+          "data": {
+            "field": "{{cb.callback}}",
+            "operator": "starts_with",
+            "value": "sell:"
+          }
+        },
+        {
+          "id": "open_read",
+          "type": "memory",
+          "position": {
+            "x": 600,
+            "y": -200
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{cb.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "open_norm",
+          "type": "transform",
+          "position": {
+            "x": 860,
+            "y": -200
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "number"
+            },
+            "alias": "coins"
+          }
+        },
+        {
+          "id": "open_sw",
+          "type": "switch",
+          "position": {
+            "x": 1120,
+            "y": -200
+          },
+          "data": {
+            "field": "{{cb.season}}",
+            "cases": [
+              {
+                "value": "autumn"
+              },
+              {
+                "value": "winter"
+              },
+              {
+                "value": "spring"
+              },
+              {
+                "value": "summer"
+              }
+            ]
+          }
+        },
+        {
+          "id": "open_ui_autumn",
+          "type": "ui_builder",
+          "position": {
+            "x": 1400,
+            "y": -360
+          },
+          "data": {
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "anchor": "center"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Loja - Outono",
+              "min_width": 320,
+              "gap": 8,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 28
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 24,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tabs",
+                  "active": 0,
+                  "tabs": [
+                    {
+                      "label": "Comprar",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "carrot",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Cenoura (5)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:carrot",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "berries",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Frutas (5)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:berries",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "axe",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Machado (20)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:axe",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "spear",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Lanca (30)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:spear",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "Vender",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "log",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Madeira (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:log",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "rocks",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:rocks",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "goldnugget",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Ouro (+8)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:goldnugget",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "flint",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Silex (+3)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:flint",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "open_ui_winter",
+          "type": "ui_builder",
+          "position": {
+            "x": 1400,
+            "y": -280
+          },
+          "data": {
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "anchor": "center"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Loja - Inverno",
+              "min_width": 320,
+              "gap": 8,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 28
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 24,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tabs",
+                  "active": 0,
+                  "tabs": [
+                    {
+                      "label": "Comprar",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "earmuffshat",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Orelheira (25)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:earmuffshat",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "heatrock",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra Termica (50)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:heatrock",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "meat",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Carne (15)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:meat",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "torch",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Tocha (10)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:torch",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "Vender",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "log",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Madeira (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:log",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "rocks",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:rocks",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "goldnugget",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Ouro (+8)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:goldnugget",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "flint",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Silex (+3)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:flint",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "open_ui_spring",
+          "type": "ui_builder",
+          "position": {
+            "x": 1400,
+            "y": -200
+          },
+          "data": {
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "anchor": "center"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Loja - Primavera",
+              "min_width": 320,
+              "gap": 8,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 28
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 24,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tabs",
+                  "active": 0,
+                  "tabs": [
+                    {
+                      "label": "Comprar",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "umbrella",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Guarda-chuva (35)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:umbrella",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "strawhat",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Chapeu de Palha (15)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:strawhat",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "seeds",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Sementes (5)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:seeds",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "spear",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Lanca (30)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:spear",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "Vender",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "log",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Madeira (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:log",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "rocks",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:rocks",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "goldnugget",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Ouro (+8)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:goldnugget",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "flint",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Silex (+3)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:flint",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "open_ui_summer",
+          "type": "ui_builder",
+          "position": {
+            "x": 1400,
+            "y": -120
+          },
+          "data": {
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "anchor": "center"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Loja - Verao",
+              "min_width": 320,
+              "gap": 8,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 28
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 24,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tabs",
+                  "active": 0,
+                  "tabs": [
+                    {
+                      "label": "Comprar",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "umbrella",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Guarda-chuva (35)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:umbrella",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "endothermicfire",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Fogueira Gelada (60)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:endothermicfire",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "watermelon",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Melancia (12)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:watermelon",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "strawhat",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Chapeu (15)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:strawhat",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "Vender",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "log",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Madeira (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:log",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "rocks",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:rocks",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "goldnugget",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Ouro (+8)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:goldnugget",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "flint",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Silex (+3)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:flint",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "open_ui_def",
+          "type": "ui_builder",
+          "position": {
+            "x": 1400,
+            "y": 60
+          },
+          "data": {
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "anchor": "center"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Loja - Outono",
+              "min_width": 320,
+              "gap": 8,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 28
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 24,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tabs",
+                  "active": 0,
+                  "tabs": [
+                    {
+                      "label": "Comprar",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "carrot",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Cenoura (5)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:carrot",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "berries",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Frutas (5)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:berries",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "axe",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Machado (20)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:axe",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "spear",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Lanca (30)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Comprar",
+                                "callback": "buy:spear",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "Vender",
+                      "child": {
+                        "type": "col",
+                        "gap": 6,
+                        "children": [
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "log",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Madeira (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:log",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "rocks",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Pedra (+2)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:rocks",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "goldnugget",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Ouro (+8)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:goldnugget",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          },
+                          {
+                            "type": "row",
+                            "gap": 8,
+                            "children": [
+                              {
+                                "type": "icon",
+                                "prefab": "flint",
+                                "size": 32
+                              },
+                              {
+                                "type": "text",
+                                "text": "Silex (+3)",
+                                "size": 16
+                              },
+                              {
+                                "type": "button",
+                                "text": "Vender",
+                                "callback": "sell:flint",
+                                "width": 90,
+                                "height": 34
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "buy_item",
+          "type": "transform",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{cb.callback}}",
+              "operation": "after",
+              "operand": "buy:"
+            },
+            "alias": "item"
+          }
+        },
+        {
+          "id": "buy_read",
+          "type": "memory",
+          "position": {
+            "x": 860,
+            "y": 0
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{cb.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "buy_norm",
+          "type": "transform",
+          "position": {
+            "x": 1120,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "number"
+            },
+            "alias": "coins"
+          }
+        },
+        {
+          "id": "buy_can",
+          "type": "condition",
+          "position": {
+            "x": 1380,
+            "y": 0
+          },
+          "data": {
+            "field": "{{coins.value}}",
+            "operator": "greater_than",
+            "value": "9"
+          }
+        },
+        {
+          "id": "buy_charge",
+          "type": "transform",
+          "position": {
+            "x": 1640,
+            "y": -60
+          },
+          "data": {
+            "params": {
+              "value": "{{coins.value}}",
+              "operation": "sub",
+              "operand": "10"
+            },
+            "alias": "newbal"
+          }
+        },
+        {
+          "id": "buy_write",
+          "type": "memory",
+          "position": {
+            "x": 1900,
+            "y": -60
+          },
+          "data": {
+            "action": "write",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{cb.userid}}",
+              "value": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "buy_give",
+          "type": "action",
+          "position": {
+            "x": 2160,
+            "y": -60
+          },
+          "data": {
+            "action_type": "give_item",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "prefab": "{{item.value}}",
+              "count": "1"
+            }
+          }
+        },
+        {
+          "id": "buy_set",
+          "type": "action",
+          "position": {
+            "x": 2420,
+            "y": -60
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "buy_broke",
+          "type": "action",
+          "position": {
+            "x": 1640,
+            "y": 120
+          },
+          "data": {
+            "action_type": "ui_notification",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "text": "Moedas insuficientes",
+              "duration": "2"
+            }
+          }
+        },
+        {
+          "id": "sell_item",
+          "type": "transform",
+          "position": {
+            "x": 600,
+            "y": 300
+          },
+          "data": {
+            "params": {
+              "value": "{{cb.callback}}",
+              "operation": "after",
+              "operand": "sell:"
+            },
+            "alias": "item"
+          }
+        },
+        {
+          "id": "sell_remove",
+          "type": "action",
+          "position": {
+            "x": 860,
+            "y": 300
+          },
+          "data": {
+            "action_type": "remove_item",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "prefab": "{{item.value}}",
+              "count": "1",
+              "token": "{{cb.callback}}"
+            }
+          }
+        },
+        {
+          "id": "sell_read",
+          "type": "memory",
+          "position": {
+            "x": 1120,
+            "y": 300
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{cb.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "sell_norm",
+          "type": "transform",
+          "position": {
+            "x": 1380,
+            "y": 300
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "number"
+            },
+            "alias": "coins"
+          }
+        },
+        {
+          "id": "sell_credit",
+          "type": "transform",
+          "position": {
+            "x": 1640,
+            "y": 300
+          },
+          "data": {
+            "params": {
+              "value": "{{coins.value}}",
+              "operation": "add",
+              "operand": "5"
+            },
+            "alias": "newbal"
+          }
+        },
+        {
+          "id": "sell_write",
+          "type": "memory",
+          "position": {
+            "x": 1900,
+            "y": 300
+          },
+          "data": {
+            "action": "write",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{cb.userid}}",
+              "value": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "sell_set",
+          "type": "action",
+          "position": {
+            "x": 2160,
+            "y": 300
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "shop",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_isopen",
+          "source": "trg",
+          "target": "isopen"
+        },
+        {
+          "id": "e_trg_isbuy",
+          "source": "trg",
+          "target": "isbuy"
+        },
+        {
+          "id": "e_trg_issell",
+          "source": "trg",
+          "target": "issell"
+        },
+        {
+          "id": "e_isopen_open_read_true",
+          "source": "isopen",
+          "target": "open_read",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_open_read_open_norm",
+          "source": "open_read",
+          "target": "open_norm"
+        },
+        {
+          "id": "e_open_norm_open_sw",
+          "source": "open_norm",
+          "target": "open_sw"
+        },
+        {
+          "id": "e_open_sw_open_ui_autumn_case_0",
+          "source": "open_sw",
+          "target": "open_ui_autumn",
+          "sourceHandle": "case_0"
+        },
+        {
+          "id": "e_open_sw_open_ui_winter_case_1",
+          "source": "open_sw",
+          "target": "open_ui_winter",
+          "sourceHandle": "case_1"
+        },
+        {
+          "id": "e_open_sw_open_ui_spring_case_2",
+          "source": "open_sw",
+          "target": "open_ui_spring",
+          "sourceHandle": "case_2"
+        },
+        {
+          "id": "e_open_sw_open_ui_summer_case_3",
+          "source": "open_sw",
+          "target": "open_ui_summer",
+          "sourceHandle": "case_3"
+        },
+        {
+          "id": "e_open_sw_open_ui_def_default",
+          "source": "open_sw",
+          "target": "open_ui_def",
+          "sourceHandle": "default"
+        },
+        {
+          "id": "e_isbuy_buy_item_true",
+          "source": "isbuy",
+          "target": "buy_item",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_buy_item_buy_read",
+          "source": "buy_item",
+          "target": "buy_read"
+        },
+        {
+          "id": "e_buy_read_buy_norm",
+          "source": "buy_read",
+          "target": "buy_norm"
+        },
+        {
+          "id": "e_buy_norm_buy_can",
+          "source": "buy_norm",
+          "target": "buy_can"
+        },
+        {
+          "id": "e_buy_can_buy_charge_true",
+          "source": "buy_can",
+          "target": "buy_charge",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_buy_can_buy_broke_false",
+          "source": "buy_can",
+          "target": "buy_broke",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e_buy_charge_buy_write",
+          "source": "buy_charge",
+          "target": "buy_write"
+        },
+        {
+          "id": "e_buy_write_buy_give",
+          "source": "buy_write",
+          "target": "buy_give"
+        },
+        {
+          "id": "e_buy_give_buy_set",
+          "source": "buy_give",
+          "target": "buy_set"
+        },
+        {
+          "id": "e_issell_sell_item_true",
+          "source": "issell",
+          "target": "sell_item",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_sell_item_sell_remove",
+          "source": "sell_item",
+          "target": "sell_remove"
+        },
+        {
+          "id": "e_sell_remove_sell_read",
+          "source": "sell_remove",
+          "target": "sell_read"
+        },
+        {
+          "id": "e_sell_read_sell_norm",
+          "source": "sell_read",
+          "target": "sell_norm"
+        },
+        {
+          "id": "e_sell_norm_sell_credit",
+          "source": "sell_norm",
+          "target": "sell_credit"
+        },
+        {
+          "id": "e_sell_credit_sell_write",
+          "source": "sell_credit",
+          "target": "sell_write"
+        },
+        {
+          "id": "e_sell_write_sell_set",
+          "source": "sell_write",
+          "target": "sell_set"
+        }
+      ]
+    },
+    {
+      "name": "Carteira — abre o painel de saldo quando o player entra",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "player_spawn",
+            "alias": "joined"
+          }
+        },
+        {
+          "id": "read",
+          "type": "memory",
+          "position": {
+            "x": 320,
+            "y": 0
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{joined.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "norm",
+          "type": "transform",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "number"
+            },
+            "alias": "coins"
+          }
+        },
+        {
+          "id": "window",
+          "type": "ui_builder",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "userid": "{{joined.userid}}",
+              "id": "wallet",
+              "anchor": "bottomleft"
+            },
+            "tree": {
+              "type": "panel",
+              "title": "Carteira",
+              "width": 200,
+              "height": 84,
+              "children": [
+                {
+                  "type": "row",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "icon",
+                      "prefab": "goldnugget",
+                      "size": 40
+                    },
+                    {
+                      "type": "text",
+                      "id": "saldo_txt",
+                      "text": "{{coins.value}}",
+                      "size": 30,
+                      "color": [
+                        1,
+                        0.85,
+                        0.2,
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "text": "Abrir Loja",
+                  "callback": "open",
+                  "width": 150,
+                  "height": 36
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_read",
+          "source": "trg",
+          "target": "read"
+        },
+        {
+          "id": "e_read_norm",
+          "source": "read",
+          "target": "norm"
+        },
+        {
+          "id": "e_norm_window",
+          "source": "norm",
+          "target": "window"
+        }
+      ]
+    },
+    {
+      "name": "Carteira — !dar credita +100 e atualiza o painel ao vivo (admin)",
+      "nodes": [
+        {
+          "id": "trg",
+          "type": "trigger",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "event_type": "chat_message",
+            "alias": "chat"
+          }
+        },
+        {
+          "id": "isdar",
+          "type": "condition",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "data": {
+            "field": "{{chat.message}}",
+            "operator": "starts_with",
+            "value": "!dar"
+          }
+        },
+        {
+          "id": "who",
+          "type": "get_player",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "userid": "{{chat.userid}}"
+            },
+            "alias": "player"
+          }
+        },
+        {
+          "id": "isadmin",
+          "type": "condition",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "data": {
+            "field": "{{player.admin}}",
+            "operator": "equals",
+            "value": "true"
+          }
+        },
+        {
+          "id": "read",
+          "type": "memory",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "data": {
+            "action": "read",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{chat.userid}}"
+            },
+            "alias": "bal"
+          }
+        },
+        {
+          "id": "credit",
+          "type": "transform",
+          "position": {
+            "x": 1500,
+            "y": 0
+          },
+          "data": {
+            "params": {
+              "value": "{{bal.value}}",
+              "operation": "add",
+              "operand": "100"
+            },
+            "alias": "newbal"
+          }
+        },
+        {
+          "id": "write",
+          "type": "memory",
+          "position": {
+            "x": 1800,
+            "y": 0
+          },
+          "data": {
+            "action": "write",
+            "params": {
+              "flow": "shop",
+              "key": "coins:{{chat.userid}}",
+              "value": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "update",
+          "type": "action",
+          "position": {
+            "x": 2100,
+            "y": 0
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{chat.userid}}",
+              "id": "wallet",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e_trg_isdar",
+          "source": "trg",
+          "target": "isdar"
+        },
+        {
+          "id": "e_dar_who",
+          "source": "isdar",
+          "target": "who",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_who_admin",
+          "source": "who",
+          "target": "isadmin"
+        },
+        {
+          "id": "e_admin_read",
+          "source": "isadmin",
+          "target": "read",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e_read_credit",
+          "source": "read",
+          "target": "credit"
+        },
+        {
+          "id": "e_credit_write",
+          "source": "credit",
+          "target": "write"
+        },
+        {
+          "id": "e_write_update",
+          "source": "write",
+          "target": "update"
+        }
+      ]
+    }
+  ]
+}
