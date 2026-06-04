@@ -1,0 +1,10 @@
+{
+  "name": "Anti-grief — estrutura queimada → alerta aos admins (sem punição auto)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "structure_burnt", "alias": "fire" } },
+    { "id": "warn", "type": "action", "position": { "x": 320, "y": 0 }, "data": { "action_type": "announce", "params": { "message": "[ALERTA] {{fire.prefab}} pegou fogo. Verifiquem o servidor." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_warn", "source": "trg", "target": "warn" }
+  ]
+}

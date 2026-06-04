@@ -1,0 +1,24 @@
+{
+  "name": "Loja — !comprar lanca gasta 50 moedas e entrega uma lança",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "chat_message", "alias": "chat" } },
+    { "id": "iscmd", "type": "condition", "position": { "x": 300, "y": 0 }, "data": { "field": "{{chat.message}}", "operator": "starts_with", "value": "!comprar lanca" } },
+    { "id": "read", "type": "memory", "position": { "x": 600, "y": 0 }, "data": { "action": "read", "params": { "flow": "shop", "key": "coins:{{chat.userid}}" }, "alias": "bal" } },
+    { "id": "canafford", "type": "condition", "position": { "x": 900, "y": 0 }, "data": { "field": "{{bal.value}}", "operator": "greater_than", "value": "49" } },
+    { "id": "charge", "type": "transform", "position": { "x": 1200, "y": -60 }, "data": { "params": { "value": "{{bal.value}}", "operation": "sub", "operand": "50" }, "alias": "newbal" } },
+    { "id": "write", "type": "memory", "position": { "x": 1500, "y": -60 }, "data": { "action": "write", "params": { "flow": "shop", "key": "coins:{{chat.userid}}", "value": "{{newbal.value}}" } } },
+    { "id": "give", "type": "action", "position": { "x": 1800, "y": -60 }, "data": { "action_type": "give_item", "params": { "userid": "{{chat.userid}}", "prefab": "spear", "count": "1" } } },
+    { "id": "ok", "type": "action", "position": { "x": 2100, "y": -60 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Lança comprada! Saldo: {{newbal.value}}", "duration": "3" } } },
+    { "id": "broke", "type": "action", "position": { "x": 1200, "y": 100 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Moedas insuficientes (precisa de 50). Saldo: {{bal.value}}", "duration": "3" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_iscmd", "source": "trg", "target": "iscmd" },
+    { "id": "e_iscmd_read", "source": "iscmd", "target": "read", "sourceHandle": "true" },
+    { "id": "e_read_can", "source": "read", "target": "canafford" },
+    { "id": "e_can_charge", "source": "canafford", "target": "charge", "sourceHandle": "true" },
+    { "id": "e_can_broke", "source": "canafford", "target": "broke", "sourceHandle": "false" },
+    { "id": "e_charge_write", "source": "charge", "target": "write" },
+    { "id": "e_write_give", "source": "write", "target": "give" },
+    { "id": "e_give_ok", "source": "give", "target": "ok" }
+  ]
+}

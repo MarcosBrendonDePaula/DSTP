@@ -1,0 +1,22 @@
+{
+  "name": "Loja — !moedas dá +100 de saldo ao jogador (admin)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "chat_message", "alias": "chat" } },
+    { "id": "iscmd", "type": "condition", "position": { "x": 300, "y": 0 }, "data": { "field": "{{chat.message}}", "operator": "starts_with", "value": "!moedas" } },
+    { "id": "who", "type": "get_player", "position": { "x": 600, "y": 0 }, "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" } },
+    { "id": "isadmin", "type": "condition", "position": { "x": 900, "y": 0 }, "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" } },
+    { "id": "read", "type": "memory", "position": { "x": 1200, "y": 0 }, "data": { "action": "read", "params": { "flow": "shop", "key": "coins:{{chat.userid}}" }, "alias": "bal" } },
+    { "id": "add", "type": "transform", "position": { "x": 1500, "y": 0 }, "data": { "params": { "value": "{{bal.value}}", "operation": "add", "operand": "100" }, "alias": "newbal" } },
+    { "id": "write", "type": "memory", "position": { "x": 1800, "y": 0 }, "data": { "action": "write", "params": { "flow": "shop", "key": "coins:{{chat.userid}}", "value": "{{newbal.value}}" } } },
+    { "id": "notify", "type": "action", "position": { "x": 2100, "y": 0 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Saldo: {{newbal.value}} moedas", "duration": "3" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_iscmd", "source": "trg", "target": "iscmd" },
+    { "id": "e_iscmd_who", "source": "iscmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_read", "source": "isadmin", "target": "read", "sourceHandle": "true" },
+    { "id": "e_read_add", "source": "read", "target": "add" },
+    { "id": "e_add_write", "source": "add", "target": "write" },
+    { "id": "e_write_notify", "source": "write", "target": "notify" }
+  ]
+}

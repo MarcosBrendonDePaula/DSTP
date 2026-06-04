@@ -1,0 +1,16 @@
+{
+  "name": "Anti-grief — não-admin martelou estrutura → alerta + kick",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "structure_hammered", "alias": "grief" } },
+    { "id": "who", "type": "get_player", "position": { "x": 320, "y": 0 }, "data": { "params": { "userid": "{{grief.userid}}" }, "alias": "player" } },
+    { "id": "notadmin", "type": "condition", "position": { "x": 640, "y": 0 }, "data": { "field": "{{player.admin}}", "operator": "equals", "value": "false" } },
+    { "id": "warn", "type": "action", "position": { "x": 960, "y": -60 }, "data": { "action_type": "announce", "params": { "message": "[ANTI-GRIEF] {{grief.name}} destruiu {{grief.prefab}} e foi removido." } } },
+    { "id": "kick", "type": "action", "position": { "x": 1280, "y": -60 }, "data": { "action_type": "kick", "params": { "userid": "{{grief.userid}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_who", "source": "trg", "target": "who" },
+    { "id": "e_who_notadmin", "source": "who", "target": "notadmin" },
+    { "id": "e_notadmin_warn", "source": "notadmin", "target": "warn", "sourceHandle": "true" },
+    { "id": "e_warn_kick", "source": "warn", "target": "kick" }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Evento — novo dia tem 15% de chance de spawnar um boss aleatório",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "new_day", "alias": "day" } },
+    { "id": "roll", "type": "random", "position": { "x": 320, "y": 0 }, "data": { "params": { "min": "1", "max": "100" }, "alias": "roll" } },
+    { "id": "lucky", "type": "condition", "position": { "x": 640, "y": 0 }, "data": { "field": "{{roll.value}}", "operator": "less_than", "value": "16" } },
+    { "id": "pick", "type": "random", "position": { "x": 960, "y": 0 }, "data": { "params": { "list": "deerclops,bearger,moose,dragonfly" }, "alias": "boss" } },
+    { "id": "spawn", "type": "action", "position": { "x": 1280, "y": -60 }, "data": { "action_type": "spawn_prefab", "params": { "prefab": "{{boss.value}}", "x": "0", "z": "0", "count": "1" } } },
+    { "id": "warn", "type": "action", "position": { "x": 1280, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "Um {{boss.value}} apareceu no mundo! Cuidado." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_roll", "source": "trg", "target": "roll" },
+    { "id": "e_roll_lucky", "source": "roll", "target": "lucky" },
+    { "id": "e_lucky_pick", "source": "lucky", "target": "pick", "sourceHandle": "true" },
+    { "id": "e_pick_spawn", "source": "pick", "target": "spawn" },
+    { "id": "e_pick_warn", "source": "pick", "target": "warn" }
+  ]
+}

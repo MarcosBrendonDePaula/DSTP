@@ -30,6 +30,9 @@ Uso no chat: `!comando` liga, `!comando off` desliga. (O chat do DST troca `/` p
 | `ghost-notarget` | `!ghost` | `notarget` | Mobs te ignoram | `combat.lua:253` |
 | `god-invincible` | `!god` | `invincible` | Invencível + imune à escuridão | `health.lua:54` |
 | `worker-toughworker` | `!worker` | `toughworker` | Trabalha sem ferramenta | `workable.lua:200` |
+| `fireimmune` | `!fireimmune` | `fireimmune` | Não pega fogo | `burnable.lua:252` |
+| `spiderfriend` | `!spider` | `spiderwhisperer` | Aranhas não te atacam | spider AI |
+| `nightvision` | `!nightvision` | `nightvision` | Enxerga no escuro | grue/vision |
 
 ## Sem tag (call_component)
 
@@ -41,5 +44,6 @@ Velocidade não é uma tag — é o componente `locomotor`. O `turbo-speed` usa 
 | Fluxo | Comando | Componente | Método |
 |-------|---------|------------|--------|
 | `turbo-speed` | `!turbo` | `locomotor` | `SetExternalSpeedMultiplier` (2x) |
+| `builder-allrecipes` | `!builder` | `builder` | `GiveAllRecipes` (sem off) |
 
 Requer o mod DSTP **v0.5.0+** (comandos `add_tag`/`remove_tag`/`call_component`).

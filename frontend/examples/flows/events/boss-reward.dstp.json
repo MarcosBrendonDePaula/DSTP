@@ -1,0 +1,16 @@
+{
+  "name": "Evento — quem matar um boss ganha uma recompensa",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "boss_killed", "alias": "boss" } },
+    { "id": "killer", "type": "find_player", "position": { "x": 320, "y": 0 }, "data": { "params": { "name": "{{boss.cause}}" }, "alias": "killer" } },
+    { "id": "found", "type": "condition", "position": { "x": 640, "y": 0 }, "data": { "field": "{{killer.userid}}", "operator": "exists", "value": "" } },
+    { "id": "reward", "type": "action", "position": { "x": 960, "y": -60 }, "data": { "action_type": "give_item", "params": { "userid": "{{killer.userid}}", "prefab": "purpleamulet", "count": "1" } } },
+    { "id": "announce", "type": "action", "position": { "x": 960, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "{{killer.name}} derrotou {{boss.prefab}} e ganhou um prêmio!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_killer", "source": "trg", "target": "killer" },
+    { "id": "e_killer_found", "source": "killer", "target": "found" },
+    { "id": "e_found_reward", "source": "found", "target": "reward", "sourceHandle": "true" },
+    { "id": "e_found_announce", "source": "found", "target": "announce", "sourceHandle": "true" }
+  ]
+}
