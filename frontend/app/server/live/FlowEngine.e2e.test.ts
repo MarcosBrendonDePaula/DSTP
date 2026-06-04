@@ -74,6 +74,7 @@ afterAll(() => {
 let engine: FlowEngine
 let commands: Cmd[]
 let groups: any[]
+let states: Record<string, any>[]
 
 beforeEach(() => {
   // Wipe any flows left by prior tests — evaluateEvent runs ALL enabled flows
@@ -85,7 +86,17 @@ beforeEach(() => {
   engine = new FlowEngine(h.host)
   commands = h.commands
   groups = h.groups
+  states = h.states
 })
+
+// Latest capture:<server> delta emitted (the accumulated trace for the flow).
+function latestCapture(): any {
+  for (let i = states.length - 1; i >= 0; i--) {
+    const d = states[i][`capture:${SERVER}`]
+    if (d) return d
+  }
+  return null
+}
 
 // Register one server group with the given players (for get_player/find_player).
 function setPlayers(players: any[]) {
@@ -442,5 +453,51 @@ describe('FlowEngine e2e — wait / merge (stateful)', () => {
     engine.evaluateEvent(SERVER, { type: 'player_spawn', data: { userid: 'KU_1' } })
     await new Promise(r => setTimeout(r, 30))
     expect(commands.filter(c => c.type === 'announce')).toHaveLength(1)
+  })
+})
+
+describe('FlowEngine e2e — capture with multiple triggers', () => {
+  // A flow with two entry points (chat_message + ui_callback). Each fires its own
+  // execution; capture must accumulate BOTH runs' traces, not stop after the first.
+  function buildMultiTriggerFlow() {
+    const nodes = [
+      trigger('t_chat', 'chat_message'),
+      action('a_chat', 'announce', { message: 'from chat' }),
+      trigger('t_cb', 'ui_callback'),
+      action('a_cb', 'announce', { message: 'from callback' }),
+    ]
+    const edges = [edge('t_chat', 'a_chat'), edge('t_cb', 'a_cb')]
+    return { nodes, edges }
+  }
+
+  it('accumulates traces from both triggers instead of stopping after the first', async () => {
+    const fid = uid()
+    const { nodes, edges } = buildMultiTriggerFlow()
+    new FlowRepository(SERVER).save({ id: fid, name: fid, enabled: true, nodes, edges })
+
+    engine.startCapture(SERVER)
+
+    // First entry point.
+    engine.evaluateEvent(SERVER, { type: 'chat_message', data: { userid: 'KU_1', message: 'hi' } })
+    await new Promise(r => setTimeout(r, 30))
+    let cap = latestCapture()
+    expect(cap.active).toBe(true) // capture stays ON after the first execution
+    let nodeIds = (cap.trace || []).map((e: any) => e.nodeId)
+    expect(nodeIds).toContain('t_chat')
+    expect(nodeIds).toContain('a_chat')
+
+    // Second entry point — same flow, different trigger.
+    engine.evaluateEvent(SERVER, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'x' } })
+    await new Promise(r => setTimeout(r, 30))
+    cap = latestCapture()
+    nodeIds = (cap.trace || []).map((e: any) => e.nodeId)
+
+    // The accumulated trace now covers BOTH entry points.
+    expect(nodeIds).toContain('t_chat')
+    expect(nodeIds).toContain('a_chat')
+    expect(nodeIds).toContain('t_cb')
+    expect(nodeIds).toContain('a_cb')
+
+    engine.stopCapture(SERVER)
   })
 })

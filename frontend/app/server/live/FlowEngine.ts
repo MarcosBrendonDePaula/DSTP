@@ -85,6 +85,13 @@ export class FlowEngine {
   // Trace buffers are per-execution (on each context), not engine-wide — see
   // captureBufferFor. The engine keeps only the on/off gate + auto-stop timer.
   private _captureTimeout: ReturnType<typeof setTimeout> | null = null
+  // Accumulated traces per flow while capture is on. A flow with multiple triggers
+  // (e.g. chat_message + ui_callback) runs once per trigger; we merge those runs so
+  // the editor shows every entry point, not just the first. Capture stays ON until
+  // auto-stop/stopCapture — it does NOT end after the first execution. Keyed by
+  // flowId; reset on startCapture.
+  private _captureTraces: Map<string, any[]> = new Map()
+  private _captureContexts: Map<string, any> = new Map()
 
   // Shared storage between flows — Script nodes can read/write via context.store
   private _flowStorage: Record<string, Record<string, any>> = {}
@@ -170,6 +177,8 @@ export class FlowEngine {
 
   startCapture(serverId: string) {
     this._captureServerId = serverId
+    this._captureTraces.clear()
+    this._captureContexts.clear()
     // Auto-stop after 5 minutes to prevent unbounded memory growth
     if (this._captureTimeout) clearTimeout(this._captureTimeout)
     this._captureTimeout = setTimeout(() => this.stopCapture(serverId), 5 * 60 * 1000)
@@ -182,6 +191,8 @@ export class FlowEngine {
       this._captureTimeout = null
     }
     this._captureServerId = null
+    this._captureTraces.clear()
+    this._captureContexts.clear()
     this.host.emitState({ [`capture:${serverId}`]: null } as any)
   }
 
@@ -567,17 +578,31 @@ export class FlowEngine {
       console.error(`[DSTP Automation] Flow "${flow.name}" error:`, maskSecrets(String((err as any)?.message ?? err), context))
     }
 
-    // If capturing, emit THIS execution's own trace (from its context buffer) and
-    // stop capture. Already masked at push time; mask the context snapshot too.
+    // If capturing, MERGE this execution's trace into the flow's accumulated trace
+    // and emit it — but keep capture ON. A multi-trigger flow runs once per entry
+    // point (chat_message, then ui_callback, ...); accumulating means the editor
+    // shows all of them instead of only the first run. Capture ends on auto-stop
+    // or stopCapture, never on a single execution finishing. Already masked at push
+    // time; mask the context snapshot too. Per-node entries are de-duplicated by
+    // nodeId (a re-run of the same node updates its entry) so repeated triggers of
+    // the same path don't pile up duplicates.
     if (this._captureServerId === serverId) {
       const trace = (context as any)[CAPTURE_BUFFER_KEY] ?? []
+      const merged = new Map<string, any>(
+        (this._captureTraces.get(flow.id) ?? []).map(e => [e.nodeId, e]),
+      )
+      for (const entry of trace) merged.set(entry.nodeId, entry)
+      const mergedTrace = [...merged.values()]
+      this._captureTraces.set(flow.id, mergedTrace)
+      // Keep the latest context per flow (newest run wins for {{...}} preview).
+      this._captureContexts.set(flow.id, context)
+
       this.host.emitState({ [`capture:${serverId}`]: {
-        active: false,
+        active: true,
         flowId: flow.id,
-        trace: maskSecrets(trace, context),
+        trace: maskSecrets(mergedTrace, context),
         context: maskSecrets(context, context),
       }} as any)
-      this._captureServerId = null
     }
 
     // Always log and update stats
