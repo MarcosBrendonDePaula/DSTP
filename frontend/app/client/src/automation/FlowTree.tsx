@@ -13,7 +13,7 @@ export type FlowLike = { id: string; name: string; folderPath?: string; folder_p
 
 export type FolderLike = { path: string; sortOrder?: number; sort_order?: number }
 
-type TreeNode = {
+export type TreeNode = {
   name: string          // folder segment ("" for the synthetic root)
   path: string          // full folder path to here
   order: number         // sortOrder among siblings
@@ -21,8 +21,8 @@ type TreeNode = {
   flows: FlowLike[]
 }
 
-const folderOf = (f: FlowLike) => (f.folderPath ?? f.folder_path ?? '') as string
-const orderOf = (f: FlowLike) => (f.sortOrder ?? f.sort_order ?? 0) as number
+export const folderOf = (f: FlowLike) => (f.folderPath ?? f.folder_path ?? '') as string
+export const orderOf = (f: FlowLike) => (f.sortOrder ?? f.sort_order ?? 0) as number
 
 // Ensure a folder path (and ancestors) exists in the tree, returning the leaf node.
 function ensurePath(root: TreeNode, path: string): TreeNode {
@@ -35,7 +35,7 @@ function ensurePath(root: TreeNode, path: string): TreeNode {
   return node
 }
 
-function buildTree(flows: FlowLike[], registeredFolders: FolderLike[]): TreeNode {
+export function buildTree(flows: FlowLike[], registeredFolders: FolderLike[]): TreeNode {
   const root: TreeNode = { name: '', path: '', order: 0, folders: new Map(), flows: [] }
   // Registered (possibly empty) folders first, so they show even with no flows.
   for (const rf of registeredFolders) {

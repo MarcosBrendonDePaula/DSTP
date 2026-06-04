@@ -7,7 +7,7 @@ import { FlowEditor } from './FlowEditor'
 import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
-import { FlowTree } from './FlowTree'
+import { FlowExplorer } from './FlowExplorer'
 import { PromptModal, ConfirmModal } from './FlowModal'
 
 export function AutomationPage() {
@@ -497,7 +497,7 @@ export function AutomationPage() {
                   title="Criar uma pasta (pode ficar vazia)"
                 >📁 Nova pasta</button>
               </div>
-              <FlowTree
+              <FlowExplorer
                 flows={flows}
                 folders={folders}
                 search={flowSearch}
