@@ -279,6 +279,7 @@ export class FlowEngine {
       evaluateCondition: () => this.evaluateCondition(node, context),
       followOutEdges,
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
+      log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
       runFlowAction: () => this.runFlowAction(serverId, node, context),
       executeHttpRequest: () => this.executeHttpRequest(node, context),
       executeSetVariable: () => this.executeSetVariable(node, context),

@@ -32,6 +32,14 @@ import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch
 import { ui as switchUi } from '@shared/automation/nodes/logic/branch/switch/ui'
 import { meta as foreachMeta } from '@shared/automation/nodes/logic/loop/foreach/meta'
 import { ui as foreachUi } from '@shared/automation/nodes/logic/loop/foreach/ui'
+import { meta as filterMeta } from '@shared/automation/nodes/logic/branch/filter/meta'
+import { ui as filterUi } from '@shared/automation/nodes/logic/branch/filter/ui'
+import { meta as logMeta } from '@shared/automation/nodes/data/debug/log/meta'
+import { ui as logUi } from '@shared/automation/nodes/data/debug/log/ui'
+import { meta as randomMeta } from '@shared/automation/nodes/data/random/random/meta'
+import { ui as randomUi } from '@shared/automation/nodes/data/random/random/ui'
+import { meta as transformMeta } from '@shared/automation/nodes/data/transform/transform/meta'
+import { ui as transformUi } from '@shared/automation/nodes/data/transform/transform/ui'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -85,6 +93,10 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: conditionMeta, ui: conditionUi },
   { meta: switchMeta, ui: switchUi },
   { meta: foreachMeta, ui: foreachUi },
+  { meta: filterMeta, ui: filterUi },
+  { meta: logMeta, ui: logUi },
+  { meta: randomMeta, ui: randomUi },
+  { meta: transformMeta, ui: transformUi },
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },

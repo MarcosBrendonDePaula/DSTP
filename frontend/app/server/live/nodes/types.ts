@@ -54,6 +54,8 @@ export interface NodeRunContext {
 
   // ── Side-effects / heavy helpers (stay in the engine, injected here) ──
   pushCommand: (type: string, data: any) => void
+  /** Write a debug line to the server log, with secrets masked. */
+  log: (message: string) => void
   runFlowAction: () => void
   executeHttpRequest: () => Promise<any>
   executeSetVariable: () => any

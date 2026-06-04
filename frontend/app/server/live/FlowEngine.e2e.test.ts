@@ -591,3 +591,69 @@ describe('FlowEngine e2e — foreach', () => {
     expect(commands.map(c => c.data.message)).toEqual(['i=0', 'i=1'])
   })
 })
+
+describe('FlowEngine e2e — basic primitives', () => {
+  const node = (id: string, type: string, params: any, extra: any = {}): FlowNode =>
+    ({ id, type, data: { params, ...extra }, position: { x: 0, y: 0 } } as any)
+
+  it('filter continues when the condition passes', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      { id: 'f', type: 'filter', data: { field: '{{trigger.admin}}', operator: 'equals', value: 'true' }, position: { x: 0, y: 0 } } as any,
+      action('a', 'announce', { message: 'allowed' }),
+    ]
+    await run(nodes, [edge('t', 'f'), edge('f', 'a')], { type: 'chat_message', data: { admin: true } })
+    expect(commands.map(c => c.data.message)).toEqual(['allowed'])
+  })
+
+  it('filter stops the flow when the condition fails', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      { id: 'f', type: 'filter', data: { field: '{{trigger.admin}}', operator: 'equals', value: 'true' }, position: { x: 0, y: 0 } } as any,
+      action('a', 'announce', { message: 'allowed' }),
+    ]
+    await run(nodes, [edge('t', 'f'), edge('f', 'a')], { type: 'chat_message', data: { admin: false } })
+    expect(commands).toHaveLength(0)
+  })
+
+  it('transform uppercases and continues', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('x', 'transform', { value: '{{trigger.name}}', operation: 'uppercase' }),
+      action('a', 'announce', { message: '{{x.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'x'), edge('x', 'a')], { type: 'chat_message', data: { name: 'wilson' } })
+    expect(commands[0].data.message).toBe('WILSON')
+  })
+
+  it('transform does math (add)', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('x', 'transform', { value: '{{trigger.n}}', operation: 'add', operand: '5' }),
+      action('a', 'announce', { message: '{{x.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'x'), edge('x', 'a')], { type: 'chat_message', data: { n: 10 } })
+    // {{x.value}} alone returns the raw typed value (number 15), not a string.
+    expect(commands[0].data.message).toBe(15)
+  })
+
+  it('random picks an item from the list', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('r', 'random', { list: 'a,b,c' }),
+      action('a', 'announce', { message: '{{r.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'r'), edge('r', 'a')], { type: 'chat_message', data: {} })
+    expect(['a', 'b', 'c']).toContain(commands[0].data.message)
+  })
+
+  it('log writes its message to output and continues', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('l', 'log', { message: 'hello {{trigger.userid}}' }),
+      action('a', 'announce', { message: '{{l.message}}' }),
+    ]
+    await run(nodes, [edge('t', 'l'), edge('l', 'a')], { type: 'chat_message', data: { userid: 'KU_1' } })
+    expect(commands[0].data.message).toBe('hello KU_1')
+  })
+})
