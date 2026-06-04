@@ -33,6 +33,8 @@ import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action
 import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
 import { handler as uiPanelHandler } from '@shared/automation/nodes/ui/builder/ui_panel/exec'
+import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
+import { handler as aiAgentHandler } from '@shared/automation/nodes/ai/agent/ai_agent/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -52,6 +54,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: conditionMeta, handler: conditionHandler },
   { meta: actionMeta, handler: actionHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
+  { meta: aiAgentMeta, handler: aiAgentHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))

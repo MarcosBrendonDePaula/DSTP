@@ -32,6 +32,8 @@ import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
 import { ui as uiPanelUi } from '@shared/automation/nodes/ui/builder/ui_panel/ui'
+import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
+import { ui as aiAgentUi } from '@shared/automation/nodes/ai/agent/ai_agent/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -51,6 +53,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: conditionMeta, ui: conditionUi },
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
+  { meta: aiAgentMeta, ui: aiAgentUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
