@@ -1,0 +1,12 @@
+{
+  "name": "Inventário — avisa que a mochila está cheia e um item caiu",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "inventory_full", "alias": "ev" } },
+    { "id": "pm", "type": "action", "position": { "x": 320, "y": -60 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Seu inventario esta cheio! O item {{ev.item}} caiu no chao. Guarde itens em um bau para liberar espaco." } } },
+    { "id": "toast", "type": "action", "position": { "x": 320, "y": 80 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "Inventario cheio - {{ev.item}} caiu no chao" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_pm", "source": "trg", "target": "pm" },
+    { "id": "e_trg_toast", "source": "trg", "target": "toast" }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Combate — bloqueou um golpaço? elogia e conta a tankiness 🛡️",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_block", "alias": "blk" } },
+    { "id": "big", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{blk.original_damage}}", "operator": "greater_than", "value": "40" } },
+    { "id": "read", "type": "memory", "position": { "x": 640, "y": -40 }, "data": { "action": "read", "params": { "key": "blocked_dmg:{{blk.userid}}" }, "alias": "prev" } },
+    { "id": "sum", "type": "transform", "position": { "x": 960, "y": -40 }, "data": { "params": { "value": "{{prev.value}}", "operation": "add", "operand": "{{blk.original_damage}}" }, "alias": "total" } },
+    { "id": "save", "type": "memory", "position": { "x": 1280, "y": -40 }, "data": { "action": "write", "params": { "key": "blocked_dmg:{{blk.userid}}", "value": "{{total.value}}" } } },
+    { "id": "praise", "type": "action", "position": { "x": 1600, "y": -180 }, "data": { "action_type": "private_message", "params": { "userid": "{{blk.userid}}", "message": "Tank! Voce aparou {{blk.original_damage}} de dano de um {{blk.attacker}} (so {{blk.damage}} passou). Total ja bloqueado: {{total.value}}." } } },
+    { "id": "wall", "type": "condition", "position": { "x": 1600, "y": 40 }, "data": { "field": "{{total.value}}", "operator": "greater_than", "value": "1000" } },
+    { "id": "hail", "type": "action", "position": { "x": 1920, "y": 40 }, "data": { "action_type": "announce", "params": { "message": "{{blk.name}} ja aparou mais de 1000 de dano com escudo. A muralha viva do servidor!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_big", "source": "trg", "target": "big" },
+    { "id": "e_big_read", "source": "big", "target": "read", "sourceHandle": "true" },
+    { "id": "e_read_sum", "source": "read", "target": "sum" },
+    { "id": "e_sum_save", "source": "sum", "target": "save" },
+    { "id": "e_save_praise", "source": "save", "target": "praise" },
+    { "id": "e_save_wall", "source": "save", "target": "wall" },
+    { "id": "e_wall_hail", "source": "wall", "target": "hail", "sourceHandle": "true" }
+  ]
+}

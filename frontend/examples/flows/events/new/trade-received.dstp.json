@@ -1,0 +1,16 @@
+{
+  "name": "Inventário — registrar troca: jogador deu item a um NPC (pigking etc.)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "trade_received", "alias": "trade" } },
+    { "id": "log", "type": "log", "position": { "x": 320, "y": 0 }, "data": { "params": { "message": "Troca: {{trade.name}} entregou {{trade.item}} para {{trade.receiver}}" } } },
+    { "id": "is_pigking", "type": "condition", "position": { "x": 640, "y": 0 }, "data": { "field": "{{trade.receiver}}", "operator": "equals", "value": "pigking" } },
+    { "id": "thanks", "type": "action", "position": { "x": 960, "y": -60 }, "data": { "action_type": "private_message", "params": { "userid": "{{trade.userid}}", "message": "O Rei Porco agradece pela sua oferenda de {{trade.item}}!" } } },
+    { "id": "announce", "type": "action", "position": { "x": 960, "y": 80 }, "data": { "action_type": "announce", "params": { "message": "{{trade.name}} fez uma oferenda ao Rei Porco." } } }
+  ],
+  "edges": [
+    { "id": "e_trg_log", "source": "trg", "target": "log" },
+    { "id": "e_log_is_pigking", "source": "log", "target": "is_pigking" },
+    { "id": "e_is_pigking_thanks", "source": "is_pigking", "target": "thanks", "sourceHandle": "true" },
+    { "id": "e_is_pigking_announce", "source": "is_pigking", "target": "announce", "sourceHandle": "true" }
+  ]
+}

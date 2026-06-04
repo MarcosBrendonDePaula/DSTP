@@ -1,0 +1,22 @@
+{
+  "name": "Boas-vindas — primeiro spawn de um personagem novo (kit inicial)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_new_character", "alias": "novo" } },
+    { "id": "anuncio", "type": "action", "position": { "x": 320, "y": -160 }, "data": { "action_type": "announce", "params": { "message": "Bem-vindo(a) ao servidor, {{novo.name}}! Diga ola para o novo {{novo.prefab}}." } } },
+    { "id": "boasvindas", "type": "action", "position": { "x": 320, "y": 0 }, "data": { "action_type": "private_message", "params": { "userid": "{{novo.userid}}", "message": "Ola {{novo.name}}! Voce e novo por aqui. Pegamos um kit inicial pra te ajudar nos primeiros dias. Boa sorte!" } } },
+    { "id": "toast", "type": "action", "position": { "x": 320, "y": 140 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{novo.userid}}", "text": "Kit inicial entregue na sua mochila." } } },
+    { "id": "tocha", "type": "action", "position": { "x": 640, "y": 60 }, "data": { "action_type": "give_item", "params": { "userid": "{{novo.userid}}", "prefab": "torch", "count": "1" } } },
+    { "id": "comida", "type": "action", "position": { "x": 640, "y": 180 }, "data": { "action_type": "give_item", "params": { "userid": "{{novo.userid}}", "prefab": "cookedmeat", "count": "3" } } },
+    { "id": "ehfixed", "type": "condition", "position": { "x": 640, "y": -100 }, "data": { "field": "{{novo.mode}}", "operator": "equals", "value": "Fixed" } },
+    { "id": "extra", "type": "action", "position": { "x": 960, "y": -100 }, "data": { "action_type": "give_item", "params": { "userid": "{{novo.userid}}", "prefab": "armorwood", "count": "1" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_anuncio", "source": "trg", "target": "anuncio" },
+    { "id": "e_trg_boasvindas", "source": "trg", "target": "boasvindas" },
+    { "id": "e_trg_toast", "source": "trg", "target": "toast" },
+    { "id": "e_boas_tocha", "source": "boasvindas", "target": "tocha" },
+    { "id": "e_boas_comida", "source": "boasvindas", "target": "comida" },
+    { "id": "e_trg_ehfixed", "source": "trg", "target": "ehfixed" },
+    { "id": "e_fixed_extra", "source": "ehfixed", "target": "extra", "sourceHandle": "true" }
+  ]
+}

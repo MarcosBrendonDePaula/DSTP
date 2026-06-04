@@ -1,0 +1,14 @@
+{
+  "name": "Evento — jogador ressuscitou: anuncia e dá um empurrãozinho de cura",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_resurrected", "alias": "rez" } },
+    { "id": "announce", "type": "action", "position": { "x": 320, "y": 0 }, "data": { "action_type": "announce", "params": { "message": "{{rez.name}} voltou a vida! Bem-vindo de volta." } } },
+    { "id": "heal", "type": "action", "position": { "x": 640, "y": 0 }, "data": { "action_type": "heal", "params": { "userid": "{{rez.userid}}" } } },
+    { "id": "welcome", "type": "action", "position": { "x": 960, "y": 0 }, "data": { "action_type": "private_message", "params": { "userid": "{{rez.userid}}", "message": "Voce ressuscitou e recebeu uma cura. Cuidado por ai!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_announce", "source": "trg", "target": "announce" },
+    { "id": "e_announce_heal", "source": "announce", "target": "heal" },
+    { "id": "e_heal_welcome", "source": "heal", "target": "welcome" }
+  ]
+}

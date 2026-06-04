@@ -1,0 +1,17 @@
+{
+  "name": "Combate — avisar o player quando um mob mira nele",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_combat_target", "alias": "ev" } },
+    { "id": "switched", "type": "condition", "position": { "x": 320, "y": 0 }, "data": { "field": "{{ev.switched_from}}", "operator": "exists", "value": "" } },
+    { "id": "pm_switched", "type": "action", "position": { "x": 640, "y": -120 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Cuidado! {{ev.aggressor}} largou outro alvo e agora veio pra cima de voce." } } },
+    { "id": "pm_fresh", "type": "action", "position": { "x": 640, "y": 120 }, "data": { "action_type": "private_message", "params": { "userid": "{{ev.userid}}", "message": "Cuidado! {{ev.aggressor}} acabou de te marcar como alvo." } } },
+    { "id": "toast", "type": "action", "position": { "x": 960, "y": 0 }, "data": { "action_type": "ui_notification", "params": { "userid": "{{ev.userid}}", "text": "Voce esta sob ataque de {{ev.aggressor}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_switched", "source": "trg", "target": "switched" },
+    { "id": "e_switched_pm_switched", "source": "switched", "target": "pm_switched", "sourceHandle": "true" },
+    { "id": "e_switched_pm_fresh", "source": "switched", "target": "pm_fresh", "sourceHandle": "false" },
+    { "id": "e_pm_switched_toast", "source": "pm_switched", "target": "toast" },
+    { "id": "e_pm_fresh_toast", "source": "pm_fresh", "target": "toast" }
+  ]
+}
