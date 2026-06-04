@@ -3,10 +3,62 @@
 Loja com saldo virtual de moedas guardado no node `memory` (namespace `shop`,
 chave `coins:<userid>`). Os dois fluxos **compartilham** esse namespace.
 
-| Fluxo | Comando | Efeito |
+| Fluxo | Gatilho | Efeito |
 |-------|---------|--------|
-| `shop-give-coins` | `!moedas` (admin) | Soma +100 ao saldo do jogador |
-| `shop-buy-spear` | `!comprar lanca` | Gasta 50 do saldo e entrega uma `spear` |
+| **`shop-full`** | `ui_callback` | **Loja completa num fluxo:** carteira + abas Comprar/Vender + itens que mudam por estação. Abre com o botão "Abrir Loja" da carteira. |
+| `wallet-open` | `player_spawn` | Abre a carteira (ícone de ouro + saldo + botão "Abrir Loja") no canto |
+| `wallet-give` | `!dar` (admin) | Credita +100 e atualiza a carteira ao vivo |
+| `shop-give-coins` | `!moedas` (admin) | Soma +100 ao saldo (versão simples por chat) |
+| `shop-buy-spear` | `!comprar lanca` | Gasta 50 e entrega uma `spear` (versão simples por chat) |
+
+## Importar tudo de uma vez
+
+**`loja-completa.bundle.json`** — um único arquivo que instala os 3 fluxos da loja
+de uma vez (`shop-full` + `wallet-open` + `wallet-give`). O importador reconhece o
+formato `{ "flows": [...] }` e cria cada um como fluxo novo (vêm **desabilitados** —
+ligue-os depois de importar). Use o botão "↑ Importar" e escolha esse arquivo.
+
+> Por que são 3 fluxos e não 1? Cada fluxo tem **um** trigger, e a loja reage a
+> eventos diferentes: abrir a carteira = `player_spawn`, usar a loja = `ui_callback`,
+> dar moeda = `chat_message`. A lógica da loja toda vive num fluxo (`shop-full`); os
+> outros dois só fazem o "liga" (abrir + abastecer). O bundle junta tudo num arquivo.
+
+## Loja completa (`shop-full`)
+
+Um único fluxo, trigger **`ui_callback`**, roteado pelo `callback` do botão clicado:
+
+- **`open`** → lê o saldo → `switch {{cb.season}}` escolhe o catálogo da estação →
+  `ui_builder` monta o painel **Loja** com a carteira no topo e **abas**
+  Comprar/Vender. A aba Comprar **muda os itens conforme a estação**
+  (outono/inverno/primavera/verão); a aba Vender é fixa.
+- **`buy:<prefab>`** → `transform after ":"` extrai o prefab do callback → checa
+  saldo → debita (preço fixo 10) → `give_item` → `ui_set` atualiza o saldo ao vivo.
+- **`sell:<prefab>`** → extrai o prefab → `remove_item` (token `sell`). **Não
+  credita aqui** — só PEDE a remoção. O crédito acontece no `shop-sell-confirm`.
+
+### Venda é atômica (não dá pra vender o que não tem)
+
+O `remove_item` é **assíncrono**: o mod remove **só se o player tiver o item** e
+responde com um evento `item_removed { success, token }`. Por isso a venda é em
+**dois fluxos**:
+
+1. `shop-full` (`sell:<prefab>`) → manda `remove_item` com `token: "sell"` e para.
+2. **`shop-sell-confirm`** (trigger `item_removed`) → checa `token == sell` e
+   `success == true` → só então credita +5 e atualiza a carteira/loja (`ui_set`).
+
+Se o player não tem o item, `success` é `false` → **nada é creditado**. (Creditar
+no `shop-full` direto, sem esperar a confirmação, era um bug: pagava por item
+inexistente.)
+
+O botão **"Abrir Loja"** (callback `open`) vem da carteira (`wallet-open`), que abre
+no `player_spawn`. Então: entra → vê a carteira → clica → loja abre. Toda a lógica
+de comprar/vender/sazonal vive no `shop-full`; só a abertura mora na carteira
+(um fluxo = um trigger, e abrir + clicar são gatilhos distintos).
+
+> O `transform` ganhou as operações **`after` / `before` / `replace`** para extrair
+> o prefab do callback (`buy:spear` → `spear`) — o engine não tem split de string.
+
+Requer o mod **v0.6.0+** (UI tree, tabs, botões com callback).
 
 ## Como funciona
 

@@ -12,7 +12,7 @@
 //
 // Run under `bun test` (bun:sqlite + bun:test).
 import { describe, it, expect, beforeEach, afterAll } from 'bun:test'
-import { rmSync } from 'node:fs'
+import { rmSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FlowEngine, type EngineHost } from './FlowEngine'
 import { FlowRepository, type FlowNode, type FlowEdge } from '../db'
@@ -747,5 +747,128 @@ describe('FlowEngine e2e — call_component + tags', () => {
     nodes = [trigger('t', 'player_spawn'), psNode('p', { userid: '{{trigger.userid}}', attribute: 'tag', mode: 'off', value: 'fastpicker' })]
     await run(nodes, [edge('t', 'p')], { type: 'player_spawn', data: { userid: 'KU_1' } })
     expect(commands[0]).toMatchObject({ type: 'remove_tag', data: { userid: 'KU_1', tag: 'fastpicker' } })
+  })
+})
+
+describe('FlowEngine e2e — wallet (live money HUD)', () => {
+  const exDir = join(import.meta.dir, '../../../examples/flows/shop')
+  const openFlow = JSON.parse(readFileSync(join(exDir, 'wallet-open.dstp.json'), 'utf8'))
+  const giveFlow = JSON.parse(readFileSync(join(exDir, 'wallet-give.dstp.json'), 'utf8'))
+
+  it('player_spawn builds the wallet panel (ui_command tree) with an addressable saldo_txt', async () => {
+    await run(openFlow.nodes, openFlow.edges, { type: 'player_spawn', data: { userid: 'KU_5ZOnLvnc' } })
+    const ui = commands.find(c => c.type === 'ui_command')
+    expect(ui).toBeDefined()
+    expect(ui!.data.userid).toBe('KU_5ZOnLvnc')
+    expect(ui!.data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'wallet' })
+    // the addressable balance text is nested under the row
+    const row = ui!.data.cmd.tree.children.find((c: any) => c.type === 'row')
+    const txt = row.children.find((c: any) => c.id === 'saldo_txt')
+    expect(txt).toBeDefined()
+    // empty balance is normalized to 0 by the transform — NOT the literal
+    // "{{coins.value}}" template (resolveValue leaves null-leaf templates as-is).
+    expect(txt.text).toBe(0)
+    expect(String(txt.text)).not.toContain('{{')
+  })
+
+  it('!dar (admin) credits +100 and patches saldo_txt via ui_set', async () => {
+    setPlayers([{ userid: 'KU_5ZOnLvnc', name: 'MarcosBn', admin: true }])
+    await run(giveFlow.nodes, giveFlow.edges, { type: 'chat_message', data: { userid: 'KU_5ZOnLvnc', message: '!dar' } })
+    const sets = commands.filter(c => c.type === 'ui_command' && c.data.cmd.action === 'set')
+    // patches BOTH the wallet HUD and the shop panel so neither goes stale
+    expect(sets.map(c => c.data.cmd.id).sort()).toEqual(['shop', 'wallet'])
+    expect(String(sets[0].data.cmd.props.text)).toContain('100')
+  })
+})
+
+describe('FlowEngine e2e — shop-full (one-flow shop)', () => {
+  const shop = JSON.parse(readFileSync(join(import.meta.dir, '../../../examples/flows/shop/shop-full.dstp.json'), 'utf8'))
+
+  it('open in winter builds the shop tree with the winter buy tab', async () => {
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'open', season: 'winter' } })
+    const ui = commands.find(c => c.type === 'ui_command')
+    expect(ui).toBeDefined()
+    expect(ui!.data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'shop' })
+    const json = JSON.stringify(ui!.data.cmd.tree)
+    expect(json).toContain('Inverno')         // panel title for winter
+    expect(json).toContain('buy:heatrock')    // a winter-only item callback
+    expect(json).toContain('sell:log')        // sell tab present
+  })
+
+  it('buy:spear (with funds) debits and gives the item; extracts prefab from callback', async () => {
+    // seed a balance so the buy passes the funds check
+    new (require('../db').FlowMemoryRepository)(SERVER).set('shop', 'coins:KU_1', 50)
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'buy:spear', season: 'autumn' } })
+    const give = commands.find(c => c.type === 'give_item')
+    expect(give).toBeDefined()
+    expect(give!.data).toMatchObject({ userid: 'KU_1', prefab: 'spear' })
+    // balance patched in BOTH the shop panel AND the wallet HUD
+    const setIds = commands.filter(c => c.type === 'ui_command' && c.data.cmd.action === 'set').map(c => c.data.cmd.id).sort()
+    expect(setIds).toEqual(['shop', 'wallet'])
+  })
+
+  it('sell:log only REQUESTS removal (token sell) — does NOT credit yet', async () => {
+    await run(shop.nodes, shop.edges, { type: 'ui_callback', data: { userid: 'KU_1', callback: 'sell:log', season: 'autumn' } })
+    const rm = commands.find(c => c.type === 'remove_item')
+    expect(rm).toBeDefined()
+    expect(rm!.data).toMatchObject({ userid: 'KU_1', prefab: 'log', token: 'sell' })
+    // no memory write / ui_set credit happens in this flow — that waits for item_removed
+  })
+})
+
+describe('FlowEngine e2e — shop-sell-confirm (atomic sell)', () => {
+  const confirm = JSON.parse(readFileSync(join(import.meta.dir, '../../../examples/flows/shop/shop-sell-confirm.dstp.json'), 'utf8'))
+  const Repo = require('../db').FlowMemoryRepository
+
+  it('credits +5 only when the mod confirms removal (success=true, token=sell)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: true, token: 'sell' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(15)
+  })
+
+  it('does NOT credit when the player lacked the item (success=false)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: false, token: 'sell' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(10)
+  })
+
+  it('ignores item_removed from other flows (token != sell)', async () => {
+    new Repo(SERVER).set('shop', 'coins:KU_1', 10)
+    await run(confirm.nodes, confirm.edges, { type: 'item_removed', data: { userid: 'KU_1', prefab: 'log', success: true, token: 'other' } })
+    expect(new Repo(SERVER).get('shop', 'coins:KU_1')).toBe(10)
+  })
+})
+
+describe('FlowEngine e2e — land_claim', () => {
+  const lc = (id: string, params: any): FlowNode =>
+    ({ id, type: 'land_claim', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  it('add → claim_add with owner defaulting to userid and no coords (mod uses pos)', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'add', userid: '{{trigger.userid}}', radius: '25' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({
+      type: 'claim_add',
+      data: { owner: 'KU_7', userid: 'KU_7', radius: 25 },
+    })
+    expect(commands[0].data.x).toBeUndefined()
+    expect(commands[0].data.z).toBeUndefined()
+  })
+
+  it('remove without coords flags at_player so the mod removes the claim under them', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'remove', userid: '{{trigger.userid}}' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_remove', data: { userid: 'KU_7', at_player: true } })
+  })
+
+  it('trust → claim_trust with friend + on flag', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'trust', userid: '{{trigger.userid}}', friend: 'KU_9', on: 'true' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_trust', data: { owner: 'KU_7', friend: 'KU_9', on: true } })
+  })
+
+  it('list → claim_list', async () => {
+    const nodes = [trigger('t', 'chat_message'), lc('c', { operation: 'list' })]
+    await run(nodes, [edge('t', 'c')], { type: 'chat_message', data: { userid: 'KU_7' } })
+    expect(commands[0]).toMatchObject({ type: 'claim_list' })
   })
 })

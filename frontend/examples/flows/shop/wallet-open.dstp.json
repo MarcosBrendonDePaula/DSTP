@@ -1,0 +1,31 @@
+{
+  "name": "Carteira — abre o painel de saldo quando o player entra",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "player_spawn", "alias": "joined" } },
+    { "id": "read", "type": "memory", "position": { "x": 320, "y": 0 }, "data": { "action": "read", "params": { "flow": "shop", "key": "coins:{{joined.userid}}" }, "alias": "bal" } },
+    { "id": "norm", "type": "transform", "position": { "x": 600, "y": 0 }, "data": { "params": { "value": "{{bal.value}}", "operation": "number" }, "alias": "coins" } },
+    { "id": "window", "type": "ui_builder", "position": { "x": 900, "y": 0 },
+      "data": {
+        "params": { "userid": "{{joined.userid}}", "id": "wallet", "anchor": "bottomleft" },
+        "tree": {
+          "type": "panel",
+          "title": "Carteira",
+          "width": 200,
+          "height": 84,
+          "children": [
+            { "type": "row", "gap": 8, "children": [
+              { "type": "icon", "prefab": "goldnugget", "size": 40 },
+              { "type": "text", "id": "saldo_txt", "text": "{{coins.value}}", "size": 30, "color": [1, 0.85, 0.2, 1] }
+            ] },
+            { "type": "button", "text": "Abrir Loja", "callback": "open", "width": 150, "height": 36 }
+          ]
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_read", "source": "trg", "target": "read" },
+    { "id": "e_read_norm", "source": "read", "target": "norm" },
+    { "id": "e_norm_window", "source": "norm", "target": "window" }
+  ]
+}

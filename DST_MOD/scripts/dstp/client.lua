@@ -32,6 +32,7 @@ local evt_config = {}
 local evt_initialized = {}
 local world_inst = nil
 local hooked_players = {}
+local LandClaims = nil  -- dstp/land_claims singleton, set in Init()
 
 -- Forward declarations (DST strict mode requires variables to exist before reference)
 local SendPrivateMessage
@@ -695,6 +696,73 @@ local function RegisterBuiltinCommands()
             end
         end
         fn(comp, _G.unpack(args, 1, n))
+    end)
+
+    -- ---- Land claims (terrain protection) ----------------------------------
+    -- These manage the claim store; the actual BLOCKING happens in modmain via
+    -- workable/burnable/builder overrides that call LandClaims.IsProtected. The
+    -- POLICY (who may claim, limits, cost) is up to the FLOW that calls these —
+    -- e.g. gate claim_add behind condition {{player.admin}} or a coins check.
+    -- A claim's position defaults to the player's current position when x/z are
+    -- omitted (so a flow can do "!claim" with just the userid).
+
+    local function ResolveXZ(data)
+        if data.x ~= nil and data.z ~= nil then
+            return tonumber(data.x), tonumber(data.z)
+        end
+        local player = data.userid and FindPlayer(data.userid)
+        if player and player.Transform then
+            local x, _, z = player.Transform:GetWorldPosition()
+            return x, z
+        end
+        return nil, nil
+    end
+
+    DSTP.RegisterCommand("claim_add", function(data)
+        if not LandClaims then return end
+        local owner = data.owner or data.userid
+        local x, z = ResolveXZ(data)
+        if owner and x and z then
+            LandClaims.Add(owner, x, z, data.radius)
+        end
+    end)
+
+    DSTP.RegisterCommand("claim_remove", function(data)
+        if not LandClaims then return end
+        local x, z = nil, nil
+        if data.x ~= nil and data.z ~= nil then x, z = tonumber(data.x), tonumber(data.z) end
+        -- if no explicit point but a userid is given, remove the claim under them
+        if (x == nil or z == nil) and data.at_player and data.userid then
+            x, z = ResolveXZ(data)
+        end
+        LandClaims.Remove(data.owner, x, z)
+    end)
+
+    DSTP.RegisterCommand("claim_trust", function(data)
+        if not LandClaims then return end
+        local owner = data.owner or data.userid
+        local x, z = ResolveXZ(data)
+        if owner and data.friend then
+            LandClaims.Trust(owner, x, z, tostring(data.friend), data.on ~= false)
+        end
+    end)
+
+    DSTP.RegisterCommand("claim_list", function(data)
+        if not LandClaims then return end
+        DSTP.PushEvent("claim_list_result", {
+            claims = LandClaims.List(),
+            token = data.token,
+        })
+    end)
+
+    DSTP.RegisterCommand("claim_check", function(data)
+        if not LandClaims then return end
+        local x, z = ResolveXZ(data)
+        local owner = (x and z) and LandClaims.OwnerAt(x, z) or nil
+        DSTP.PushEvent("claim_check_result", {
+            x = x, z = z, owner = owner, protected = owner ~= nil,
+            token = data.token,
+        })
     end)
 
     DSTP.RegisterCommand("give_item", function(data)
@@ -2327,6 +2395,12 @@ function DSTP.Init(mod_env, mod_config)
         end
     end
 
+    -- Land-claims store (terrain protection). The blocking overrides live in
+    -- modmain; here we just init the singleton so the claim_* commands work.
+    LandClaims = _G.require("dstp/land_claims").Init({
+        GLOBAL = _G, debug_logs = config.debug_logs,
+    })
+
     RegisterBuiltinCommands()
 
     mod_env.AddPrefabPostInit("world", function(inst)
@@ -2334,6 +2408,11 @@ function DSTP.Init(mod_env, mod_config)
 
         -- Detect shard type
         config.shard_type = inst:HasTag("cave") and "caves" or "master"
+
+        -- Attach the persistence component so claims save with the world.
+        if not inst.components.dstp_landclaims then
+            inst:AddComponent("dstp_landclaims")
+        end
 
         -- Defer 1 frame so TheWorld.meta is fully populated
         inst:DoTaskInTime(0, function()

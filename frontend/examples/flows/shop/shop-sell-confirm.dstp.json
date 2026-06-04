@@ -1,0 +1,24 @@
+{
+  "name": "Loja — confirma venda: credita +5 SÓ quando o item foi removido de verdade",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "item_removed", "alias": "sold" } },
+    { "id": "fromshop", "type": "condition", "position": { "x": 280, "y": 0 }, "data": { "field": "{{sold.token}}", "operator": "equals", "value": "sell" } },
+    { "id": "ok", "type": "condition", "position": { "x": 560, "y": 0 }, "data": { "field": "{{sold.success}}", "operator": "equals", "value": "true" } },
+    { "id": "read", "type": "memory", "position": { "x": 840, "y": 0 }, "data": { "action": "read", "params": { "flow": "shop", "key": "coins:{{sold.userid}}" }, "alias": "bal" } },
+    { "id": "norm", "type": "transform", "position": { "x": 860, "y": 0 }, "data": { "params": { "value": "{{bal.value}}", "operation": "number" }, "alias": "coins" } },
+    { "id": "credit", "type": "transform", "position": { "x": 1120, "y": 0 }, "data": { "params": { "value": "{{coins.value}}", "operation": "add", "operand": "5" }, "alias": "newbal" } },
+    { "id": "write", "type": "memory", "position": { "x": 1380, "y": 0 }, "data": { "action": "write", "params": { "flow": "shop", "key": "coins:{{sold.userid}}", "value": "{{newbal.value}}" } } },
+    { "id": "set", "type": "action", "position": { "x": 1640, "y": -60 }, "data": { "action_type": "ui_set", "params": { "userid": "{{sold.userid}}", "id": "shop", "node": "saldo_txt", "text": "{{newbal.value}}" } } },
+    { "id": "wallet", "type": "action", "position": { "x": 1640, "y": 80 }, "data": { "action_type": "ui_set", "params": { "userid": "{{sold.userid}}", "id": "wallet", "node": "saldo_txt", "text": "{{newbal.value}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_fromshop", "source": "trg", "target": "fromshop" },
+    { "id": "e_fromshop_ok", "source": "fromshop", "target": "ok", "sourceHandle": "true" },
+    { "id": "e_ok_read", "source": "ok", "target": "read", "sourceHandle": "true" },
+    { "id": "e_read_norm", "source": "read", "target": "norm" },
+    { "id": "e_norm_credit", "source": "norm", "target": "credit" },
+    { "id": "e_credit_write", "source": "credit", "target": "write" },
+    { "id": "e_write_set", "source": "write", "target": "set" },
+    { "id": "e_write_wallet", "source": "write", "target": "wallet" }
+  ]
+}
