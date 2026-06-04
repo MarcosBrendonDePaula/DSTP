@@ -11,8 +11,8 @@
 import type { NodeMeta } from '@shared/automation/nodeMeta'
 import type { NodeHandler } from './types'
 
-import { meta as delayMeta } from '@shared/automation/nodes/delay/meta'
-import { handler as delayHandler } from '@shared/automation/nodes/delay/exec'
+import { meta as delayMeta } from '@shared/automation/nodes/logic/timing/delay/meta'
+import { handler as delayHandler } from '@shared/automation/nodes/logic/timing/delay/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
