@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useRef } from 'react'
 
 // Renders the flow list as a collapsible folder tree with HTML5 drag-and-drop.
 // Folders are DERIVED from each flow's folderPath ("" = root, "Loja/Eventos" =
@@ -66,26 +66,39 @@ export function FlowTree({
   const needle = search.trim().toLowerCase()
   const matches = useCallback((f: FlowLike) => !needle || f.name.toLowerCase().includes(needle), [needle])
 
+  // The dragged flow id is held in a ref (not just dataTransfer): some browsers
+  // block getData() during dragover, and we want the highlight to follow reliably.
+  const draggingId = useRef<string | null>(null)
+
   const onDragStart = (e: React.DragEvent, id: string) => {
+    draggingId.current = id
     e.dataTransfer.setData('text/flow-id', id)
     e.dataTransfer.effectAllowed = 'move'
   }
+  const onDragEnd = () => { draggingId.current = null; setDropTarget(null) }
+
+  const idFrom = (e: React.DragEvent) => draggingId.current || e.dataTransfer.getData('text/flow-id')
+
   // Drop on a folder header → move into that folder, appended (order = count).
   const onDropFolder = (e: React.DragEvent, folderPath: string, count: number) => {
-    e.preventDefault()
-    const id = e.dataTransfer.getData('text/flow-id')
+    e.preventDefault(); e.stopPropagation()
+    const id = idFrom(e)
+    draggingId.current = null
     setDropTarget(null)
     if (id) onMove(id, folderPath, count)
   }
   // Drop on a gap before a sibling → same folder, take that sibling's order slot.
   const onDropGap = (e: React.DragEvent, folderPath: string, order: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const id = e.dataTransfer.getData('text/flow-id')
+    e.preventDefault(); e.stopPropagation()
+    const id = idFrom(e)
+    draggingId.current = null
     setDropTarget(null)
     if (id) onMove(id, folderPath, order)
   }
-  const allow = (e: React.DragEvent, key: string) => { e.preventDefault(); if (dropTarget !== key) setDropTarget(key) }
+  // dragover MUST preventDefault for drop to fire. We only set the highlight here;
+  // we deliberately do NOT clear it on dragLeave (leaving onto a child element
+  // would flicker/lose the target). It clears on drop or dragend instead.
+  const allow = (e: React.DragEvent, key: string) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== key) setDropTarget(key) }
 
   const renderFolder = (node: TreeNode, depth: number): React.ReactNode => {
     const isRoot = node.path === ''
@@ -102,14 +115,18 @@ export function FlowTree({
           .map(child => renderFolder(child, depth + 1))}
         {visibleFlows.map((f, i) => (
           <div key={f.id}>
-            {/* drop gap before this flow */}
+            {/* drop gap before this flow — taller hit area so it's easy to target */}
             <div
               onDragOver={e => allow(e, `gap:${node.path}:${i}`)}
-              onDragLeave={() => setDropTarget(null)}
               onDrop={e => onDropGap(e, node.path, orderOf(f))}
-              className={`h-1.5 rounded transition-colors ${dropTarget === `gap:${node.path}:${i}` ? 'bg-blue-400/60' : ''}`}
+              className={`h-2 -my-1 rounded transition-colors ${dropTarget === `gap:${node.path}:${i}` ? 'bg-blue-400/60 h-3' : ''}`}
             />
-            <div draggable onDragStart={e => onDragStart(e, f.id)} className="cursor-grab active:cursor-grabbing">
+            <div
+              draggable
+              onDragStart={e => onDragStart(e, f.id)}
+              onDragEnd={onDragEnd}
+              className="cursor-grab active:cursor-grabbing"
+            >
               {renderFlow(f)}
             </div>
           </div>
@@ -122,23 +139,28 @@ export function FlowTree({
         <div
           key="root"
           onDragOver={e => allow(e, headerKey)}
-          onDragLeave={() => setDropTarget(null)}
           onDrop={e => onDropFolder(e, '', node.flows.length)}
-          className={`space-y-2 rounded-lg ${dropTarget === headerKey ? 'ring-1 ring-blue-400/40' : ''}`}
+          className={`space-y-2 rounded-lg p-1 ${dropTarget === headerKey ? 'ring-1 ring-blue-400/40' : ''}`}
         >
           {body}
         </div>
       )
     }
 
+    // The WHOLE folder (header + body) is one drop zone, so dropping anywhere in it
+    // moves the flow into the folder. The gap strips inside stopPropagation on drop,
+    // so reordering within a folder still takes precedence over the folder-move.
     return (
-      <div key={node.path} style={{ marginLeft: depth > 1 ? 12 : 0 }}>
+      <div
+        key={node.path}
+        style={{ marginLeft: depth > 1 ? 12 : 0 }}
+        onDragOver={e => allow(e, headerKey)}
+        onDrop={e => onDropFolder(e, node.path, node.flows.length)}
+        className={`rounded-lg ${dropTarget === headerKey ? 'bg-blue-500/10 ring-2 ring-blue-400/50' : ''}`}
+      >
         <div
           onClick={() => toggle(node.path)}
-          onDragOver={e => allow(e, headerKey)}
-          onDragLeave={() => setDropTarget(null)}
-          onDrop={e => onDropFolder(e, node.path, node.flows.length)}
-          className={`group/folder flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none text-gray-300 hover:bg-white/5 ${dropTarget === headerKey ? 'bg-blue-500/15 ring-1 ring-blue-400/40' : ''}`}
+          className="group/folder flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none text-gray-300 hover:bg-white/5"
         >
           <span className="text-[10px] text-gray-500 w-3">{isCollapsed ? '▶' : '▼'}</span>
           <span className="text-sm">📁</span>
