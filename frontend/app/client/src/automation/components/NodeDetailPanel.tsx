@@ -8,6 +8,7 @@ import {
 } from '../nodeOutputSchemas'
 import { TRIGGER_EVENTS } from '../nodes'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
+import { registryMetaByType } from '../nodes/registry'
 import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -555,7 +556,12 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
 
 export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, captureContext, allNodes = [], allEdges = [], onUpdateTree }: NodeDetailPanelProps) {
   const type = node.type || 'unknown'
-  const meta = nodeTypeMeta[type] || { icon: '?', label: type, color: '#888' }
+  // Prefer the node's registry meta (icon/label/color); fall back to the local
+  // map for any non-module type, then a generic default.
+  const regMeta = registryMetaByType[type]
+  const meta = regMeta
+    ? { icon: regMeta.icon, label: regMeta.label, color: regMeta.color }
+    : (nodeTypeMeta[type] || { icon: '?', label: type, color: '#888' })
   const data = node.data as Record<string, any>
   const alias = data?.alias as string | undefined
 
