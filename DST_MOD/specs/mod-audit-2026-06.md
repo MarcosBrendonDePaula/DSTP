@@ -71,14 +71,15 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
 - Nodes clicáveis de texto/ícone/imagem (`ui_widgets.lua:520-536`): `OnControl` +
   `SetClickable` não tornam um widget de HUD focável → cliques não chegam.
 
-## 📋 Gap de eventos — RESOLVIDO (14 implementados, 4 pulados)
+## 📋 Gap de eventos — RESOLVIDO (18/18 implementados)
 
 **Status (jun/2026):** os 18 candidatos foram validados 1-a-1 contra os scripts
 vanilla extraídos ANTES de fiar (workflow de 18 agentes). A validação pegou **4
-casos que teriam virado listener morto** (a própria classe de bug #5/#6) — esses
-foram **PULADOS** com justificativa. Os 14 restantes foram implementados na
-`events/<categoria>.lua` certa, com o shape de dados real (keyed, nil-guards) e
-debounce/edge-detection onde a fonte dispara por-tick.
+casos que teriam virado listener morto** (a própria classe de bug #5/#6) se feitos
+do jeito ingênuo — esses foram refeitos na entidade CERTA (world / component-hook).
+Todos com o shape de dados real (keyed, nil-guards) e debounce/edge-detection onde a
+fonte dispara por-tick. **Exemplos** de flow para cada um em
+`frontend/examples/flows/events/new/`.
 
 ### ✅ Implementados (14) — `feat(events): add 14 audit events (#8-14)`
 | Categoria | Eventos | Nota de implementação |
@@ -91,13 +92,20 @@ debounce/edge-detection onde a fonte dispara por-tick.
 | crafting | `recipe_unlocked` (unlockrecipe), `tech_tree_changed` (techtreechange) | recipe nil-guarda freebuild; tech `data.level` é MAP de árvores |
 | survival | `player_enlightened` (goenlightened), `player_lunacy_normal` (sanitymodechanged mode==0), `player_wet` (moisturedelta) | wet edge-detect no limiar 'soaked' (>35) |
 
-### ⛔ Pulados (4) — seriam listeners mortos
-| Evento da issue | Por que pulado |
-|-----------------|----------------|
-| `player_min_health` | `minhealth` só dispara em bosses com `SetMinHealth(>0)`; em player real (min=0) vai pro caminho de morte. Nunca dispara no player. |
-| `player_combat_target` | `newcombattarget` dispara na entidade que **adquire** alvo (o MOB que aggra), não no player. Player-scoped = morto. |
-| `trade_received` | `trade` dispara no **NPC receptor** (Pig King etc.), não no player que dá. E o item vai pro NPC, então nem `player_item_get` cobre — exige hook em todo prefab Trader. |
-| `player_migrated` | A fonte da issue (`OnDespawn`) é um **método**, não evento. O real é `ms_playerdespawnandmigrate` no world (4 sites, shape variável). Complexo demais p/ o valor; o `player_disconnected` já existe. |
+### ✅ Os 4 "difíceis" — depois implementados na fonte CERTA (18/18)
+Inicialmente pulados por seriam listener morto se feitos do jeito ingênuo (player-
+scoped). Depois implementados na entidade correta, a pedido:
+| Evento | Onde dispara de verdade → como foi feito |
+|--------|-------------------------------------------|
+| `player_min_health` | `minhealth` no player — per-player em `combat.lua`. Raro (só com `SetMinHealth(>0)` ativo, ex. life-giving amulet); documentado como sinal de "salvo na unha". |
+| `player_combat_target` | `newcombattarget` dispara no **MOB que aggra**, não no player. `AddComponentPostInit("combat")` → `events/nonplayer.lua` `HookCombat`, emite só quando o alvo é player (mob→player aggro). |
+| `trade_received` | `trade` dispara no **NPC receptor**. `AddComponentPostInit("trader")` → `HookTrader`, emite `{receiver, giver, item}`. |
+| `player_migrated` | `ms_playerdespawnandmigrate` no **TheWorld** (não o método `OnDespawn` da issue) — world listener em `players.lua`. |
+
+`events/nonplayer.lua` é o módulo dos eventos hookados por componente (entidades
+não-player); a fachada publica `core.HookCombatComponent`/`HookTraderComponent` e o
+modmain anexa com 2 `AddComponentPostInit`. Ambos gateiam em `evt_config` e filtram
+forte → com a categoria off, é um early-return barato.
 
 ## Nota sobre os `ms_*` na lista "emitida"
 
