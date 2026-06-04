@@ -77,11 +77,16 @@ N('buy_can', 'condition', { field: '{{coins.value}}', operator: 'greater_than', 
 N('buy_charge', 'transform', { params: { value: '{{coins.value}}', operation: 'sub', operand: '10' }, alias: 'newbal' }, 1640, -60)
 N('buy_write', 'memory', { action: 'write', params: { flow: 'shop', key: 'coins:{{cb.userid}}', value: '{{newbal.value}}' } }, 1900, -60)
 N('buy_give', 'action', { action_type: 'give_item', params: { userid: '{{cb.userid}}', prefab: '{{item.value}}', count: '1' } }, 2160, -60)
-N('buy_set', 'action', { action_type: 'ui_set', params: { userid: '{{cb.userid}}', id: 'shop', node: 'saldo_txt', text: '{{newbal.value}}' } }, 2420, -60)
+// Patch the balance text in BOTH widgets: the shop panel (id shop) AND the
+// wallet HUD (id wallet). They are separate widgets each with their own saldo_txt,
+// so a single ui_set would leave the other stale. ui_set on a missing widget is a
+// no-op, so this is safe whether or not the wallet is currently open.
+N('buy_set', 'action', { action_type: 'ui_set', params: { userid: '{{cb.userid}}', id: 'shop', node: 'saldo_txt', text: '{{newbal.value}}' } }, 2420, -90)
+N('buy_set_w', 'action', { action_type: 'ui_set', params: { userid: '{{cb.userid}}', id: 'wallet', node: 'saldo_txt', text: '{{newbal.value}}' } }, 2420, 30)
 N('buy_broke', 'action', { action_type: 'ui_notification', params: { userid: '{{cb.userid}}', text: 'Moedas insuficientes', duration: '2' } }, 1640, 120)
 E('isbuy', 'buy_item', 'true'); E('buy_item', 'buy_read'); E('buy_read', 'buy_norm'); E('buy_norm', 'buy_can')
 E('buy_can', 'buy_charge', 'true'); E('buy_can', 'buy_broke', 'false')
-E('buy_charge', 'buy_write'); E('buy_write', 'buy_give'); E('buy_give', 'buy_set')
+E('buy_charge', 'buy_write'); E('buy_write', 'buy_give'); E('buy_give', 'buy_set'); E('buy_give', 'buy_set_w')
 
 // SELL branch (ASYNC): only REQUEST the atomic removal — do NOT credit here.
 // remove_item is async: the mod removes only if the player has the item and

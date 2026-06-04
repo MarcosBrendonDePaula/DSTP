@@ -1491,13 +1491,30 @@
       "type": "action",
       "position": {
         "x": 2420,
-        "y": -60
+        "y": -90
       },
       "data": {
         "action_type": "ui_set",
         "params": {
           "userid": "{{cb.userid}}",
           "id": "shop",
+          "node": "saldo_txt",
+          "text": "{{newbal.value}}"
+        }
+      }
+    },
+    {
+      "id": "buy_set_w",
+      "type": "action",
+      "position": {
+        "x": 2420,
+        "y": 30
+      },
+      "data": {
+        "action_type": "ui_set",
+        "params": {
+          "userid": "{{cb.userid}}",
+          "id": "wallet",
           "node": "saldo_txt",
           "text": "{{newbal.value}}"
         }
@@ -1662,6 +1679,11 @@
       "id": "e_buy_give_buy_set",
       "source": "buy_give",
       "target": "buy_set"
+    },
+    {
+      "id": "e_buy_give_buy_set_w",
+      "source": "buy_give",
+      "target": "buy_set_w"
     },
     {
       "id": "e_issell_sell_item_true",

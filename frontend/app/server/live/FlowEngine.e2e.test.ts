@@ -774,10 +774,10 @@ describe('FlowEngine e2e — wallet (live money HUD)', () => {
   it('!dar (admin) credits +100 and patches saldo_txt via ui_set', async () => {
     setPlayers([{ userid: 'KU_5ZOnLvnc', name: 'MarcosBn', admin: true }])
     await run(giveFlow.nodes, giveFlow.edges, { type: 'chat_message', data: { userid: 'KU_5ZOnLvnc', message: '!dar' } })
-    const ui = commands.filter(c => c.type === 'ui_command').pop()
-    expect(ui).toBeDefined()
-    expect(ui!.data.cmd).toMatchObject({ action: 'set', id: 'wallet', node: 'saldo_txt' })
-    expect(String(ui!.data.cmd.props.text)).toContain('100')
+    const sets = commands.filter(c => c.type === 'ui_command' && c.data.cmd.action === 'set')
+    // patches BOTH the wallet HUD and the shop panel so neither goes stale
+    expect(sets.map(c => c.data.cmd.id).sort()).toEqual(['shop', 'wallet'])
+    expect(String(sets[0].data.cmd.props.text)).toContain('100')
   })
 })
 
@@ -802,8 +802,9 @@ describe('FlowEngine e2e — shop-full (one-flow shop)', () => {
     const give = commands.find(c => c.type === 'give_item')
     expect(give).toBeDefined()
     expect(give!.data).toMatchObject({ userid: 'KU_1', prefab: 'spear' })
-    const set = commands.find(c => c.type === 'ui_command' && c.data.cmd.action === 'set')
-    expect(set!.data.cmd).toMatchObject({ id: 'shop', node: 'saldo_txt' })
+    // balance patched in BOTH the shop panel AND the wallet HUD
+    const setIds = commands.filter(c => c.type === 'ui_command' && c.data.cmd.action === 'set').map(c => c.data.cmd.id).sort()
+    expect(setIds).toEqual(['shop', 'wallet'])
   })
 
   it('sell:log only REQUESTS removal (token sell) — does NOT credit yet', async () => {

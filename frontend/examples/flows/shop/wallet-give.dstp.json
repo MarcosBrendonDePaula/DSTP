@@ -8,7 +8,8 @@
     { "id": "read", "type": "memory", "position": { "x": 1200, "y": 0 }, "data": { "action": "read", "params": { "flow": "shop", "key": "coins:{{chat.userid}}" }, "alias": "bal" } },
     { "id": "credit", "type": "transform", "position": { "x": 1500, "y": 0 }, "data": { "params": { "value": "{{bal.value}}", "operation": "add", "operand": "100" }, "alias": "newbal" } },
     { "id": "write", "type": "memory", "position": { "x": 1800, "y": 0 }, "data": { "action": "write", "params": { "flow": "shop", "key": "coins:{{chat.userid}}", "value": "{{newbal.value}}" } } },
-    { "id": "update", "type": "action", "position": { "x": 2100, "y": 0 }, "data": { "action_type": "ui_set", "params": { "userid": "{{chat.userid}}", "id": "wallet", "node": "saldo_txt", "text": "{{newbal.value}}" } } }
+    { "id": "update", "type": "action", "position": { "x": 2100, "y": -60 }, "data": { "action_type": "ui_set", "params": { "userid": "{{chat.userid}}", "id": "wallet", "node": "saldo_txt", "text": "{{newbal.value}}" } } },
+    { "id": "update_shop", "type": "action", "position": { "x": 2100, "y": 60 }, "data": { "action_type": "ui_set", "params": { "userid": "{{chat.userid}}", "id": "shop", "node": "saldo_txt", "text": "{{newbal.value}}" } } }
   ],
   "edges": [
     { "id": "e_trg_isdar", "source": "trg", "target": "isdar" },
@@ -17,6 +18,7 @@
     { "id": "e_admin_read", "source": "isadmin", "target": "read", "sourceHandle": "true" },
     { "id": "e_read_credit", "source": "read", "target": "credit" },
     { "id": "e_credit_write", "source": "credit", "target": "write" },
-    { "id": "e_write_update", "source": "write", "target": "update" }
+    { "id": "e_write_update", "source": "write", "target": "update" },
+    { "id": "e_write_update_shop", "source": "write", "target": "update_shop" }
   ]
 }

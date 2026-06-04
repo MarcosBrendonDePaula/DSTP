@@ -1,5 +1,5 @@
 {
-  "name": "Loja completa (bundle: loja + carteira + dar moeda + confirma venda)",
+  "name": "Loja completa (bundle)",
   "flows": [
     {
       "name": "Loja completa — carteira + abas Comprar/Vender + itens por estacao (ui_callback)",
@@ -1494,13 +1494,30 @@
           "type": "action",
           "position": {
             "x": 2420,
-            "y": -60
+            "y": -90
           },
           "data": {
             "action_type": "ui_set",
             "params": {
               "userid": "{{cb.userid}}",
               "id": "shop",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "buy_set_w",
+          "type": "action",
+          "position": {
+            "x": 2420,
+            "y": 30
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{cb.userid}}",
+              "id": "wallet",
               "node": "saldo_txt",
               "text": "{{newbal.value}}"
             }
@@ -1665,6 +1682,11 @@
           "id": "e_buy_give_buy_set",
           "source": "buy_give",
           "target": "buy_set"
+        },
+        {
+          "id": "e_buy_give_buy_set_w",
+          "source": "buy_give",
+          "target": "buy_set_w"
         },
         {
           "id": "e_issell_sell_item_true",
@@ -1905,13 +1927,30 @@
           "type": "action",
           "position": {
             "x": 2100,
-            "y": 0
+            "y": -60
           },
           "data": {
             "action_type": "ui_set",
             "params": {
               "userid": "{{chat.userid}}",
               "id": "wallet",
+              "node": "saldo_txt",
+              "text": "{{newbal.value}}"
+            }
+          }
+        },
+        {
+          "id": "update_shop",
+          "type": "action",
+          "position": {
+            "x": 2100,
+            "y": 60
+          },
+          "data": {
+            "action_type": "ui_set",
+            "params": {
+              "userid": "{{chat.userid}}",
+              "id": "shop",
               "node": "saldo_txt",
               "text": "{{newbal.value}}"
             }
@@ -1955,6 +1994,11 @@
           "id": "e_write_update",
           "source": "write",
           "target": "update"
+        },
+        {
+          "id": "e_write_update_shop",
+          "source": "write",
+          "target": "update_shop"
         }
       ]
     },
