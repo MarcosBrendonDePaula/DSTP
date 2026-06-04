@@ -390,6 +390,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           onConnect={onConnect}
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
+          // Drop handlers on ReactFlow itself — it fills the <main> and consumes
+          // drag events, so the wrapper's onDragOver/onDrop never fire. Must be here.
+          onDragOver={onCanvasDragOver}
+          onDrop={onCanvasDrop}
           onInit={instance => { reactFlowRef.current = instance }}
           nodeTypes={nodeTypes}
           fitView
@@ -448,9 +452,17 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       {/* Node drawer */}
       {nodeDrawerOpen && (
         <div className="absolute inset-0 z-30 pointer-events-none">
-          <button
+          {/* Backdrop: closes on click, but must let a node DROP pass through to
+              the canvas underneath (delegate to the same drop handlers) — else the
+              drop lands here and is blocked. */}
+          <div
+            role="button"
+            tabIndex={0}
             className="absolute inset-0 bg-black/10 pointer-events-auto"
             onClick={() => setNodeDrawerOpen(false)}
+            onKeyDown={e => { if (e.key === 'Escape') setNodeDrawerOpen(false) }}
+            onDragOver={onCanvasDragOver}
+            onDrop={e => { onCanvasDrop(e); setNodeDrawerOpen(false) }}
             aria-label="Fechar biblioteca de nodes"
           />
           <aside className="absolute right-0 top-[68px] bottom-9 w-[396px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
@@ -492,12 +504,18 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                 <div key={category} className="mb-2">
                   <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400">{category}</div>
                   {items.map(item => (
-                    <button
+                    // A real <div> (not <button>) — `draggable` on a button is
+                    // unreliable across browsers (Firefox ignores it), which broke
+                    // drag-to-canvas. Keep click-to-add via onClick + keyboard.
+                    <div
                       key={`${item.type}:${item.data?.event_type || item.label}`}
+                      role="button"
+                      tabIndex={0}
                       draggable
                       onDragStart={event => onNodeDragStart(event, item)}
                       onClick={() => addCatalogItem(item)}
-                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60"
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCatalogItem(item) } }}
+                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60 cursor-grab active:cursor-grabbing"
                       title="Arraste para o canvas ou clique para adicionar"
                     >
                       <div className="flex items-center gap-3">
@@ -508,7 +526,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                         </div>
                         <span className="text-gray-500 group-hover:text-white">›</span>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ))}
