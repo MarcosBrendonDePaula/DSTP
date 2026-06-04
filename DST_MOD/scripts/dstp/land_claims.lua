@@ -1,5 +1,15 @@
 -- DSTP Land Claims — server-side terrain protection
 --
+-- ⚠️ EXPERIMENT / NOT A KEEPER. This whole land-claim feature (this module, the
+-- workable/burnable/builder overrides in modmain, the claim_* commands, and the
+-- `land_claim` node) is a PROTOTYPE for initial testing of in-frame vetoing. It
+-- deliberately VIOLATES DSTP's dynamic-system idea (mod = generic dumb primitives,
+-- flow = logic) by hardcoding the "claim" concept into Lua. Do NOT build on it or
+-- treat it as an official feature. When protection is taken seriously, REWRITE it
+-- over a generic region-veto primitive (a flow defines the protected regions + who
+-- may act; the mod only answers "is this point vetoed for this doer?") — or remove
+-- it. See the memory note `project-landclaim-debt`.
+--
 -- A generic protection ENGINE. The policy (who may claim, limits, cost) lives in
 -- the panel flows; this module only answers "is this point protected from this
 -- doer?" and stores the claims. There is NO veto callback in workable/burnable

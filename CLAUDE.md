@@ -161,6 +161,9 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `call_component` | **Admin-power (RCE-equivalent on the server).** Invoke any method of any DST component on a player (`component`/`method`/`args`, `"{{self}}"` = the player). Same trust class as `script`/`execute` — gate it in the flow with `condition {{player.admin}}==true`. Contained by the mod's pcall (bad name just logs). |
 | `get_player` | Fetch player data by userid (health, hunger, sanity, position, inventory, **admin**) |
 | `find_player` | Search player by name (partial, strips command prefixes like `/tp`, `#tp`) |
+| `split` | Split a string into parts by a separator (default whitespace) → `parts[]`, `count`, `first`, `rest`, `part1..part10`. Generic helper to read command words without a parser. |
+| `list_flows` | List this server's flows with filters (onlyEnabled / folder / startsWith) → `flows[]`, `names[]`, `count`, `text`. Lets a flow introspect the others (e.g. a self-updating `!help`). |
+| `land_claim` | **⚠️ EXPERIMENT — NOT A KEEPER.** Prototype terrain protection (claim_add/remove/trust/list/check). Hardcodes the "claim" concept into the mod (Lua), violating the dynamic-system idea — kept only to test in-frame vetoing. Do not build on it; rewrite over a generic region-veto primitive (or remove) when protection is taken seriously. See `examples/flows/protection/README.md`. |
 | `memory` | Persistent key-value per flow (SQLite) |
 | `wait` | Multi-trigger merge: waits for N branches, 3 correlation modes, timeout support |
 | `ai_agent` | LLM agent (Vercel AI SDK). Nodes wired to its `tools` handle become callable tools; agentic loop (`stopWhen: stepCountIs`). See **AI Agent Node** below. |
@@ -345,3 +348,23 @@ Character avatars are static PNGs from DST Wiki in `frontend/app/client/public/a
 - A replacement for traditional DST mods
 
 For real-time client-side features (HP bars following mobs, proximity HUDs) that the declarative rules engine can't express, write them as traditional hardcoded Lua in the mod — don't try to generate Lua from flows.
+
+### Experiment: land-claim (terrain protection) — NOT a keeper
+
+The land-claim feature (mod v0.6.0: the `land_claim` node, `claim_*` commands, and
+the `workable`/`burnable`/`builder` overrides; `examples/flows/protection/`) is a
+**prototype kept only to test in-frame vetoing**. It **knowingly violates the
+dynamic-system principle** above: instead of the mod exposing a generic primitive
+and the flow holding the logic, the "claim" concept (area/owner/radius/trusted) is
+**hardcoded in Lua**, so each new protection would need its own command/node/Workshop
+re-upload — the opposite of the design.
+
+**Do not treat it as an official feature or build on it.** The only part that
+genuinely must be Lua is the **in-frame veto** (workable/burnable/builder apply
+synchronously, no veto callback, and a flow round-trips through the backend too
+slowly to block). When protection is taken seriously, **rewrite** it as a generic
+**region-veto primitive**: the flow defines the protected regions + who may act; the
+mod only answers "is this point vetoed for this doer?". Then house protection, PvP
+zones and no-fire areas are all *flows* over the same primitive — or remove the
+experiment. (Contrast: the money wallet in `examples/flows/shop/` is 100% flow, zero
+new Lua — that's the pattern to follow.)
