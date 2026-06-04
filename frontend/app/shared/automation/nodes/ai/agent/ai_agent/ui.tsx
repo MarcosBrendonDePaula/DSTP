@@ -73,18 +73,19 @@ export const ui = function AIAgentNode({ id, data, selected }: any) {
         </div>
       </BaseNode>
 
-      {/* Tools input handle (left) — connect action/get_player/etc nodes here.
-          Rendered AFTER BaseNode so the flow input (BaseNode's top handle) is the
-          first target in the DOM — otherwise an edge with no targetHandle would
-          bind to this `tools` handle instead of the flow input. */}
+      {/* Two LEFT inputs: the flow input (BaseNode's left handle, sits at the
+          vertical center) and this `tools` input, placed LOWER on the left edge.
+          Connect action/get_player/etc nodes to tools. Rendered AFTER BaseNode so
+          the flow input is the first target in the DOM — otherwise an edge with no
+          targetHandle would bind to this `tools` handle instead of the flow input. */}
       <Handle
         type="target"
         position={Position.Left}
         id="tools"
         className="!w-3 !h-3 !border-2"
-        style={{ background: '#2a2a2a', borderColor: '#a855f7', top: 32 }}
+        style={{ background: '#2a2a2a', borderColor: '#a855f7', top: 'auto', bottom: 14 }}
       />
-      <div className="absolute -left-1 top-9 text-[8px] text-purple-400 -translate-x-full pr-1 whitespace-nowrap pointer-events-none">
+      <div className="absolute -left-1 bottom-2 text-[8px] text-purple-400 -translate-x-full pr-1 whitespace-nowrap pointer-events-none">
         tools{toolCount ? ` (${toolCount})` : ''}
       </div>
     </div>

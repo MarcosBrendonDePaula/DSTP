@@ -127,9 +127,9 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
     >
-      {/* Input handle */}
+      {/* Input handle — left side (data flows left → right) */}
       {hasInput && (
-        <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
+        <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
       )}
 
       {/* Header */}
@@ -171,23 +171,27 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
         </div>
       )}
 
-      {/* Output handle(s) */}
+      {/* Output handle — right side */}
       {hasOutput && !outputLabels && (
-        <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
+        <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
       )}
 
-      {/* Named output handles (for conditions: true/false) */}
+      {/* Named output handles (condition true/false, switch cases, foreach
+          each/done) — stacked on the RIGHT edge, one row each with its label. */}
       {outputLabels && (
-        <div className="flex justify-around px-2 pb-2 pt-1">
-          {outputLabels.map((out, i) => (
-            <div key={out.id} className="relative flex flex-col items-center">
-              <span className="text-[9px] text-gray-500 mb-1">{out.label}</span>
+        <div className="flex flex-col items-end gap-1.5 px-3 pb-2 pt-1">
+          {outputLabels.map((out) => (
+            <div key={out.id} className="relative flex items-center gap-1 pr-1">
+              <span className="text-[9px] text-gray-500">{out.label}</span>
               <Handle
                 type="source"
-                position={Position.Bottom}
+                position={Position.Right}
                 id={out.id}
-                className="!w-2.5 !h-2.5 !border-2 !relative !transform-none !top-0 !left-0"
-                style={{ background: '#2a2a2a', borderColor: out.id === 'true' ? '#22c55e' : '#ef4444' }}
+                className="!w-2.5 !h-2.5 !border-2 !relative !transform-none !top-0 !right-0"
+                style={{
+                  background: '#2a2a2a',
+                  borderColor: out.id === 'true' ? '#22c55e' : out.id === 'false' ? '#ef4444' : colors.accent,
+                }}
               />
             </div>
           ))}

@@ -23,7 +23,7 @@ export function UIBox({
         style={{ background: BG, border: `1px solid ${selected ? ACCENT : BORDER}`, boxShadow: selected ? `0 0 16px ${ACCENT}20` : 'none' }}
       >
         {hasInput && (
-          <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} />
+          <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} />
         )}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b" style={{ borderColor: BORDER }}>
           <span>{icon}</span>
@@ -31,7 +31,7 @@ export function UIBox({
         </div>
         {children && <div className="px-3 py-2 space-y-1.5">{children}</div>}
         {isContainer && (
-          <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} title="conectar filhos" />
+          <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} title="conectar filhos" />
         )}
       </div>
     </div>
