@@ -90,36 +90,34 @@ export function ConfirmModal({
 // A real folder picker: a <select> of existing folder paths ("" = root) plus a
 // "+ Nova pasta…" option that reveals a text input for a new (possibly nested)
 // path. Value is the chosen folder path ("" = root).
+// Folder picker: a free-text path input (the source of truth — empty = root, a new
+// path is created on use) plus a dropdown that just PREFILLS the input with an
+// existing folder. Text-first means a suggested/new name is never lost to a
+// <select> that lacks that option.
 export function FolderSelect({ folders, value, onChange }: {
   folders: string[]
   value: string
   onChange: (path: string) => void
 }) {
-  const [creating, setCreating] = useState(value !== '' && !folders.includes(value))
   const sorted = [...folders].filter(Boolean).sort()
   return (
-    <div className="space-y-1.5">
-      {!creating ? (
+    <div className="flex gap-1.5">
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="🗂 raiz — ou digite: Loja/Eventos"
+        className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
+      />
+      {sorted.length > 0 && (
         <select
-          value={value}
-          onChange={e => { if (e.target.value === '__new__') { setCreating(true); onChange('') } else onChange(e.target.value) }}
-          className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-400/40 focus:outline-none"
+          value=""
+          onChange={e => { if (e.target.value) onChange(e.target.value) }}
+          title="Escolher uma pasta existente"
+          className="w-10 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-white focus:border-blue-400/40 focus:outline-none"
         >
-          <option value="" className="bg-[#10101e]">🗂 Raiz (sem pasta)</option>
-          {sorted.map(f => <option key={f} value={f} className="bg-[#10101e]">📁 {f}</option>)}
-          <option value="__new__" className="bg-[#10101e]">＋ Nova pasta…</option>
+          <option value="" className="bg-[#10101e]">📁</option>
+          {sorted.map(f => <option key={f} value={f} className="bg-[#10101e]">{f}</option>)}
         </select>
-      ) : (
-        <div className="flex gap-1.5">
-          <input
-            autoFocus
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder="Loja/Eventos"
-            className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
-          />
-          <button onClick={() => { setCreating(false); onChange('') }} className="text-xs px-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10">↩</button>
-        </div>
       )}
     </div>
   )
