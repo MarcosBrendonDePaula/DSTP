@@ -1,0 +1,60 @@
+{
+  "name": "Limpar entidades — !limpar remove bosses/mobs num raio (admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "cmd",
+      "type": "condition",
+      "position": { "x": 300, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "limpar" }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": { "x": 600, "y": 0 },
+      "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" }
+    },
+    {
+      "id": "isadmin",
+      "type": "condition",
+      "position": { "x": 900, "y": 0 },
+      "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" }
+    },
+    {
+      "id": "clear",
+      "type": "script",
+      "position": { "x": 1200, "y": -60 },
+      "data": {
+        "action_type": "script",
+        "params": {
+          "code": "// Limpa entidades num raio ao redor do jogador. O mod só remove UM prefab\n// por comando, então percorremos a lista e emitimos um remove_near_player por\n// prefab. Ajuste TARGETS e RADIUS à vontade.\nfunction run(context) {\n  const userid = context.trigger && context.trigger.userid;\n  if (!userid) return { skipped: 'no userid' };\n\n  const RADIUS = 30;   // alcance da limpeza (tiles)\n  const LIMIT = 999;   // por prefab\n\n  // Bosses + mobs hostis comuns. Não inclui estruturas, baús, jogadores.\n  const TARGETS = [\n    'deerclops', 'bearger', 'moose', 'dragonfly', 'antlion', 'minotaur',\n    'klaus', 'klaus_sack', 'toadstool', 'beequeen', 'crabking', 'malbatross',\n    'stalker', 'warg', 'spiderqueen',\n    'spider', 'spider_warrior', 'spider_hider', 'spider_spitter', 'spider_dropper',\n    'hound', 'firehound', 'icehound', 'killerbee', 'mosquito', 'frog',\n    'tentacle', 'merm', 'tallbird', 'krampus', 'spat', 'worm', 'batilisk',\n    'crawlinghorror', 'terrorbeak', 'nightmarebeak'\n  ];\n\n  for (const prefab of TARGETS) {\n    context.sendCommand('remove_near_player', { userid: userid, prefab: prefab, radius: RADIUS, limit: LIMIT });\n  }\n  return { cleared: TARGETS.length, radius: RADIUS };\n}"
+        }
+      }
+    },
+    {
+      "id": "warn",
+      "type": "action",
+      "position": { "x": 1500, "y": -60 },
+      "data": {
+        "action_type": "ui_notification",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "text": "Limpeza: removendo mobs/bosses num raio de {{clear.radius}}",
+          "duration": "3"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_cmd", "source": "trg", "target": "cmd" },
+    { "id": "e_cmd_who", "source": "cmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_clear", "source": "isadmin", "target": "clear", "sourceHandle": "true" },
+    { "id": "e_clear_warn", "source": "clear", "target": "warn" }
+  ]
+}

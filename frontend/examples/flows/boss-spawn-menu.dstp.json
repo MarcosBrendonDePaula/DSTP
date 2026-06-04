@@ -1,0 +1,86 @@
+{
+  "name": "Boss Spawn Menu — !boss abre menu de botões (admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "cmd",
+      "type": "condition",
+      "position": { "x": 300, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "boss" }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": { "x": 600, "y": 0 },
+      "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" }
+    },
+    {
+      "id": "isadmin",
+      "type": "condition",
+      "position": { "x": 900, "y": 0 },
+      "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" }
+    },
+    {
+      "id": "menu",
+      "type": "action",
+      "position": { "x": 1200, "y": -60 },
+      "data": {
+        "action_type": "ui_menu",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "id": "boss_menu",
+          "title": "Spawn de Boss",
+          "body": "Escolha um boss para invocar",
+          "width": "360",
+          "buttons": "[{\"label\":\"Deerclops\",\"callback\":\"spawn:deerclops\"},{\"label\":\"Bearger\",\"callback\":\"spawn:bearger\"},{\"label\":\"Dragonfly\",\"callback\":\"spawn:dragonfly\"},{\"label\":\"Moose/Goose\",\"callback\":\"spawn:moose\"},{\"label\":\"Antlion\",\"callback\":\"spawn:antlion\"},{\"label\":\"Bee Queen\",\"callback\":\"spawn:beequeen\"},{\"label\":\"Klaus\",\"callback\":\"spawn:klaus\"},{\"label\":\"Toadstool\",\"callback\":\"spawn:toadstool\"}]"
+        }
+      }
+    },
+    {
+      "id": "click",
+      "type": "trigger",
+      "position": { "x": 0, "y": 360 },
+      "data": { "event_type": "ui_callback", "alias": "cb" }
+    },
+    {
+      "id": "isspawn",
+      "type": "condition",
+      "position": { "x": 300, "y": 360 },
+      "data": { "field": "{{cb.callback}}", "operator": "contains", "value": "spawn:" }
+    },
+    {
+      "id": "spawn",
+      "type": "script",
+      "position": { "x": 600, "y": 300 },
+      "data": {
+        "action_type": "script",
+        "params": {
+          "code": "// Extrai o prefab do callback do botão (ex: 'spawn:deerclops' -> 'deerclops')\n// e spawna 1 perto do jogador que clicou.\nfunction run(context) {\n  const cb = context.trigger || {};\n  const userid = cb.userid;\n  const callback = String(cb.callback || '');\n  if (!userid || callback.indexOf('spawn:') !== 0) return { skipped: true };\n\n  const prefab = callback.slice('spawn:'.length);\n  if (!prefab) return { skipped: 'no prefab' };\n\n  context.sendCommand('spawn_at_player', {\n    userid: userid, prefab: prefab, count: 1, offset_x: 4, offset_z: 0\n  });\n  return { boss: prefab };\n}"
+        }
+      }
+    },
+    {
+      "id": "warn",
+      "type": "action",
+      "position": { "x": 900, "y": 300 },
+      "data": {
+        "action_type": "announce",
+        "params": { "message": "{{cb.name}} invocou {{spawn.boss}}!" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_cmd", "source": "trg", "target": "cmd" },
+    { "id": "e_cmd_who", "source": "cmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_menu", "source": "isadmin", "target": "menu", "sourceHandle": "true" },
+    { "id": "e_click_isspawn", "source": "click", "target": "isspawn" },
+    { "id": "e_isspawn_spawn", "source": "isspawn", "target": "spawn", "sourceHandle": "true" },
+    { "id": "e_spawn_warn", "source": "spawn", "target": "warn" }
+  ]
+}

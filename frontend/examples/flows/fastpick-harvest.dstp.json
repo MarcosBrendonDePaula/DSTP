@@ -1,0 +1,39 @@
+{
+  "name": "Fastpick — colheita instantânea (bônus no inventário)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_harvest", "alias": "harvest" }
+    },
+    {
+      "id": "pick",
+      "type": "script",
+      "position": { "x": 360, "y": 0 },
+      "data": {
+        "action_type": "script",
+        "params": {
+          "code": "// Fastpick: quando o jogador colhe algo (player_harvest já é instantâneo\n// no DST), entrega o fruto correspondente direto no inventário dele.\n// `source` é o prefab do objeto colhido (ex: berrybush, flower).\n//\n// Ajuste o mapa abaixo à vontade: source -> { prefab, count }.\nfunction run(context) {\n  const t = context.trigger || {};\n  const userid = t.userid;\n  const source = String(t.source || '').toLowerCase();\n  if (!userid) return { skipped: 'no userid' };\n\n  // Mapa colhido -> item entregue. count = quanto dar de bônus.\n  const MAP = {\n    berrybush:        { prefab: 'berries', count: 1 },\n    berrybush2:       { prefab: 'berries', count: 1 },\n    berrybush_juicy:  { prefab: 'berries_juicy', count: 1 },\n    flower:           { prefab: 'petals', count: 1 },\n    flower_evil:      { prefab: 'petals_evil', count: 1 },\n    cave_banana_tree: { prefab: 'cave_banana', count: 1 },\n    reeds:            { prefab: 'cutreeds', count: 1 },\n    grass:            { prefab: 'cutgrass', count: 1 },\n    sapling:          { prefab: 'twigs', count: 1 },\n    marsh_bush:       { prefab: 'twigs', count: 1 }\n  };\n\n  const hit = MAP[source];\n  if (!hit) return { skipped: 'source nao mapeado', source };\n\n  context.sendCommand('give_item', { userid: userid, prefab: hit.prefab, count: hit.count });\n  return { gave: hit.prefab, count: hit.count, source: source };\n}"
+        }
+      }
+    },
+    {
+      "id": "notify",
+      "type": "action",
+      "position": { "x": 720, "y": 0 },
+      "data": {
+        "action_type": "ui_notification",
+        "params": {
+          "userid": "{{harvest.userid}}",
+          "text": "Fastpick: +{{pick.count}} {{pick.gave}}",
+          "duration": "2"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_pick", "source": "trg", "target": "pick" },
+    { "id": "e_pick_notify", "source": "pick", "target": "notify" }
+  ]
+}

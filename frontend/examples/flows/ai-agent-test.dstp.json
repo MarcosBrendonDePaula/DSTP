@@ -1,0 +1,24 @@
+{
+  "name": "AI Agent Test (chat -> announce)",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "chat_message" } },
+    {
+      "id": "ai",
+      "type": "ai_agent",
+      "position": { "x": 0, "y": 200 },
+      "data": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "api_key": "{{environment.prod.OPENAI_KEY}}",
+        "system": "You are a friendly Don't Starve Together server assistant. When a player chats, respond with a short in-game announcement by calling the announce tool. Keep it under ~80 chars, plain text, no emojis.",
+        "prompt": "A player said in chat: \"{{trigger.message}}\". React with the announce tool.",
+        "max_steps": "3"
+      }
+    },
+    { "id": "ann", "type": "action", "position": { "x": 360, "y": 200 }, "data": { "action_type": "announce", "params": { "message": "" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_ai", "source": "trg", "target": "ai" },
+    { "id": "e_ann_ai", "source": "ann", "target": "ai", "targetHandle": "tools" }
+  ]
+}
