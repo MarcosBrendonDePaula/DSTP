@@ -39,6 +39,7 @@ export const TRIGGER_EVENTS = [
   { value: 'player_work', label: '⛏ Player Work (chop/mine/hammer)', category: 'gathering' },
   { value: 'resource_gathered', label: '📦 Resource Gathered (loot drop)', category: 'gathering' },
   { value: 'player_harvest', label: '🌿 Player Harvest', category: 'gathering' },
+  { value: 'player_action_start', label: '▶ Começou Ação (colher/pick)', category: 'gathering' },
   { value: 'player_startfire', label: '🔥 Player Start Fire', category: 'gathering' },
   // World
   { value: 'new_day', label: '🌅 New Day', category: 'world' },

@@ -30,6 +30,12 @@ const ATTRIBUTES: Record<string, Builder> = {
 
   // Position reuses the existing teleport command.
   position: (rc, userid) => ({ command: 'teleport', data: { userid, x: num(rc, 'x'), z: num(rc, 'z') } }),
+
+  // Tags — generic player-tag mutation (e.g. fastpicker). `mode` on/off = add/remove.
+  tag: (rc, userid) => ({
+    command: rc.param('mode') === 'off' ? 'remove_tag' : 'add_tag',
+    data: { userid, tag: String(rc.resolve(rc.param('value')) || '') },
+  }),
 }
 
 function vital(command: string, rc: NodeRunContext, userid: string) {

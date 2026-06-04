@@ -6,6 +6,20 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [0.5.0]
+
+### Added
+- `call_component` command — invoke any method of any component on a player
+  (`component`, `method`, `args[]`; the sentinel `"{{self}}"` in args becomes the
+  player). This is admin-power (RCE-equivalent on the server, same trust class as
+  the `script` node / `execute` command) — gate it in the flow with
+  `condition {{player.admin}}==true`. Contained by the command pcall (bad
+  component/method just logs, never crashes). Lets flows program real gameplay
+  mutations from the panel (e.g. movement speed, fastpick) without hardcoded Lua.
+- `add_tag` / `remove_tag` — generic player-tag mutation (e.g. `fastpicker`).
+- `player_action_start` event — fires when a player begins a long action
+  (harvest/pick), before it completes (the "began" event gathering lacked).
+
 ## [0.4.0]
 
 ### Added

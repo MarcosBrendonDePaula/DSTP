@@ -716,3 +716,36 @@ describe('FlowEngine e2e — player_state', () => {
     expect(commands[0]).toMatchObject({ type: 'teleport', data: { userid: 'KU_1', x: 10, z: -5 } })
   })
 })
+
+describe('FlowEngine e2e — call_component + tags', () => {
+  const cc = (id: string, params: any): FlowNode =>
+    ({ id, type: 'call_component', data: { params }, position: { x: 0, y: 0 } } as any)
+  const psNode = (id: string, params: any): FlowNode =>
+    ({ id, type: 'player_state', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  it('call_component sends component/method/args, keeping {{self}} literal', async () => {
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      cc('c', { userid: '{{trigger.userid}}', component: 'locomotor', method: 'SetExternalSpeedMultiplier', args: '["{{self}}","dstp",2]' }),
+    ]
+    await run(nodes, [edge('t', 'c')], { type: 'player_spawn', data: { userid: 'KU_1' } })
+    expect(commands[0]).toEqual({
+      serverId: SERVER,
+      type: 'call_component',
+      data: { userid: 'KU_1', component: 'locomotor', method: 'SetExternalSpeedMultiplier', args: ['{{self}}', 'dstp', 2] },
+    })
+  })
+
+  it('player_state tag add → add_tag, remove → remove_tag', async () => {
+    let nodes = [trigger('t', 'player_spawn'), psNode('p', { userid: '{{trigger.userid}}', attribute: 'tag', mode: 'on', value: 'fastpicker' })]
+    await run(nodes, [edge('t', 'p')], { type: 'player_spawn', data: { userid: 'KU_1' } })
+    expect(commands[0]).toMatchObject({ type: 'add_tag', data: { userid: 'KU_1', tag: 'fastpicker' } })
+
+    const repo = new FlowRepository(SERVER)
+    for (const f of repo.findAll()) repo.delete(f.id)
+    commands.length = 0
+    nodes = [trigger('t', 'player_spawn'), psNode('p', { userid: '{{trigger.userid}}', attribute: 'tag', mode: 'off', value: 'fastpicker' })]
+    await run(nodes, [edge('t', 'p')], { type: 'player_spawn', data: { userid: 'KU_1' } })
+    expect(commands[0]).toMatchObject({ type: 'remove_tag', data: { userid: 'KU_1', tag: 'fastpicker' } })
+  })
+})

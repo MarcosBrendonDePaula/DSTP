@@ -157,6 +157,8 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `random` | Pick a random list item or integer in [min,max] |
 | `log` | Write a template-resolved, secret-masked debug line to the server log |
 | `script` | JavaScript via `new Function()` (admin-only, runs in Node) |
+| `player_state` | Set a player's real state: temperature, moisture, fire, freeze, speed, health/hunger/sanity (percent or value), max health, position, add/remove tag. Backed by mod commands on real components (master sim). |
+| `call_component` | **Admin-power (RCE-equivalent on the server).** Invoke any method of any DST component on a player (`component`/`method`/`args`, `"{{self}}"` = the player). Same trust class as `script`/`execute` — gate it in the flow with `condition {{player.admin}}==true`. Contained by the mod's pcall (bad name just logs). |
 | `get_player` | Fetch player data by userid (health, hunger, sanity, position, inventory, **admin**) |
 | `find_player` | Search player by name (partial, strips command prefixes like `/tp`, `#tp`) |
 | `memory` | Persistent key-value per flow (SQLite) |
@@ -304,6 +306,7 @@ Each DST server has 1-2 shards: master (overworld) and caves. The mod sends `sha
 
 ### Security
 - `executeScript` in LiveAutomation uses `new Function()` — runs arbitrary JS with full server access. **Admin-only feature by design.**
+- `call_component` node + the mod's `execute` command run arbitrary methods/Lua on the **DST server**. Same trust class as `script`: no code-level admin gate — the gate is "an admin drew the flow" (`PanelAuthStore`). For dangerous mutations, gate in the flow: `get_player → condition {{player.admin}}==true → call_component`. The mod's per-command `pcall` (`client.lua` `ExecuteCommand`) contains errors (bad component/method just logs, no server crash); it does NOT stop infinite loops or bad-state mutations.
 - `VisitURL` in modmain.lua only auto-opens URLs matching the configured `BACKEND_URL`.
 - No authentication on `/api/dst/sync` — trusted local network only (the DST mod posts here).
 - The **admin panel** is gated by per-server auth: a password (hashed in `panel_auth`) plus cookie sessions, authorized per `server_id`. Setup token is announced per server on first `/dst/sync`. In-game magic links (`/panel-auth/issue-link`) let an admin grant access from chat. See `PanelAuthStore.ts`.

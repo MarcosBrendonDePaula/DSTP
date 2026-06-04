@@ -12,10 +12,11 @@ const ATTRIBUTES = [
   { value: 'freeze', label: '❄ Congelar' },
   { value: 'speed', label: '🏃 Velocidade' },
   { value: 'position', label: '📍 Posição' },
+  { value: 'tag', label: '🏷 Tag' },
 ]
 
 const VITALS = new Set(['health', 'hunger', 'sanity'])
-const ONOFF = new Set(['fire', 'freeze'])
+const ONOFF = new Set(['fire', 'freeze', 'tag'])
 
 // Hint shown under the value field, per attribute.
 const HINTS: Record<string, string> = {
@@ -43,13 +44,15 @@ export const ui = function PlayerStateNode({ id, data, selected }: any) {
         <NodeSelect value={attribute} onChange={v => setParam('attribute', v)} options={ATTRIBUTES} />
       </NodeField>
 
-      {/* On/off attributes (fire, freeze) */}
+      {/* On/off attributes (fire, freeze, tag) */}
       {ONOFF.has(attribute) && (
-        <NodeField label="Estado">
+        <NodeField label={attribute === 'tag' ? 'Ação' : 'Estado'}>
           <NodeSelect
             value={mode === 'off' ? 'off' : 'on'}
             onChange={v => setParam('mode', v)}
-            options={[{ value: 'on', label: 'Ligar' }, { value: 'off', label: 'Desligar' }]}
+            options={attribute === 'tag'
+              ? [{ value: 'on', label: 'Adicionar' }, { value: 'off', label: 'Remover' }]
+              : [{ value: 'on', label: 'Ligar' }, { value: 'off', label: 'Desligar' }]}
           />
         </NodeField>
       )}
@@ -72,10 +75,10 @@ export const ui = function PlayerStateNode({ id, data, selected }: any) {
           <NodeInput value={data.params?.z || ''} onChange={v => setParam('z', v)} placeholder="z" />
         </div>
       ) : (
-        // freeze "off" has no value; everything else takes a value
-        !(ONOFF.has(attribute) && mode === 'off') && (
-          <NodeField label={VITALS.has(attribute) ? (mode === 'value' ? 'Valor' : 'Percent (0..1)') : 'Valor'}>
-            <NodeInput value={data.params?.value || ''} onChange={v => setParam('value', v)} placeholder={attribute === 'freeze' ? 'duração (s, opcional)' : 'valor'} />
+        // fire/freeze "off" take no value; tag always needs the tag name.
+        !(ONOFF.has(attribute) && mode === 'off' && attribute !== 'tag') && (
+          <NodeField label={attribute === 'tag' ? 'Tag' : VITALS.has(attribute) ? (mode === 'value' ? 'Valor' : 'Percent (0..1)') : 'Valor'}>
+            <NodeInput value={data.params?.value || ''} onChange={v => setParam('value', v)} placeholder={attribute === 'tag' ? 'fastpicker' : attribute === 'freeze' ? 'duração (s, opcional)' : 'valor'} />
           </NodeField>
         )
       )}

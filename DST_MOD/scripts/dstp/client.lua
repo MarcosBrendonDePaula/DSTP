@@ -654,6 +654,49 @@ local function RegisterBuiltinCommands()
         end
     end)
 
+    -- Tags: generic, safe-ish player mutation (fastpicker, insulated, ...).
+    DSTP.RegisterCommand("add_tag", function(data)
+        local player = FindPlayer(data.userid)
+        if player and data.tag then player:AddTag(tostring(data.tag)) end
+    end)
+
+    DSTP.RegisterCommand("remove_tag", function(data)
+        local player = FindPlayer(data.userid)
+        if player and data.tag then player:RemoveTag(tostring(data.tag)) end
+    end)
+
+    -- call_component: invoke any method of any component on the player. This is
+    -- ADMIN-POWER (RCE-equivalent on the server), same trust class as the `script`
+    -- node and the existing `execute` command — gate it in the FLOW with
+    -- get_player → condition {{player.admin}}==true. Contained by the outer pcall
+    -- (a bad component/method name just logs, never crashes). The sentinel
+    -- "{{self}}" in args is replaced by the player itself (many DST methods take
+    -- `inst` as the first arg, e.g. locomotor:SetExternalSpeedMultiplier(inst,k,m)).
+    DSTP.RegisterCommand("call_component", function(data)
+        local player = FindPlayer(data.userid)
+        if not (player and data.component and data.method) then return end
+        local comp = player.components[data.component]
+        if not comp then
+            LogError("call_component: no component '" .. tostring(data.component) .. "'")
+            return
+        end
+        local fn = comp[data.method]
+        if type(fn) ~= "function" then
+            LogError("call_component: '" .. tostring(data.component) .. "' has no method '" .. tostring(data.method) .. "'")
+            return
+        end
+        -- Resolve args: "{{self}}" → the player entity; everything else passed as-is.
+        local args = {}
+        local n = 0
+        if type(data.args) == "table" then
+            for i, a in ipairs(data.args) do
+                n = i
+                args[i] = (a == "{{self}}") and player or a
+            end
+        end
+        fn(comp, _G.unpack(args, 1, n))
+    end)
+
     DSTP.RegisterCommand("give_item", function(data)
         local player = FindPlayer(data.userid)
         if player and data.prefab then
@@ -1600,6 +1643,16 @@ RegisterPerPlayerEvents = function(player)
         DSTP.PushEvent("player_harvest", {
             userid = uid, name = pname,
             source = obj and obj.prefab or "unknown",
+        }, data)
+    end)
+
+    -- Player STARTED a long action (e.g. harvesting/picking). Fires at the start,
+    -- before the action completes — the "began" event that gathering otherwise
+    -- lacks (player_harvest fires only on completion).
+    player:ListenForEvent("startlongaction", function(inst, data)
+        if not evt_config.gathering then return end
+        DSTP.PushEvent("player_action_start", {
+            userid = uid, name = pname,
         }, data)
     end)
 
