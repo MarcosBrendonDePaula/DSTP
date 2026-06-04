@@ -13,6 +13,12 @@ import type { NodeHandler } from './types'
 
 import { meta as delayMeta } from '@shared/automation/nodes/logic/timing/delay/meta'
 import { handler as delayHandler } from '@shared/automation/nodes/logic/timing/delay/exec'
+import { meta as setVarMeta } from '@shared/automation/nodes/data/vars/set_variable/meta'
+import { handler as setVarHandler } from '@shared/automation/nodes/data/vars/set_variable/exec'
+import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_player/meta'
+import { handler as getPlayerHandler } from '@shared/automation/nodes/data/player/get_player/exec'
+import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
+import { handler as findPlayerHandler } from '@shared/automation/nodes/data/player/find_player/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -22,6 +28,9 @@ export interface BackendNodeEntry {
 // ── Registered node modules (one entry per migrated node) ──
 const ENTRIES: BackendNodeEntry[] = [
   { meta: delayMeta, handler: delayHandler },
+  { meta: setVarMeta, handler: setVarHandler },
+  { meta: getPlayerMeta, handler: getPlayerHandler },
+  { meta: findPlayerMeta, handler: findPlayerHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))

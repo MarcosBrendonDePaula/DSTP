@@ -1,6 +1,8 @@
-# Data (per-server SQLite DBs)
-data/
-frontend/data/
+# Data (per-server SQLite DBs). Anchored with a leading slash so it only matches
+# the runtime data dirs at the repo root / frontend root — NOT nested code folders
+# like app/shared/automation/nodes/data/ (a node category).
+/data/
+/frontend/data/
 
 # Dependencies
 node_modules/

@@ -12,6 +12,12 @@ import type { NodeOutputSchema } from '@shared/automation/outputSchema'
 
 import { meta as delayMeta } from '@shared/automation/nodes/logic/timing/delay/meta'
 import { ui as delayUi } from '@shared/automation/nodes/logic/timing/delay/ui'
+import { meta as setVarMeta } from '@shared/automation/nodes/data/vars/set_variable/meta'
+import { ui as setVarUi } from '@shared/automation/nodes/data/vars/set_variable/ui'
+import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_player/meta'
+import { ui as getPlayerUi } from '@shared/automation/nodes/data/player/get_player/ui'
+import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
+import { ui as findPlayerUi } from '@shared/automation/nodes/data/player/find_player/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -21,6 +27,9 @@ interface FrontendNodeEntry {
 // ── Registered node modules (one entry per migrated node) ──
 const ENTRIES: FrontendNodeEntry[] = [
   { meta: delayMeta, ui: delayUi },
+  { meta: setVarMeta, ui: setVarUi },
+  { meta: getPlayerMeta, ui: getPlayerUi },
+  { meta: findPlayerMeta, ui: findPlayerUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
