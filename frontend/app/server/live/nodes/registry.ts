@@ -21,6 +21,8 @@ import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/fin
 import { handler as findPlayerHandler } from '@shared/automation/nodes/data/player/find_player/exec'
 import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/player_state/meta'
 import { handler as playerStateHandler } from '@shared/automation/nodes/data/player/player_state/exec'
+import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/call_component/meta'
+import { handler as callComponentHandler } from '@shared/automation/nodes/data/player/call_component/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
@@ -73,6 +75,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: getPlayerMeta, handler: getPlayerHandler },
   { meta: findPlayerMeta, handler: findPlayerHandler },
   { meta: playerStateMeta, handler: playerStateHandler },
+  { meta: callComponentMeta, handler: callComponentHandler },
   { meta: memoryMeta, handler: memoryHandler },
   { meta: httpMeta, handler: httpHandler },
   { meta: scriptMeta, handler: scriptHandler },

@@ -20,6 +20,8 @@ import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/fin
 import { ui as findPlayerUi } from '@shared/automation/nodes/data/player/find_player/ui'
 import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/player_state/meta'
 import { ui as playerStateUi } from '@shared/automation/nodes/data/player/player_state/ui'
+import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/call_component/meta'
+import { ui as callComponentUi } from '@shared/automation/nodes/data/player/call_component/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
@@ -89,6 +91,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: getPlayerMeta, ui: getPlayerUi },
   { meta: findPlayerMeta, ui: findPlayerUi },
   { meta: playerStateMeta, ui: playerStateUi },
+  { meta: callComponentMeta, ui: callComponentUi },
   { meta: memoryMeta, ui: memoryUi },
   { meta: httpMeta, ui: httpUi },
   { meta: scriptMeta, ui: scriptUi },
