@@ -134,7 +134,8 @@ export const registryDefaults: Record<string, any> =
 export const registryOutputSchemas: Record<string, NodeOutputSchema> =
   Object.fromEntries(ENTRIES.filter(e => e.meta.outputSchema).map(e => [e.meta.type, e.meta.outputSchema!]))
 
-/** Palette catalog items for migrated, non-hidden nodes. */
+/** Palette catalog items for migrated, non-hidden nodes. `family` comes from the
+ *  node's own meta.kind — the node declares its menu family, no string guessing. */
 export const registryCatalog = ENTRIES
   .filter(e => !e.meta.hidden)
   .map(e => ({
@@ -142,6 +143,7 @@ export const registryCatalog = ENTRIES
     label: e.meta.label,
     description: e.meta.description,
     category: e.meta.category,
+    family: e.meta.kind,
     icon: e.meta.icon,
     accent: e.meta.accent ?? 'text-gray-400',
     data: e.meta.defaults,

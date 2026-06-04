@@ -49,9 +49,29 @@ type NodeCatalogItem = {
   label: string
   description: string
   category: string
+  family?: string   // node.meta.kind — the node declares its own menu family
   icon: string
   accent: string
   data?: Record<string, any>
+}
+
+// Canonical menu families, in display order. A node's family is its meta.kind;
+// for legacy catalog items (game events, action subtypes) that lack `kind`, we
+// fall back to matching the old `category` string.
+const CATEGORY_FAMILIES: { id: string; label: string; icon: string; kinds: string[]; legacyCategories: string[] }[] = [
+  { id: 'triggers', label: 'Gatilhos', icon: '⚡', kinds: ['trigger'], legacyCategories: ['Eventos do jogo', 'Gatilhos'] },
+  { id: 'logic', label: 'Lógica', icon: '🔀', kinds: ['logic'], legacyCategories: ['Logica'] },
+  { id: 'data', label: 'Dados', icon: '🗃', kinds: ['data'], legacyCategories: ['Dados'] },
+  { id: 'actions', label: 'Ações', icon: '🎯', kinds: ['action'], legacyCategories: ['Acoes', 'Acoes DSTP'] },
+  { id: 'ai', label: 'IA', icon: '🤖', kinds: ['ai'], legacyCategories: ['IA'] },
+  { id: 'ui', label: 'Interface (UI)', icon: '🎨', kinds: ['ui', 'ui-primitive'], legacyCategories: ['UI', 'UI Primitivos'] },
+]
+
+function familyFor(item: NodeCatalogItem): { id: string; label: string; icon: string } {
+  const fam = item.family
+    ? CATEGORY_FAMILIES.find(f => f.kinds.includes(item.family!))
+    : CATEGORY_FAMILIES.find(f => f.legacyCategories.includes(item.category))
+  return fam ?? { id: 'other', label: 'Outros', icon: '▢' }
 }
 
 const TRIGGER_CATALOG: NodeCatalogItem[] = TRIGGER_EVENTS.map(event => ({
@@ -95,6 +115,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   // Live preview of the node being dragged from the library, following the cursor
   // over the canvas. {type, data} + screen position; null when not dragging.
   const [dragPreview, setDragPreview] = useState<{ item: NodeCatalogItem; x: number; y: number } | null>(null)
+  // Catalog families start collapsed; click a header to expand. A search query
+  // auto-expands all (so results are visible).
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set())
   const draggingItemRef = useRef<NodeCatalogItem | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
 
@@ -206,10 +229,21 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       if (!query) return true
       return `${item.label} ${item.description} ${item.category} ${item.type}`.toLowerCase().includes(query)
     })
-    return visible.reduce<Record<string, NodeCatalogItem[]>>((acc, item) => {
-      ;(acc[item.category] ||= []).push(item)
+    // Group by canonical family, then return families in the defined order.
+    const byFamily = visible.reduce<Record<string, NodeCatalogItem[]>>((acc, item) => {
+      const fam = familyFor(item)
+      ;(acc[fam.id] ||= []).push(item)
       return acc
     }, {})
+    const order = [...CATEGORY_FAMILIES.map(f => f.id), 'other']
+    return order
+      .filter(id => byFamily[id]?.length)
+      .map(id => {
+        const meta = id === 'other'
+          ? { id, label: 'Outros', icon: '▢' }
+          : CATEGORY_FAMILIES.find(f => f.id === id)!
+        return { ...meta, items: byFamily[id] }
+      })
   }, [nodeSearch, catalogFilter])
 
   // Inject execution status + capture indicator into node data
@@ -492,7 +526,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                 <div>
                   <h2 className="text-lg font-semibold text-white">Adicionar etapa</h2>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Eventos, ações e UI ficam juntos aqui. Use busca ou filtros para achar rápido.
+                    Nodes agrupados por categoria. Use a busca ou os filtros para achar rápido.
                   </p>
                 </div>
                 <button onClick={() => setNodeDrawerOpen(false)} className="text-gray-400 hover:text-white text-lg">×</button>
@@ -520,11 +554,25 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                 autoFocus
               />
             </div>
-            <div className="flex-1 overflow-y-auto py-3">
-              {Object.entries(catalogGroups).map(([category, items]) => (
-                <div key={category} className="mb-2">
-                  <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400">{category}</div>
-                  {items.map(item => (
+            <div className="flex-1 overflow-y-auto py-2">
+              {catalogGroups.map(group => {
+                const open = nodeSearch.trim() !== '' || expandedFamilies.has(group.id)
+                return (
+                <div key={group.id} className="mb-1">
+                  <button
+                    onClick={() => setExpandedFamilies(prev => {
+                      const next = new Set(prev)
+                      next.has(group.id) ? next.delete(group.id) : next.add(group.id)
+                      return next
+                    })}
+                    className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-2.5 bg-[#0f0f0f]/95 backdrop-blur border-b border-white/5 hover:bg-white/[0.03] transition-colors"
+                  >
+                    <span className={`text-gray-500 text-[10px] transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
+                    <span className="text-sm">{group.icon}</span>
+                    <span className="text-[11px] uppercase tracking-wide font-semibold text-gray-300">{group.label}</span>
+                    <span className="ml-auto text-[10px] text-gray-600">{group.items.length}</span>
+                  </button>
+                  {open && group.items.map(item => (
                     // A real <div> (not <button>) — `draggable` on a button is
                     // unreliable across browsers (Firefox ignores it), which broke
                     // drag-to-canvas. Keep click-to-add via onClick + keyboard.
@@ -551,8 +599,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                     </div>
                   ))}
                 </div>
-              ))}
-              {Object.keys(catalogGroups).length === 0 && (
+                )
+              })}
+              {catalogGroups.length === 0 && (
                 <div className="text-sm text-gray-400 text-center py-10">Nenhum node encontrado.</div>
               )}
             </div>
