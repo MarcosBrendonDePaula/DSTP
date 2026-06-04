@@ -26,7 +26,19 @@ D(`_DSTP_MODULES = {}
    end`, 'shim')
 
 // Load the real submodules. Add new ones here as they're extracted.
-for (const mod of ['core', 'collectors', 'commands', 'events', 'chat', 'http']) {
+// ORDER MATTERS: events.lua (the facade) require()s every events/<cat> at module top
+// (eager), so all 14 events/* entries MUST load BEFORE 'events' or the require shim
+// throws "unexpected require". The dstp() helper resolves 'events/players.lua' on disk
+// and the key becomes "dstp/events/players" — exactly what the facade looks up.
+for (const mod of [
+  'core', 'collectors', 'commands',
+  // events submodules (must precede the 'events' facade):
+  'events/players', 'events/combat', 'events/crafting', 'events/inventory', 'events/health',
+  'events/survival', 'events/gathering', 'events/exploration', 'events/griefing', 'events/character',
+  'events/world', 'events/weather', 'events/boss', 'events/grief_world',
+  'events',  // facade — requires all of the above
+  'chat', 'http',
+]) {
   D(`_DSTP_MODULES["dstp/${mod}"] = (function()\n${dstp(`${mod}.lua`)}\nend)()`, `load ${mod}`)
 }
 // Stub land_claims (its own logic is tested elsewhere).
@@ -58,6 +70,15 @@ D(`
 
   -- Fire the world postinit → RegisterGameEvents → many inst:ListenForEvent calls.
   local listeners = {}
+  -- A fake already-connected player so RegisterGameEvents' AllPlayers loop exercises
+  -- the per-player fan-out (each events/<cat>.RegisterForPlayer). Captures into pl[].
+  local pl = {}
+  GLOBAL.AllPlayers = { {
+    userid = "KU_player1", name = "Tester", prefab = "wilson",
+    IsValid = function() return true end,
+    HasTag = function() return false end,
+    ListenForEvent = function(_, ev) pl[ev] = true end,
+  } }
   GLOBAL.TheWorld.meta = { session_identifier = "SESSIONID1234" }
   local _ran0 = false
   local worldInst = {
@@ -78,6 +99,13 @@ D(`
   assert(listeners["phasechanged"], "phase_changed listener (the #1 fix) not registered")
   assert(listeners["seasontick"], "season_changed listener not registered")
   assert(worldInst == _DSTP_MODULES["dstp/core"].world_inst, "core.world_inst not shared")
+  -- per-player fan-out wired: each events/<cat>.RegisterForPlayer ran for the fake player
+  assert(pl["killed"], "combat per-player listener not registered (events/combat fan-out)")
+  assert(pl["healthdelta"], "health per-player listener not registered (events/health fan-out)")
+  assert(pl["equip"], "inventory per-player listener not registered (events/inventory fan-out)")
+  assert(pl["oneat"], "survival per-player listener not registered (events/survival fan-out)")
+  assert(pl["gotosleep"], "character per-player listener not registered (events/character fan-out)")
+  assert(pl["onhammer"], "griefing per-player listener not registered (events/griefing fan-out)")
 
   local Core = _DSTP_MODULES["dstp/core"]
   assert(type(DSTP)=="table" and type(DSTP.Init)=="function", "DSTP public API broken")
