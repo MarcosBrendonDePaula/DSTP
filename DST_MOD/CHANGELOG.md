@@ -6,6 +6,16 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [0.4.0]
+
+### Added
+- Player-state commands (real components, master sim): `set_temperature`,
+  `set_moisture`, `ignite`/`extinguish`, `freeze`/`unfreeze`, `set_player_speed`
+  (locomotor multiplier), `set_health`/`set_hunger`/`set_sanity` (by percent or
+  exact value), `set_max_health`. Powers the new "Player State" flow node, which
+  lets flows control a player's temperature, wetness, fire, freezing, movement
+  speed and vitals — not just top-up (heal/feed) and teleport.
+
 ## [0.3.1]
 
 ### Fixed
