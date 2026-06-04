@@ -44,6 +44,7 @@ export function AutomationPage() {
   }, [editingFlow])
 
   const flows = (auto.$state as any)[`flows:${urlServer}`] || []
+  const folders = (auto.$state as any)[`folders:${urlServer}`] || []
   const logs = (auto.$state as any)[`logs:${urlServer}`] || []
   const captureData = (auto.$state as any)[`capture:${urlServer}`] || null
 
@@ -157,15 +158,30 @@ export function AutomationPage() {
     await auto.moveFlow({ flow_id: id, server_id: urlServer, folder_path, sort_order })
   }
 
-  // Distinct existing folder paths (for the editor's datalist suggestions).
+  // Registered folder paths (incl. empty ones) for the tree.
+  const folderPaths = useMemo(() => (folders as any[]).map(f => f.path as string), [folders])
+
+  // Distinct folder paths for the editor's datalist (registered + derived from flows).
   const folderSuggestions = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>(folderPaths)
     for (const f of flows as any[]) {
       const p = (f.folderPath ?? f.folder_path ?? '').trim()
       if (p) set.add(p)
     }
     return [...set].sort()
-  }, [flows])
+  }, [flows, folderPaths])
+
+  const createFolder = async () => {
+    const path = window.prompt('Nome da pasta (use "/" para aninhar, ex: Loja/Eventos):')
+    if (path && path.trim()) await auto.createFolder({ server_id: urlServer, path: path.trim() })
+  }
+
+  const deleteFolder = async (path: string) => {
+    const res: any = await auto.deleteFolder({ server_id: urlServer, path })
+    if (res && res.success === false && res.reason === 'not_empty') {
+      alert(`Não dá para excluir "${path}": ainda tem ${res.count} fluxo(s) dentro. Mova-os antes.`)
+    }
+  }
 
   const exportFlow = (flow: any) => {
     const exportData = {
@@ -388,7 +404,7 @@ export function AutomationPage() {
       <div className="flex gap-4">
         {/* Flows list */}
         <div className="flex-1">
-          {flows.length === 0 ? (
+          {flows.length === 0 && folderPaths.length === 0 ? (
             !auto.$connected ? (
               <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
                 <div className="text-2xl mb-2 animate-pulse">⏳</div>
@@ -411,17 +427,26 @@ export function AutomationPage() {
             )
           ) : (
             <div className="space-y-2">
-              {/* Search filter over the folder tree */}
-              <input
-                value={flowSearch}
-                onChange={e => setFlowSearch(e.target.value)}
-                placeholder="🔎 Buscar fluxo por nome..."
-                className="w-full bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
-              />
+              {/* Search filter + new folder */}
+              <div className="flex gap-2">
+                <input
+                  value={flowSearch}
+                  onChange={e => setFlowSearch(e.target.value)}
+                  placeholder="🔎 Buscar fluxo por nome..."
+                  className="flex-1 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:border-blue-400/40 focus:outline-none"
+                />
+                <button
+                  onClick={createFolder}
+                  className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 whitespace-nowrap transition-colors"
+                  title="Criar uma pasta (pode ficar vazia)"
+                >📁 Nova pasta</button>
+              </div>
               <FlowTree
                 flows={flows}
+                folders={folderPaths}
                 search={flowSearch}
                 onMove={moveFlow}
+                onDeleteFolder={deleteFolder}
                 renderFlow={(flow: any) => (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
                     <div className="flex items-center gap-3">

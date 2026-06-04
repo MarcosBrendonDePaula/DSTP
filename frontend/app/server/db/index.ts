@@ -1,6 +1,7 @@
 export { getDb } from './connection'
 export * from './schema'
 export { FlowRepository } from './repositories/FlowRepository'
+export { FolderRepository } from './repositories/FolderRepository'
 export { AutomationLogRepository } from './repositories/AutomationLogRepository'
 export { EventHistoryRepository } from './repositories/EventHistoryRepository'
 export { EventSchemaRepository } from './repositories/EventSchemaRepository'

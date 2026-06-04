@@ -9,6 +9,8 @@ export class LiveAutomation {
     'deleteFlow',
     'toggleFlow',
     'moveFlow',
+    'createFolder',
+    'deleteFolder',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',

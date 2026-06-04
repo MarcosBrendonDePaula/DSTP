@@ -50,6 +50,13 @@
       "when": 1780583509546,
       "tag": "0006_small_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1780584293723,
+      "tag": "0007_chemical_beast",
+      "breakpoints": true
     }
   ]
 }

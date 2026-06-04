@@ -21,18 +21,24 @@ type TreeNode = {
 const folderOf = (f: FlowLike) => (f.folderPath ?? f.folder_path ?? '') as string
 const orderOf = (f: FlowLike) => (f.sortOrder ?? f.sort_order ?? 0) as number
 
-function buildTree(flows: FlowLike[]): TreeNode {
+// Ensure a folder path (and ancestors) exists in the tree, returning the leaf node.
+function ensurePath(root: TreeNode, path: string): TreeNode {
+  let node = root
+  for (const seg of path.split('/').map(s => s.trim()).filter(Boolean)) {
+    const childPath = node.path ? `${node.path}/${seg}` : seg
+    if (!node.folders.has(seg)) node.folders.set(seg, { name: seg, path: childPath, folders: new Map(), flows: [] })
+    node = node.folders.get(seg)!
+  }
+  return node
+}
+
+function buildTree(flows: FlowLike[], registeredFolders: string[]): TreeNode {
   const root: TreeNode = { name: '', path: '', folders: new Map(), flows: [] }
+  // Registered (possibly empty) folders first, so they show even with no flows.
+  for (const p of registeredFolders) if (p.trim()) ensurePath(root, p.trim())
   for (const f of flows) {
     const path = folderOf(f).trim()
-    let node = root
-    if (path) {
-      for (const seg of path.split('/').map(s => s.trim()).filter(Boolean)) {
-        const childPath = node.path ? `${node.path}/${seg}` : seg
-        if (!node.folders.has(seg)) node.folders.set(seg, { name: seg, path: childPath, folders: new Map(), flows: [] })
-        node = node.folders.get(seg)!
-      }
-    }
+    const node = path ? ensurePath(root, path) : root
     node.flows.push(f)
   }
   // order flows within each folder by sortOrder
@@ -42,14 +48,16 @@ function buildTree(flows: FlowLike[]): TreeNode {
 }
 
 export function FlowTree({
-  flows, search, onMove, renderFlow,
+  flows, folders = [], search, onMove, onDeleteFolder, renderFlow,
 }: {
   flows: FlowLike[]
+  folders?: string[]
   search: string
   onMove: (flowId: string, folderPath: string, sortOrder: number) => void
+  onDeleteFolder?: (path: string) => void
   renderFlow: (flow: FlowLike) => React.ReactNode
 }) {
-  const tree = useMemo(() => buildTree(flows), [flows])
+  const tree = useMemo(() => buildTree(flows, folders), [flows, folders])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [dropTarget, setDropTarget] = useState<string | null>(null)
 
@@ -130,12 +138,20 @@ export function FlowTree({
           onDragOver={e => allow(e, headerKey)}
           onDragLeave={() => setDropTarget(null)}
           onDrop={e => onDropFolder(e, node.path, node.flows.length)}
-          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none text-gray-300 hover:bg-white/5 ${dropTarget === headerKey ? 'bg-blue-500/15 ring-1 ring-blue-400/40' : ''}`}
+          className={`group/folder flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none text-gray-300 hover:bg-white/5 ${dropTarget === headerKey ? 'bg-blue-500/15 ring-1 ring-blue-400/40' : ''}`}
         >
           <span className="text-[10px] text-gray-500 w-3">{isCollapsed ? '▶' : '▼'}</span>
           <span className="text-sm">📁</span>
           <span className="text-sm font-medium">{node.name}</span>
           <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500">{countAll(node)}</span>
+          <div className="flex-1" />
+          {onDeleteFolder && (
+            <button
+              onClick={e => { e.stopPropagation(); onDeleteFolder(node.path) }}
+              title="Excluir pasta (precisa estar vazia)"
+              className="text-[10px] text-gray-600 hover:text-red-400 px-1.5 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+            >🗑</button>
+          )}
         </div>
         {!isCollapsed && <div className="ml-3 mt-1 space-y-2 border-l border-white/5 pl-2">{body}</div>}
       </div>

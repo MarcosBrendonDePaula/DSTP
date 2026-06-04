@@ -8,7 +8,7 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
-import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge } from '../db'
+import { FlowRepository, FolderRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge } from '../db'
 import { invalidateAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { FlowEngine, type EngineHost } from './FlowEngine'
@@ -80,6 +80,8 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'deleteFlow',
     'toggleFlow',
     'moveFlow',
+    'createFolder',
+    'deleteFolder',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
@@ -137,13 +139,15 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // ─── Helpers ───────────────────────────────────────
 
   private flowRepo(serverId: string) { return new FlowRepository(serverId) }
+  private folderRepo(serverId: string) { return new FolderRepository(serverId) }
   private logRepo(serverId: string) { return new AutomationLogRepository(serverId) }
 
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
+    const folders = this.folderRepo(serverId).findAll()
     console.log(`[DSTP Automation] syncState(${serverId}): ${flows.length} flows, ${logs.length} logs`)
-    this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs } as any)
+    this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs, [`folders:${serverId}`]: folders } as any)
   }
 
   // ─── Flow CRUD ─────────────────────────────────────
@@ -182,6 +186,10 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       throw err
     }
 
+    // Register the folder so it sticks even if this flow later leaves it.
+    const fp = (flow.folderPath ?? flow.folder_path ?? '').trim?.() ?? ''
+    if (fp) this.folderRepo(flow.server_id).create(fp)
+
     invalidateAnalysis(flow.id)
     this._ensureEngine().ensureEventCategories(flow)
     this.syncState(flow.server_id)
@@ -216,13 +224,36 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     order?: Array<{ flow_id: string; folder_path: string; sort_order: number }>
   }) {
     const repo = this.flowRepo(payload.server_id)
+    const folders = this.folderRepo(payload.server_id)
     if (Array.isArray(payload.order) && payload.order.length) {
-      for (const o of payload.order) repo.move(o.flow_id, o.folder_path ?? '', o.sort_order ?? 0)
+      for (const o of payload.order) { repo.move(o.flow_id, o.folder_path ?? '', o.sort_order ?? 0); if (o.folder_path) folders.create(o.folder_path) }
     } else if (payload.flow_id) {
       repo.move(payload.flow_id, payload.folder_path ?? '', payload.sort_order ?? 0)
+      if (payload.folder_path) folders.create(payload.folder_path)
     } else {
       return { success: false, reason: 'no flow_id or order' }
     }
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Create an empty folder (and its ancestors). Lets the panel make a folder
+  // before any flow lives in it.
+  async createFolder(payload: { server_id: string; path: string }) {
+    const path = (payload.path || '').trim()
+    if (!path) return { success: false, reason: 'empty path' }
+    this.folderRepo(payload.server_id).create(path)
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Delete a folder. Blocked if any flow still lives in it or a subfolder — the
+  // user must empty/move those flows first (no accidental flow loss).
+  async deleteFolder(payload: { server_id: string; path: string }) {
+    const repo = this.folderRepo(payload.server_id)
+    const n = repo.flowCountUnder(payload.path)
+    if (n > 0) return { success: false, reason: 'not_empty', count: n }
+    repo.delete(payload.path)
     this.syncState(payload.server_id)
     return { success: true }
   }
