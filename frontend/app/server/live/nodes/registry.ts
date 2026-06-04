@@ -19,6 +19,12 @@ import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_
 import { handler as getPlayerHandler } from '@shared/automation/nodes/data/player/get_player/exec'
 import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
 import { handler as findPlayerHandler } from '@shared/automation/nodes/data/player/find_player/exec'
+import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
+import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
+import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
+import { handler as httpHandler } from '@shared/automation/nodes/actions/http/http_request/exec'
+import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
+import { handler as scriptHandler } from '@shared/automation/nodes/actions/code/script/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -31,6 +37,9 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: setVarMeta, handler: setVarHandler },
   { meta: getPlayerMeta, handler: getPlayerHandler },
   { meta: findPlayerMeta, handler: findPlayerHandler },
+  { meta: memoryMeta, handler: memoryHandler },
+  { meta: httpMeta, handler: httpHandler },
+  { meta: scriptMeta, handler: scriptHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))

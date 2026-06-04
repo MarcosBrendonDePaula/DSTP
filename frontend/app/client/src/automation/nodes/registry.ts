@@ -18,6 +18,12 @@ import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_
 import { ui as getPlayerUi } from '@shared/automation/nodes/data/player/get_player/ui'
 import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
 import { ui as findPlayerUi } from '@shared/automation/nodes/data/player/find_player/ui'
+import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
+import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
+import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
+import { ui as httpUi } from '@shared/automation/nodes/actions/http/http_request/ui'
+import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
+import { ui as scriptUi } from '@shared/automation/nodes/actions/code/script/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -30,6 +36,9 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: setVarMeta, ui: setVarUi },
   { meta: getPlayerMeta, ui: getPlayerUi },
   { meta: findPlayerMeta, ui: findPlayerUi },
+  { meta: memoryMeta, ui: memoryUi },
+  { meta: httpMeta, ui: httpUi },
+  { meta: scriptMeta, ui: scriptUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
