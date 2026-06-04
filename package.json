@@ -1,0 +1,13 @@
+{
+  "name": "dstp-mod-tooling",
+  "private": true,
+  "description": "Root-level dev tooling for the DST mod (Lua syntax check via luaparse, runtime smoke test via fengari). The FluxStack app lives in frontend/.",
+  "scripts": {
+    "smoke": "bun DST_MOD/scripts/dstp/test/smoke.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "fengari": "^0.1.5",
+    "luaparse": "^0.3.1"
+  }
+}
