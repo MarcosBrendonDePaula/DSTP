@@ -12,7 +12,7 @@
 //
 // Run under `bun test` (bun:sqlite + bun:test).
 import { describe, it, expect, beforeEach, afterAll } from 'bun:test'
-import { rmSync } from 'node:fs'
+import { rmSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FlowEngine, type EngineHost } from './FlowEngine'
 import { FlowRepository, type FlowNode, type FlowEdge } from '../db'
@@ -747,6 +747,37 @@ describe('FlowEngine e2e — call_component + tags', () => {
     nodes = [trigger('t', 'player_spawn'), psNode('p', { userid: '{{trigger.userid}}', attribute: 'tag', mode: 'off', value: 'fastpicker' })]
     await run(nodes, [edge('t', 'p')], { type: 'player_spawn', data: { userid: 'KU_1' } })
     expect(commands[0]).toMatchObject({ type: 'remove_tag', data: { userid: 'KU_1', tag: 'fastpicker' } })
+  })
+})
+
+describe('FlowEngine e2e — wallet (live money HUD)', () => {
+  const exDir = join(import.meta.dir, '../../../examples/flows/shop')
+  const openFlow = JSON.parse(readFileSync(join(exDir, 'wallet-open.dstp.json'), 'utf8'))
+  const giveFlow = JSON.parse(readFileSync(join(exDir, 'wallet-give.dstp.json'), 'utf8'))
+
+  it('player_spawn builds the wallet panel (ui_command tree) with an addressable saldo_txt', async () => {
+    await run(openFlow.nodes, openFlow.edges, { type: 'player_spawn', data: { userid: 'KU_5ZOnLvnc' } })
+    const ui = commands.find(c => c.type === 'ui_command')
+    expect(ui).toBeDefined()
+    expect(ui!.data.userid).toBe('KU_5ZOnLvnc')
+    expect(ui!.data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'wallet' })
+    // the addressable balance text is nested under the row
+    const row = ui!.data.cmd.tree.children.find((c: any) => c.type === 'row')
+    const txt = row.children.find((c: any) => c.id === 'saldo_txt')
+    expect(txt).toBeDefined()
+    // empty balance is normalized to 0 by the transform — NOT the literal
+    // "{{coins.value}}" template (resolveValue leaves null-leaf templates as-is).
+    expect(txt.text).toBe(0)
+    expect(String(txt.text)).not.toContain('{{')
+  })
+
+  it('!dar (admin) credits +100 and patches saldo_txt via ui_set', async () => {
+    setPlayers([{ userid: 'KU_5ZOnLvnc', name: 'MarcosBn', admin: true }])
+    await run(giveFlow.nodes, giveFlow.edges, { type: 'chat_message', data: { userid: 'KU_5ZOnLvnc', message: '!dar' } })
+    const ui = commands.filter(c => c.type === 'ui_command').pop()
+    expect(ui).toBeDefined()
+    expect(ui!.data.cmd).toMatchObject({ action: 'set', id: 'wallet', node: 'saldo_txt' })
+    expect(String(ui!.data.cmd.props.text)).toContain('100')
   })
 })
 

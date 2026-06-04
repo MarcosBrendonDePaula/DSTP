@@ -1,4 +1,4 @@
-import { UIBox, field, useParam } from '@client/src/automation/nodes/ui/shared'
+import { UIBox, field, selectField, ANCHOR_OPTIONS, useParam } from '@client/src/automation/nodes/ui/shared'
 
 // One node holding an entire UI tree (node.data.tree), edited in the
 // NodeDetailPanel tree editor. Keeps the canvas clean — no node-per-widget.
@@ -15,6 +15,7 @@ export const ui = function UIBuilderNode({ id, data, selected }: any) {
     <UIBox id={id} data={data} selected={selected} icon="🎨" label="UI Builder" isContainer={false}>
       {field('Player', data.params?.userid ?? '{{trigger.userid}}', v => set('userid', v), '{{trigger.userid}}')}
       {field('ID da UI', data.params?.id ?? '', v => set('id', v), 'loja')}
+      {selectField('Âncora (posição na tela)', data.params?.anchor ?? 'center', v => set('anchor', v), ANCHOR_OPTIONS)}
       <div className="text-[9px] text-gray-400 mt-1">
         {count > 0 ? `${count} componentes` : 'UI vazia'} — <span className="text-indigo-300">duplo-clique para editar</span>
       </div>

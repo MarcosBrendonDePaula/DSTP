@@ -50,6 +50,39 @@ export function field(label: string, value: string, onChange: (v: string) => voi
   )
 }
 
+// A labeled <select> for a fixed set of options. Mirrors field()'s styling.
+export function selectField(
+  label: string,
+  value: string,
+  onChange: (v: string) => void,
+  options: Array<{ value: string; label: string }>,
+) {
+  return (
+    <div key={label}>
+      <span className="text-[9px] text-gray-500 block mb-0.5">{label}</span>
+      <select
+        value={value} onChange={e => onChange(e.target.value)}
+        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none"
+      >
+        {options.map(o => <option key={o.value} value={o.value} className="bg-[#10101e]">{o.label}</option>)}
+      </select>
+    </div>
+  )
+}
+
+// Screen anchor positions supported by the mod renderer (ui_widgets AnchorOffset).
+export const ANCHOR_OPTIONS = [
+  { value: 'center', label: 'Centro' },
+  { value: 'top', label: 'Topo' },
+  { value: 'topleft', label: 'Topo-esquerda' },
+  { value: 'topright', label: 'Topo-direita' },
+  { value: 'left', label: 'Esquerda' },
+  { value: 'right', label: 'Direita' },
+  { value: 'bottom', label: 'Base' },
+  { value: 'bottomleft', label: 'Base-esquerda' },
+  { value: 'bottomright', label: 'Base-direita' },
+]
+
 // Update a single param key on data.params.
 export function useParam(id: string, data: any) {
   const updateNodeData = useNodeDataUpdater()
