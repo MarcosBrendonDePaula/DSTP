@@ -1,0 +1,69 @@
+{
+  "name": "!worker — corta/minera sem ferramenta (tag toughworker, admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "iscmd",
+      "type": "condition",
+      "position": { "x": 300, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "starts_with", "value": "!worker" }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": { "x": 600, "y": 0 },
+      "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" }
+    },
+    {
+      "id": "isadmin",
+      "type": "condition",
+      "position": { "x": 900, "y": 0 },
+      "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" }
+    },
+    {
+      "id": "wantsoff",
+      "type": "condition",
+      "position": { "x": 1200, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "off" }
+    },
+    {
+      "id": "turnoff",
+      "type": "player_state",
+      "position": { "x": 1500, "y": -120 },
+      "data": { "params": { "userid": "{{chat.userid}}", "attribute": "tag", "mode": "off", "value": "toughworker" } }
+    },
+    {
+      "id": "turnon",
+      "type": "player_state",
+      "position": { "x": 1500, "y": 120 },
+      "data": { "params": { "userid": "{{chat.userid}}", "attribute": "tag", "mode": "on", "value": "toughworker" } }
+    },
+    {
+      "id": "notifyoff",
+      "type": "action",
+      "position": { "x": 1800, "y": -120 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Tough worker DESLIGADO", "duration": "2" } }
+    },
+    {
+      "id": "notifyon",
+      "type": "action",
+      "position": { "x": 1800, "y": 120 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "Tough worker LIGADO (trabalha sem ferramenta)", "duration": "2" } }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_iscmd", "source": "trg", "target": "iscmd" },
+    { "id": "e_iscmd_who", "source": "iscmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_off", "source": "isadmin", "target": "wantsoff", "sourceHandle": "true" },
+    { "id": "e_off_turnoff", "source": "wantsoff", "target": "turnoff", "sourceHandle": "true" },
+    { "id": "e_off_turnon", "source": "wantsoff", "target": "turnon", "sourceHandle": "false" },
+    { "id": "e_turnoff_notify", "source": "turnoff", "target": "notifyoff" },
+    { "id": "e_turnon_notify", "source": "turnon", "target": "notifyon" }
+  ]
+}
