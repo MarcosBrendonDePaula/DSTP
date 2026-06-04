@@ -325,6 +325,7 @@ export function AutomationPage() {
       } catch { fail++ }
     }
     await auto.loadFlows({ server_id: urlServer })
+    setImportState(null)   // ensure the import modal is fully dismissed
     setImportResult(`Importação concluída: ${ok} ok${fail ? `, ${fail} falharam` : ''}.`)
   }
 
