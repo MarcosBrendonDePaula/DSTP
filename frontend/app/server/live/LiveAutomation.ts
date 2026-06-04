@@ -85,6 +85,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'reorderFolder',
     'moveFolder',
     'renameFolder',
+    'toggleFolder',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
@@ -283,6 +284,22 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     if (result === null) return { success: false, reason: 'invalid' }
     this.syncState(payload.server_id)
     return { success: true, newPath: result }
+  }
+
+  // Enable/disable all flows in a folder (and subfolders) at once.
+  async toggleFolder(payload: { server_id: string; path: string; enabled: boolean }) {
+    const repo = this.flowRepo(payload.server_id)
+    const ids = repo.findAll()
+      .filter(f => f.folderPath === payload.path || (f.folderPath ?? '').startsWith(payload.path + '/'))
+      .map(f => f.id)
+    const n = this.folderRepo(payload.server_id).setEnabledUnder(payload.path, payload.enabled)
+    // Mirror toggleFlow's side-effects: clear pending waits for flows being disabled.
+    if (!payload.enabled) {
+      const store = WorkflowInstanceStore.getInstance()
+      for (const id of ids) store.clearFlow(id)
+    }
+    this.syncState(payload.server_id)
+    return { success: true, count: n }
   }
 
   async loadFlows(payload: { server_id: string }) {

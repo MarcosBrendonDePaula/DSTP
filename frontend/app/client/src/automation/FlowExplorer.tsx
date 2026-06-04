@@ -18,6 +18,7 @@ type Props = {
   onCreateSubfolder?: (parentPath: string) => void
   onRenameFolder?: (path: string) => void
   onExportFolder?: (path: string) => void
+  onToggleFolder?: (path: string, enabled: boolean) => void
   renderFlow: (flow: FlowLike) => React.ReactNode
 }
 
@@ -27,12 +28,19 @@ const nodeByPath = (root: TreeNode, path: string): TreeNode | null => {
   for (const seg of path.split('/')) { node = node?.folders.get(seg); if (!node) return null }
   return node
 }
-const countAll = (n: TreeNode): number => n.flows.length + [...n.folders.values()].reduce((s, c) => s + countAll(c), 0)
+const isEnabled = (f: FlowLike) => (f as any).enabled !== false
+// { on, total } counting this folder + all subfolders.
+const tally = (n: TreeNode): { on: number; total: number } => {
+  let on = 0, total = 0
+  for (const f of n.flows) { total++; if (isEnabled(f)) on++ }
+  for (const c of n.folders.values()) { const t = tally(c); on += t.on; total += t.total }
+  return { on, total }
+}
 const childFoldersOf = (n: TreeNode) => [...n.folders.values()].sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name))
 
 export function FlowExplorer({
   flows, folders = [], search,
-  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, onExportFolder, renderFlow,
+  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, onExportFolder, onToggleFolder, renderFlow,
 }: Props) {
   const tree = useMemo(() => buildTree(flows, folders), [flows, folders])
   const [cwd, setCwd] = useState('')            // current folder path ("" = root)
@@ -97,8 +105,8 @@ export function FlowExplorer({
             </span>
           ) : <span className="w-3" />}
           <span>{node.path === '' ? '🗂' : '📁'}</span>
-          <span className="truncate">{node.path === '' ? 'Todos' : node.name}</span>
-          <span className="text-[9px] text-gray-500">{countAll(node)}</span>
+          <span className="truncate flex-1">{node.path === '' ? 'Todos' : node.name}</span>
+          {(() => { const t = tally(node); return <span className="text-[9px] text-gray-500" title="ligados / total">{t.on}/{t.total}</span> })()}
         </div>
         {isOpen(node.path) && subs.map(s => renderTreeNode(s, depth + 1))}
       </div>
@@ -191,8 +199,28 @@ export function FlowExplorer({
             >
               <span className="text-xl">📁</span>
               <span className="text-sm font-medium text-white flex-1 truncate">{s.name}</span>
-              <span className="text-[10px] text-gray-500">{countAll(s)} item(s)</span>
-              {onExportFolder && <button onClick={e => { e.stopPropagation(); onExportFolder(s.path) }} title="Exportar pasta (JSON)" className="text-[10px] text-gray-500 hover:text-white px-1">↗</button>}
+              {(() => {
+                const t = tally(s)
+                const allOn = t.total > 0 && t.on === t.total
+                return (
+                  <>
+                    <span className="text-[10px] text-gray-500" title="ligados / total">
+                      <span className="text-green-400">{t.on}</span>/{t.total}
+                    </span>
+                    {onToggleFolder && (
+                      // Same toggle switch the flows use — on = all enabled; click flips all.
+                      <button
+                        onClick={e => { e.stopPropagation(); onToggleFolder(s.path, !allOn) }}
+                        title={allOn ? 'Desligar todos' : 'Ligar todos'}
+                        className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${allOn ? 'bg-green-500/30' : 'bg-white/10'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full absolute top-0.5 transition-all ${allOn ? 'left-4 bg-green-400' : 'left-0.5 bg-gray-500'}`} />
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
+              {onExportFolder && <button onClick={e => { e.stopPropagation(); onExportFolder(s.path) }} title="Exportar pasta (JSON)" className="text-xs text-gray-500 hover:text-white px-1">⬇</button>}
               {onRenameFolder && <button onClick={e => { e.stopPropagation(); onRenameFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-white px-1">✏️</button>}
               {onDeleteFolder && <button onClick={e => { e.stopPropagation(); onDeleteFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-red-400 px-1">🗑</button>}
             </div>
@@ -229,7 +257,9 @@ export function FlowExplorer({
           <div className="fixed z-[81] min-w-[160px] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl py-1 text-xs text-gray-200" style={{ left: menu.x, top: menu.y }}>
             <button onClick={() => { onCreateSubfolder?.(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📁 Nova subpasta</button>
             <button onClick={() => { setCwd(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📂 Abrir</button>
-            {onExportFolder && <button onClick={() => { onExportFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">↗ Exportar pasta (JSON)</button>}
+            {onToggleFolder && <button onClick={() => { onToggleFolder(menu.path, true); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⏻ Ligar todos</button>}
+            {onToggleFolder && <button onClick={() => { onToggleFolder(menu.path, false); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⭘ Desligar todos</button>}
+            {onExportFolder && <button onClick={() => { onExportFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⬇ Exportar pasta (JSON)</button>}
             {onRenameFolder && <button onClick={() => { onRenameFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">✏️ Renomear</button>}
             {onDeleteFolder && <button onClick={() => { onDeleteFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-red-500/15 text-red-300">🗑 Excluir</button>}
           </div>

@@ -114,6 +114,20 @@ export class FolderRepository {
     return rows.filter(r => r.fp === path || (r.fp ?? '').startsWith(path + '/')).length
   }
 
+  // Enable/disable EVERY flow in this folder and its subfolders. Returns how many
+  // flows were touched.
+  setEnabledUnder(path: string, enabled: boolean): number {
+    const prefix = path + '/'
+    const rows = this.db.select({ id: flows.id, fp: flows.folderPath }).from(flows)
+      .where(eq(flows.serverId, this.serverId))
+      .all()
+      .filter(r => r.fp === path || (r.fp ?? '').startsWith(prefix))
+    for (const r of rows) {
+      this.db.update(flows).set({ enabled, updatedAt: new Date() }).where(eq(flows.id, r.id)).run()
+    }
+    return rows.length
+  }
+
   // Delete a folder and its registered subfolders. Caller must ensure it's empty
   // of flows (LiveAutomation enforces the block-if-not-empty rule).
   delete(path: string) {

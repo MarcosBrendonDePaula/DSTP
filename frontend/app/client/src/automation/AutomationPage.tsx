@@ -8,7 +8,7 @@ import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
 import { FlowExplorer } from './FlowExplorer'
-import { PromptModal, ConfirmModal } from './FlowModal'
+import { PromptModal, ConfirmModal, ImportModal } from './FlowModal'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
@@ -32,6 +32,9 @@ export function AutomationPage() {
   // Subfolder/rename prompt: { mode, path } — path is the parent (subfolder) or the
   // folder being renamed.
   const [folderPrompt, setFolderPrompt] = useState<{ mode: 'subfolder' | 'rename'; path: string } | null>(null)
+  // Import flow: a parsed bundle awaiting a destination folder + a result message.
+  const [importState, setImportState] = useState<{ flows: any[]; suggested: string } | null>(null)
+  const [importResult, setImportResult] = useState<string | null>(null)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -200,6 +203,10 @@ export function AutomationPage() {
     await auto.renameFolder({ server_id: urlServer, path, new_name: newName })
   }
 
+  const toggleFolder = async (path: string, enabled: boolean) => {
+    await auto.toggleFolder({ server_id: urlServer, path, enabled })
+  }
+
   // Resolve the folderPrompt (subfolder create OR rename) with the typed value.
   const submitFolderPrompt = async (value: string) => {
     if (!folderPrompt) return
@@ -268,75 +275,57 @@ export function AutomationPage() {
       try {
         const parsed = JSON.parse(e.target?.result as string)
 
-        // Bundle: multiple flows at once (exported via "Exportar tudo" or a folder).
+        // Bundle (multiple flows / a folder export): open the import modal so the
+        // user picks a destination folder. The single-flow case becomes a 1-item
+        // bundle so it goes through the same picker.
         if (Array.isArray(parsed.flows)) {
-          // A folder bundle carries a `folder` root name; offer to import under a
-          // folder so the structure is recreated. Default to the original name.
-          let root = ''
-          if (parsed.folder || parsed.flows.some((f: any) => f.folderPath)) {
-            const suggested = parsed.folder || ''
-            root = (window.prompt(
-              `Importar ${parsed.flows.length} fluxo(s) dentro de qual pasta?\n(vazio = raiz; o conteúdo mantém a estrutura de subpastas)`,
-              suggested,
-            ) ?? '').trim()
-          } else if (!confirm(`Importar ${parsed.flows.length} fluxo(s)? Serão criados como novos (não sobrescrevem existentes).`)) {
-            return
-          }
-          let ok = 0, fail = 0
-          const base = Date.now()
-          if (root) await auto.createFolder({ server_id: urlServer, path: root })
-          for (let i = 0; i < parsed.flows.length; i++) {
-            const f = parsed.flows[i]
-            if (!f.nodes || !f.edges) { fail++; continue }
-            // Compose the final folder path: <root>/<relative folderPath>.
-            const rel = (f.folderPath ?? '').trim()
-            const folder_path = [root, rel].filter(Boolean).join('/')
-            try {
-              await auto.saveFlow({
-                flow: {
-                  id: `flow_${base}_${i}`,
-                  name: f.name || `Fluxo ${i + 1}`,
-                  enabled: false,
-                  server_id: urlServer,
-                  nodes: f.nodes,
-                  edges: f.edges,
-                  created_at: base + i,
-                  trigger_count: 0,
-                  folder_path,
-                }
-              })
-              ok++
-            } catch { fail++ }
-          }
-          await auto.loadFlows({ server_id: urlServer })
-          alert(`Importação concluída: ${ok} ok, ${fail} falharam.`)
+          setImportState({ flows: parsed.flows, suggested: parsed.folder || '' })
           return
         }
-
-        // Single flow (legacy format)
-        if (!parsed.nodes || !parsed.edges) {
-          alert('Arquivo inválido: faltam nodes ou edges.')
+        if (parsed.nodes && parsed.edges) {
+          setImportState({ flows: [{ name: parsed.name || 'Fluxo Importado', nodes: parsed.nodes, edges: parsed.edges }], suggested: '' })
           return
         }
-        const id = `flow_${Date.now()}`
-        await auto.saveFlow({
-          flow: {
-            id,
-            name: parsed.name || 'Fluxo Importado',
-            enabled: false,
-            server_id: urlServer,
-            nodes: parsed.nodes,
-            edges: parsed.edges,
-            created_at: Date.now(),
-            trigger_count: 0,
-          }
-        })
-        await auto.loadFlows({ server_id: urlServer })
+        setImportResult('Arquivo inválido: faltam nodes ou edges.')
       } catch (err: any) {
-        alert(`Erro ao importar: ${err.message}`)
+        setImportResult(`Erro ao importar: ${err.message}`)
       }
     }
     reader.readAsText(file)
+  }
+
+  // Run the actual import into the chosen root folder; subfolder structure inside
+  // each flow's folderPath is kept relative to that root.
+  const runImport = async (root: string) => {
+    const bundle = importState
+    if (!bundle) return
+    let ok = 0, fail = 0
+    const base = Date.now()
+    if (root) await auto.createFolder({ server_id: urlServer, path: root })
+    for (let i = 0; i < bundle.flows.length; i++) {
+      const f = bundle.flows[i]
+      if (!f.nodes || !f.edges) { fail++; continue }
+      const rel = (f.folderPath ?? '').trim()
+      const folder_path = [root, rel].filter(Boolean).join('/')
+      try {
+        await auto.saveFlow({
+          flow: {
+            id: `flow_${base}_${i}`,
+            name: f.name || `Fluxo ${i + 1}`,
+            enabled: false,
+            server_id: urlServer,
+            nodes: f.nodes,
+            edges: f.edges,
+            created_at: base + i,
+            trigger_count: 0,
+            folder_path,
+          }
+        })
+        ok++
+      } catch { fail++ }
+    }
+    await auto.loadFlows({ server_id: urlServer })
+    setImportResult(`Importação concluída: ${ok} ok${fail ? `, ${fail} falharam` : ''}.`)
   }
 
   const exportAllFlows = () => {
@@ -491,6 +480,23 @@ export function AutomationPage() {
           onClose={() => setFolderWarning(null)}
         />
       )}
+      {importState && (
+        <ImportModal
+          count={importState.flows.length}
+          folders={folderSuggestions}
+          suggested={importState.suggested}
+          onConfirm={runImport}
+          onClose={() => setImportState(null)}
+        />
+      )}
+      {importResult && (
+        <ConfirmModal
+          title="Importação"
+          message={importResult}
+          confirmLabel="OK"
+          onClose={() => setImportResult(null)}
+        />
+      )}
       {folderPrompt && (
         <PromptModal
           title={folderPrompt.mode === 'subfolder' ? `Nova subpasta em "${folderPrompt.path}"` : `Renomear "${folderPrompt.path}"`}
@@ -554,6 +560,7 @@ export function AutomationPage() {
                 onCreateSubfolder={(parent) => setFolderPrompt({ mode: 'subfolder', path: parent })}
                 onRenameFolder={(path) => setFolderPrompt({ mode: 'rename', path })}
                 onExportFolder={exportFolder}
+                onToggleFolder={toggleFolder}
                 renderFlow={(flow: any) => (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
                     <div className="flex items-center gap-3">

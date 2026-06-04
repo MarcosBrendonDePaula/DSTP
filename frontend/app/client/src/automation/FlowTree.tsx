@@ -9,7 +9,7 @@ import { useMemo, useState, useCallback, useRef } from 'react'
 // The actual flow card markup is supplied by the parent via renderFlow(flow), so
 // this component owns only the tree + DnD, not the card's buttons.
 
-export type FlowLike = { id: string; name: string; folderPath?: string; folder_path?: string; sortOrder?: number; sort_order?: number }
+export type FlowLike = { id: string; name: string; enabled?: boolean; folderPath?: string; folder_path?: string; sortOrder?: number; sort_order?: number }
 
 export type FolderLike = { path: string; sortOrder?: number; sort_order?: number }
 

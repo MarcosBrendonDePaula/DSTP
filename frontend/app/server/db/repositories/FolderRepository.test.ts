@@ -73,6 +73,25 @@ describe('FolderRepository', () => {
     expect(folders().reparent('X', 'X/Y')).toBeNull()    // into descendant
   })
 
+  it('setEnabledUnder toggles every flow in the folder + subfolders', () => {
+    const s = `__test_bulk_${Date.now()}`
+    const fr = new FolderRepository(s)
+    const flr = new FlowRepository(s)
+    flr.save({ id: 'b1', name: 'b1', enabled: true, nodes: [], edges: [], folderPath: 'P' })
+    flr.save({ id: 'b2', name: 'b2', enabled: true, nodes: [], edges: [], folderPath: 'P/Sub' })
+    flr.save({ id: 'b3', name: 'b3', enabled: true, nodes: [], edges: [], folderPath: 'Other' })
+    const n = fr.setEnabledUnder('P', false)
+    expect(n).toBe(2)
+    expect(flr.findById('b1')!.enabled).toBe(false)
+    expect(flr.findById('b2')!.enabled).toBe(false)
+    expect(flr.findById('b3')!.enabled).toBe(true)  // untouched
+    fr.setEnabledUnder('P', true)
+    expect(flr.findById('b1')!.enabled).toBe(true)
+    for (const suffix of ['', '-shm', '-wal']) {
+      try { rmSync(join(process.cwd(), 'data', `${s}.sqlite`) + suffix) } catch { /* ignore */ }
+    }
+  })
+
   it('rename changes the leaf and cascades to subfolders + flows', () => {
     const s = `__test_rename_${Date.now()}`
     const fr = new FolderRepository(s)
