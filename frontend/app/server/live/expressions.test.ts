@@ -143,6 +143,18 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition({ field: 'name', operator: 'contains', value: 'xyz' }, ctx)).toBe(false)
   })
 
+  it('starts_with / ends_with anchor the match', () => {
+    const cmdCtx = { trigger: { message: '!ban Wilson' } }
+    expect(evaluateCondition({ field: 'message', operator: 'starts_with', value: '!ban' }, cmdCtx)).toBe(true)
+    expect(evaluateCondition({ field: 'message', operator: 'starts_with', value: 'ban' }, cmdCtx)).toBe(false)
+    // the false-positive starts_with fixes: contains '!ban' also matches '!banana'
+    const trap = { trigger: { message: '!banana split' } }
+    expect(evaluateCondition({ field: 'message', operator: 'contains', value: '!ban' }, trap)).toBe(true)
+    expect(evaluateCondition({ field: 'message', operator: 'starts_with', value: '!ban ' }, trap)).toBe(false)
+    expect(evaluateCondition({ field: 'name', operator: 'ends_with', value: 'son' }, ctx)).toBe(true)
+    expect(evaluateCondition({ field: 'name', operator: 'ends_with', value: 'Wil' }, ctx)).toBe(false)
+  })
+
   it('exists is true for present values including falsy ones', () => {
     expect(evaluateCondition({ field: 'name', operator: 'exists' }, ctx)).toBe(true)
     expect(evaluateCondition({ field: 'dead', operator: 'exists' }, ctx)).toBe(true) // false is present
