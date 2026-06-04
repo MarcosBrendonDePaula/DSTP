@@ -50,6 +50,12 @@ import { meta as uiBarMeta } from '@shared/automation/nodes/ui/primitives/ui_bar
 import { ui as uiBarUi } from '@shared/automation/nodes/ui/primitives/ui_bar/ui'
 import { meta as uiSpacerMeta } from '@shared/automation/nodes/ui/primitives/ui_spacer/meta'
 import { ui as uiSpacerUi } from '@shared/automation/nodes/ui/primitives/ui_spacer/ui'
+import { meta as uiMenuMeta } from '@shared/automation/nodes/ui/interactive/ui_menu/meta'
+import { ui as uiMenuUi } from '@shared/automation/nodes/ui/interactive/ui_menu/ui'
+import { meta as uiRuleMeta } from '@shared/automation/nodes/ui/interactive/ui_rule/meta'
+import { ui as uiRuleUi } from '@shared/automation/nodes/ui/interactive/ui_rule/ui'
+import { meta as aiMemoryMeta } from '@shared/automation/nodes/ai/memory/ai_memory/meta'
+import { ui as aiMemoryUi } from '@shared/automation/nodes/ai/memory/ai_memory/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -78,6 +84,9 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: uiButtonMeta, ui: uiButtonUi },
   { meta: uiBarMeta, ui: uiBarUi },
   { meta: uiSpacerMeta, ui: uiSpacerUi },
+  { meta: uiMenuMeta, ui: uiMenuUi },
+  { meta: uiRuleMeta, ui: uiRuleUi },
+  { meta: aiMemoryMeta, ui: aiMemoryUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──

@@ -5,7 +5,7 @@
 // (exec.ts) live in sibling files that the two sides import separately.
 import type { NodeOutputSchema } from './outputSchema'
 
-export type NodeKind = 'trigger' | 'action' | 'logic' | 'data' | 'ui' | 'ui-primitive'
+export type NodeKind = 'trigger' | 'action' | 'logic' | 'data' | 'ui' | 'ui-primitive' | 'ai'
 
 export interface NodeMeta {
   /** Unique node type id, e.g. 'delay', 'http_request'. Matches the folder name. */

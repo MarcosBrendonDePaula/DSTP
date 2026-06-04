@@ -35,6 +35,10 @@ import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_pane
 import { handler as uiPanelHandler } from '@shared/automation/nodes/ui/builder/ui_panel/exec'
 import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
 import { handler as aiAgentHandler } from '@shared/automation/nodes/ai/agent/ai_agent/exec'
+import { meta as uiMenuMeta } from '@shared/automation/nodes/ui/interactive/ui_menu/meta'
+import { handler as uiMenuHandler } from '@shared/automation/nodes/ui/interactive/ui_menu/exec'
+import { meta as uiRuleMeta } from '@shared/automation/nodes/ui/interactive/ui_rule/meta'
+import { handler as uiRuleHandler } from '@shared/automation/nodes/ui/interactive/ui_rule/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -55,6 +59,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: actionMeta, handler: actionHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },
+  { meta: uiMenuMeta, handler: uiMenuHandler },
+  { meta: uiRuleMeta, handler: uiRuleHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))
