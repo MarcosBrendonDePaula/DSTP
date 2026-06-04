@@ -258,13 +258,23 @@ function Core.ProcessCommands(commands)
 end
 
 -------------------------------------------------
--- Player helper
+-- Player helpers
 -------------------------------------------------
 function Core.FindPlayer(userid)
     for _, player in ipairs(Core._G.AllPlayers) do
         if player.userid == userid then return player end
     end
     return nil
+end
+
+-- Private message to a player via the _dstp_pm net_string (shared by the
+-- private_message command and the panel-link chat helper).
+function Core.SendPrivateMessage(player, message)
+    if not player or not player:IsValid() then return end
+    if player.player_classified and player.player_classified._dstp_pm then
+        player.player_classified._dstp_pm:set(message)
+        if Core.DEBUG then Core.Log("PM to " .. tostring(player.name) .. ": " .. message) end
+    end
 end
 
 -------------------------------------------------

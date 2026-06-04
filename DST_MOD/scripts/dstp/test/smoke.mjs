@@ -26,11 +26,14 @@ D(`_DSTP_MODULES = {}
    end`, 'shim')
 
 // Load the real submodules. Add new ones here as they're extracted.
-for (const mod of ['core', 'collectors']) {
+for (const mod of ['core', 'collectors', 'commands']) {
   D(`_DSTP_MODULES["dstp/${mod}"] = (function()\n${dstp(`${mod}.lua`)}\nend)()`, `load ${mod}`)
 }
 // Stub land_claims (its own logic is tested elsewhere).
-D(`_DSTP_MODULES["dstp/land_claims"] = { Init = function() return { IsProtected = function() return false end } end }`, 'stub land_claims')
+D(`_DSTP_MODULES["dstp/land_claims"] = { Init = function() return {
+     IsProtected=function() return false end, List=function() return {} end,
+     Add=function() end, Remove=function() end, Trust=function() end, OwnerAt=function() return nil end,
+   } end }`, 'stub land_claims')
 
 // Load client.lua (the glue) and run the boot path.
 D(`DSTP = (function()\n${dstp('client.lua')}\nend)()`, 'load client')
@@ -67,5 +70,14 @@ D(`
   local info = Collectors.GetServerInfo()
   assert(info.max_players == 6 and type(info.uptime)=="number", "GetServerInfo wrong: "..tostring(info.max_players))
   assert(type(Collectors.GetAllPlayersData()) == "table", "GetAllPlayersData not table")
-  print("✓ smoke: client loads, DSTP.Init runs, core populated, commands registered, collectors run, API intact")
+  -- commands count sanity + a handler actually runs (announce hits TheNet:Announce)
+  local ncmds = 0; for _ in pairs(Core.command_handlers) do ncmds = ncmds + 1 end
+  assert(ncmds >= 50, "expected ~55 commands, got "..ncmds)
+  local announced = false
+  GLOBAL.TheNet.Announce = function(_, msg) announced = (msg == "hi") end
+  Core.command_handlers["announce"]({ message = "hi" })
+  assert(announced, "announce handler did not run")
+  -- a claim command runs without error (LandClaims is the stub)
+  Core.command_handlers["claim_list"]({ token = "t" })
+  print("✓ smoke: client loads, Init runs, "..ncmds.." commands registered+runnable, collectors run, API intact")
 `, 'boot')
