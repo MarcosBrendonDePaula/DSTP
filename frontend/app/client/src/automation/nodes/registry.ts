@@ -56,6 +56,10 @@ import { meta as uiRuleMeta } from '@shared/automation/nodes/ui/interactive/ui_r
 import { ui as uiRuleUi } from '@shared/automation/nodes/ui/interactive/ui_rule/ui'
 import { meta as aiMemoryMeta } from '@shared/automation/nodes/ai/memory/ai_memory/meta'
 import { ui as aiMemoryUi } from '@shared/automation/nodes/ai/memory/ai_memory/ui'
+import { meta as triggerMeta } from '@shared/automation/nodes/triggers/game/trigger/meta'
+import { ui as triggerUi } from '@shared/automation/nodes/triggers/game/trigger/ui'
+import { meta as webhookMeta } from '@shared/automation/nodes/triggers/net/webhook/meta'
+import { ui as webhookUi } from '@shared/automation/nodes/triggers/net/webhook/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -87,6 +91,8 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: uiMenuMeta, ui: uiMenuUi },
   { meta: uiRuleMeta, ui: uiRuleUi },
   { meta: aiMemoryMeta, ui: aiMemoryUi },
+  { meta: triggerMeta, ui: triggerUi },
+  { meta: webhookMeta, ui: webhookUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──

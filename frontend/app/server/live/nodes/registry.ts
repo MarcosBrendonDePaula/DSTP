@@ -40,6 +40,11 @@ import { handler as uiMenuHandler } from '@shared/automation/nodes/ui/interactiv
 import { meta as uiRuleMeta } from '@shared/automation/nodes/ui/interactive/ui_rule/meta'
 import { handler as uiRuleHandler } from '@shared/automation/nodes/ui/interactive/ui_rule/exec'
 
+// Triggers have NO exec (entry points matched in evaluateEvent); meta only, for
+// FlowAnalyzer's isTrigger flag.
+import { meta as triggerMeta } from '@shared/automation/nodes/triggers/game/trigger/meta'
+import { meta as webhookMeta } from '@shared/automation/nodes/triggers/net/webhook/meta'
+
 export interface BackendNodeEntry {
   meta: NodeMeta
   handler: NodeHandler
@@ -63,6 +68,9 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: uiRuleMeta, handler: uiRuleHandler },
 ]
 
+// Trigger metas — no handler (entry points), kept apart from the dispatch ENTRIES.
+const TRIGGER_METAS: NodeMeta[] = [triggerMeta, webhookMeta]
+
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))
 
 /** Lookup a migrated node by type. Returns undefined for legacy/unmigrated nodes. */
@@ -70,7 +78,7 @@ export function getNodeEntry(type: string): BackendNodeEntry | undefined {
   return registry.get(type)
 }
 
-/** All registered metas (for FlowAnalyzer trigger/pausable flags). */
+/** All registered metas incl. triggers (for FlowAnalyzer trigger/pausable flags). */
 export function allNodeMetas(): NodeMeta[] {
-  return ENTRIES.map(e => e.meta)
+  return [...ENTRIES.map(e => e.meta), ...TRIGGER_METAS]
 }
