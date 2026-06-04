@@ -29,6 +29,9 @@ export function AutomationPage() {
   const [flowSearch, setFlowSearch] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
   const [folderWarning, setFolderWarning] = useState<string | null>(null)
+  // Subfolder/rename prompt: { mode, path } — path is the parent (subfolder) or the
+  // folder being renamed.
+  const [folderPrompt, setFolderPrompt] = useState<{ mode: 'subfolder' | 'rename'; path: string } | null>(null)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -182,6 +185,28 @@ export function AutomationPage() {
     const res: any = await auto.deleteFolder({ server_id: urlServer, path })
     if (res && res.success === false && res.reason === 'not_empty') {
       setFolderWarning(`Não dá para excluir a pasta "${path}": ainda tem ${res.count} fluxo(s) dentro.\nMova-os para outra pasta antes de excluir.`)
+    }
+  }
+
+  const moveFolder = async (path: string, newParent: string) => {
+    await auto.moveFolder({ server_id: urlServer, path, new_parent: newParent })
+  }
+
+  const reorderFolder = async (path: string, sortOrder: number) => {
+    await auto.reorderFolder({ server_id: urlServer, path, sort_order: sortOrder })
+  }
+
+  const renameFolder = async (path: string, newName: string) => {
+    await auto.renameFolder({ server_id: urlServer, path, new_name: newName })
+  }
+
+  // Resolve the folderPrompt (subfolder create OR rename) with the typed value.
+  const submitFolderPrompt = async (value: string) => {
+    if (!folderPrompt) return
+    if (folderPrompt.mode === 'subfolder') {
+      await auto.createFolder({ server_id: urlServer, path: `${folderPrompt.path}/${value}` })
+    } else {
+      await renameFolder(folderPrompt.path, value)
     }
   }
 
@@ -420,6 +445,17 @@ export function AutomationPage() {
           onClose={() => setFolderWarning(null)}
         />
       )}
+      {folderPrompt && (
+        <PromptModal
+          title={folderPrompt.mode === 'subfolder' ? `Nova subpasta em "${folderPrompt.path}"` : `Renomear "${folderPrompt.path}"`}
+          label={folderPrompt.mode === 'subfolder' ? 'Nome da subpasta' : 'Novo nome'}
+          placeholder={folderPrompt.mode === 'subfolder' ? 'Eventos' : folderPrompt.path.split('/').pop()}
+          initialValue={folderPrompt.mode === 'rename' ? (folderPrompt.path.split('/').pop() || '') : ''}
+          confirmLabel={folderPrompt.mode === 'subfolder' ? 'Criar' : 'Renomear'}
+          onConfirm={submitFolderPrompt}
+          onClose={() => setFolderPrompt(null)}
+        />
+      )}
 
       <div className="flex gap-4">
         {/* Flows list */}
@@ -463,10 +499,14 @@ export function AutomationPage() {
               </div>
               <FlowTree
                 flows={flows}
-                folders={folderPaths}
+                folders={folders}
                 search={flowSearch}
                 onMove={moveFlow}
+                onMoveFolder={moveFolder}
+                onReorderFolder={reorderFolder}
                 onDeleteFolder={deleteFolder}
+                onCreateSubfolder={(parent) => setFolderPrompt({ mode: 'subfolder', path: parent })}
+                onRenameFolder={(path) => setFolderPrompt({ mode: 'rename', path })}
                 renderFlow={(flow: any) => (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
                     <div className="flex items-center gap-3">

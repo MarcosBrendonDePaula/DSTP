@@ -44,4 +44,47 @@ describe('FolderRepository', () => {
     expect(paths).not.toContain('Temp')
     expect(paths).not.toContain('Temp/Sub')
   })
+
+  it('reparent moves a folder under a new parent, cascading subfolders + flows', () => {
+    const s = `__test_reparent_${Date.now()}`
+    const fr = new FolderRepository(s)
+    const flr = new FlowRepository(s)
+    fr.create('A/Sub')
+    fr.create('B')
+    flr.save({ id: 'f1', name: 'f1', enabled: true, nodes: [], edges: [], folderPath: 'A' })
+    flr.save({ id: 'f2', name: 'f2', enabled: true, nodes: [], edges: [], folderPath: 'A/Sub' })
+
+    const np = fr.reparent('A', 'B')           // A → B/A
+    expect(np).toBe('B/A')
+    const paths = fr.findAll().map(x => x.path).sort()
+    expect(paths).toContain('B/A')
+    expect(paths).toContain('B/A/Sub')
+    expect(flr.findById('f1')!.folderPath).toBe('B/A')
+    expect(flr.findById('f2')!.folderPath).toBe('B/A/Sub')
+
+    for (const suffix of ['', '-shm', '-wal']) {
+      try { rmSync(join(process.cwd(), 'data', `${s}.sqlite`) + suffix) } catch { /* ignore */ }
+    }
+  })
+
+  it('reparent into itself or its own subtree is rejected', () => {
+    folders().create('X/Y')
+    expect(folders().reparent('X', 'X')).toBeNull()      // into itself
+    expect(folders().reparent('X', 'X/Y')).toBeNull()    // into descendant
+  })
+
+  it('rename changes the leaf and cascades to subfolders + flows', () => {
+    const s = `__test_rename_${Date.now()}`
+    const fr = new FolderRepository(s)
+    const flr = new FlowRepository(s)
+    fr.create('Velha/Sub')
+    flr.save({ id: 'r1', name: 'r1', enabled: true, nodes: [], edges: [], folderPath: 'Velha/Sub' })
+    const np = fr.rename('Velha', 'Nova')
+    expect(np).toBe('Nova')
+    expect(fr.findAll().map(x => x.path).sort()).toEqual(['Nova', 'Nova/Sub'])
+    expect(flr.findById('r1')!.folderPath).toBe('Nova/Sub')
+    for (const suffix of ['', '-shm', '-wal']) {
+      try { rmSync(join(process.cwd(), 'data', `${s}.sqlite`) + suffix) } catch { /* ignore */ }
+    }
+  })
 })

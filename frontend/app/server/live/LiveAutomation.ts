@@ -82,6 +82,9 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'moveFlow',
     'createFolder',
     'deleteFolder',
+    'reorderFolder',
+    'moveFolder',
+    'renameFolder',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
@@ -256,6 +259,30 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     repo.delete(payload.path)
     this.syncState(payload.server_id)
     return { success: true }
+  }
+
+  // Reorder a folder among its siblings (drag a folder up/down).
+  async reorderFolder(payload: { server_id: string; path: string; sort_order: number }) {
+    this.folderRepo(payload.server_id).setOrder(payload.path, payload.sort_order ?? 0)
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Move a folder under a new parent ("" = root), cascading the rename to its
+  // subfolders and the flows inside. Rejected if dropped into itself/its subtree.
+  async moveFolder(payload: { server_id: string; path: string; new_parent: string; sort_order?: number }) {
+    const result = this.folderRepo(payload.server_id).reparent(payload.path, payload.new_parent ?? '', payload.sort_order ?? 0)
+    if (result === null) return { success: false, reason: 'into_self' }
+    this.syncState(payload.server_id)
+    return { success: true, newPath: result }
+  }
+
+  // Rename a folder's leaf segment, cascading to subfolders + flows.
+  async renameFolder(payload: { server_id: string; path: string; new_name: string }) {
+    const result = this.folderRepo(payload.server_id).rename(payload.path, payload.new_name ?? '')
+    if (result === null) return { success: false, reason: 'invalid' }
+    this.syncState(payload.server_id)
+    return { success: true, newPath: result }
   }
 
   async loadFlows(payload: { server_id: string }) {
