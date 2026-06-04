@@ -34,6 +34,22 @@ import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_pane
 import { ui as uiPanelUi } from '@shared/automation/nodes/ui/builder/ui_panel/ui'
 import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
 import { ui as aiAgentUi } from '@shared/automation/nodes/ai/agent/ai_agent/ui'
+import { meta as uiColMeta } from '@shared/automation/nodes/ui/primitives/ui_col/meta'
+import { ui as uiColUi } from '@shared/automation/nodes/ui/primitives/ui_col/ui'
+import { meta as uiRowMeta } from '@shared/automation/nodes/ui/primitives/ui_row/meta'
+import { ui as uiRowUi } from '@shared/automation/nodes/ui/primitives/ui_row/ui'
+import { meta as uiTabsMeta } from '@shared/automation/nodes/ui/primitives/ui_tabs/meta'
+import { ui as uiTabsUi } from '@shared/automation/nodes/ui/primitives/ui_tabs/ui'
+import { meta as uiTextMeta } from '@shared/automation/nodes/ui/primitives/ui_text/meta'
+import { ui as uiTextUi } from '@shared/automation/nodes/ui/primitives/ui_text/ui'
+import { meta as uiIconMeta } from '@shared/automation/nodes/ui/primitives/ui_icon/meta'
+import { ui as uiIconUi } from '@shared/automation/nodes/ui/primitives/ui_icon/ui'
+import { meta as uiButtonMeta } from '@shared/automation/nodes/ui/primitives/ui_button/meta'
+import { ui as uiButtonUi } from '@shared/automation/nodes/ui/primitives/ui_button/ui'
+import { meta as uiBarMeta } from '@shared/automation/nodes/ui/primitives/ui_bar/meta'
+import { ui as uiBarUi } from '@shared/automation/nodes/ui/primitives/ui_bar/ui'
+import { meta as uiSpacerMeta } from '@shared/automation/nodes/ui/primitives/ui_spacer/meta'
+import { ui as uiSpacerUi } from '@shared/automation/nodes/ui/primitives/ui_spacer/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -54,6 +70,14 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },
+  { meta: uiColMeta, ui: uiColUi },
+  { meta: uiRowMeta, ui: uiRowUi },
+  { meta: uiTabsMeta, ui: uiTabsUi },
+  { meta: uiTextMeta, ui: uiTextUi },
+  { meta: uiIconMeta, ui: uiIconUi },
+  { meta: uiButtonMeta, ui: uiButtonUi },
+  { meta: uiBarMeta, ui: uiBarUi },
+  { meta: uiSpacerMeta, ui: uiSpacerUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
