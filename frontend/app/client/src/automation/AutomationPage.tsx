@@ -333,7 +333,7 @@ export function AutomationPage() {
 
   const exportAllFlows = () => {
     if (!flows || flows.length === 0) {
-      alert('Nenhum fluxo para exportar.')
+      setImportResult('Nenhum fluxo para exportar.')
       return
     }
     const bundle = {
@@ -347,6 +347,8 @@ export function AutomationPage() {
         enabled: f.enabled,
         nodes: f.nodes || [],
         edges: f.edges || [],
+        // Preserve the folder organization so import recreates the structure.
+        folderPath: f.folderPath ?? f.folder_path ?? '',
       })),
     }
     const json = JSON.stringify(bundle, null, 2)
