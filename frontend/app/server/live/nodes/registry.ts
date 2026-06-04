@@ -29,6 +29,10 @@ import { meta as uiBuilderMeta } from '@shared/automation/nodes/ui/builder/ui_bu
 import { handler as uiBuilderHandler } from '@shared/automation/nodes/ui/builder/ui_builder/exec'
 import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/condition/meta'
 import { handler as conditionHandler } from '@shared/automation/nodes/logic/branch/condition/exec'
+import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
+import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
+import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
+import { handler as uiPanelHandler } from '@shared/automation/nodes/ui/builder/ui_panel/exec'
 
 export interface BackendNodeEntry {
   meta: NodeMeta
@@ -46,6 +50,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: scriptMeta, handler: scriptHandler },
   { meta: uiBuilderMeta, handler: uiBuilderHandler },
   { meta: conditionMeta, handler: conditionHandler },
+  { meta: actionMeta, handler: actionHandler },
+  { meta: uiPanelMeta, handler: uiPanelHandler },
 ]
 
 const registry = new Map<string, BackendNodeEntry>(ENTRIES.map(e => [e.meta.type, e]))

@@ -28,6 +28,10 @@ import { meta as uiBuilderMeta } from '@shared/automation/nodes/ui/builder/ui_bu
 import { ui as uiBuilderUi } from '@shared/automation/nodes/ui/builder/ui_builder/ui'
 import { meta as conditionMeta } from '@shared/automation/nodes/logic/branch/condition/meta'
 import { ui as conditionUi } from '@shared/automation/nodes/logic/branch/condition/ui'
+import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
+import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
+import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
+import { ui as uiPanelUi } from '@shared/automation/nodes/ui/builder/ui_panel/ui'
 
 interface FrontendNodeEntry {
   meta: NodeMeta
@@ -45,6 +49,8 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: scriptMeta, ui: scriptUi },
   { meta: uiBuilderMeta, ui: uiBuilderUi },
   { meta: conditionMeta, ui: conditionUi },
+  { meta: actionMeta, ui: actionUi },
+  { meta: uiPanelMeta, ui: uiPanelUi },
 ]
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
