@@ -1,4 +1,4 @@
-import type { NodeMeta } from '../../nodeMeta'
+import type { NodeMeta } from '@shared/automation/nodeMeta'
 
 export const meta: NodeMeta = {
   type: 'delay',

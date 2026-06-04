@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { nodeTypes, TRIGGER_EVENTS } from './nodes'
 import { ACTION_TYPES } from './nodes/actions/actionTypes'
+import { registryDefaults, registryCatalog, registryTypes, registryMetaByType } from './nodes/registry'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 
 export interface CaptureData {
@@ -103,6 +104,13 @@ const NODE_CATALOG: NodeCatalogItem[] = [
   { type: 'ui_button', label: 'Button', description: 'Botao com callback.', category: 'UI Primitivos', icon: '●', accent: 'text-violet-300' },
   { type: 'ui_bar', label: 'Bar', description: 'Barra de progresso.', category: 'UI Primitivos', icon: '▰', accent: 'text-violet-300' },
   { type: 'ui_spacer', label: 'Spacer', description: 'Espacamento fixo.', category: 'UI Primitivos', icon: '␣', accent: 'text-violet-300' },
+]
+
+// Migrated nodes' palette entries come from the registry; drop their legacy
+// hardcoded entries so each node appears once.
+const NODE_CATALOG_MERGED: NodeCatalogItem[] = [
+  ...NODE_CATALOG.filter(item => !registryTypes.has(item.type)),
+  ...registryCatalog,
 ]
 
 export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
@@ -217,8 +225,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     const contextItems = catalogFilter === 'events'
       ? TRIGGER_CATALOG
       : catalogFilter === 'nodes'
-        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG]
-        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG]
+        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
+        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
     const visible = contextItems.filter(item => {
       if (!query) return true
       return `${item.label} ${item.description} ${item.category} ${item.type}`.toLowerCase().includes(query)
@@ -305,6 +313,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       ui_button: { params: { text: 'Comprar', callback: 'click' } },
       ui_bar: { params: { value: '1', max: '1' } },
       ui_spacer: { params: { height: '8' } },
+      // Migrated nodes' defaults come from the registry and override these.
+      ...registryDefaults,
     }
     return {
       id: genId(),
@@ -450,6 +460,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           />
           <MiniMap
             nodeColor={n => {
+              // Migrated nodes carry their color in the registry meta.
+              const regColor = n.type ? registryMetaByType[n.type]?.color : undefined
+              if (regColor) return regColor
               if (n.type === 'trigger') return '#22c55e'
               if (n.type === 'condition') return '#eab308'
               if (n.type === 'http_request') return '#06b6d4'

@@ -1,3 +1,4 @@
+import { registryNodeTypes } from './registry'
 import { TriggerNode } from './triggers/TriggerNode'
 import { WebhookNode } from './triggers/WebhookNode'
 import { ConditionNode } from './conditions/ConditionNode'
@@ -16,7 +17,9 @@ import { UIBuilderNode, UIPanelNode, UIColNode, UIRowNode, UITabsNode, UITextNod
 import { AIAgentNode } from './ai/AIAgentNode'
 import { AIMemoryNode } from './ai/AIMemoryNode'
 
-export const nodeTypes = {
+// Legacy node components (still hand-registered). Migrated nodes come from the
+// registry below and OVERRIDE these — so a node moved to a module just works.
+const legacyNodeTypes = {
   trigger: TriggerNode,
   webhook: WebhookNode,
   condition: ConditionNode,
@@ -44,6 +47,8 @@ export const nodeTypes = {
   ui_bar: UIBarNode,
   ui_spacer: UISpacerNode,
 }
+
+export const nodeTypes = { ...legacyNodeTypes, ...registryNodeTypes }
 
 export { TriggerNode, TRIGGER_EVENTS } from './triggers/TriggerNode'
 export { ConditionNode } from './conditions/ConditionNode'
