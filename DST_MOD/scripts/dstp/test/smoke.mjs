@@ -26,7 +26,7 @@ D(`_DSTP_MODULES = {}
    end`, 'shim')
 
 // Load the real submodules. Add new ones here as they're extracted.
-for (const mod of ['core', 'collectors', 'commands', 'events']) {
+for (const mod of ['core', 'collectors', 'commands', 'events', 'chat', 'http']) {
   D(`_DSTP_MODULES["dstp/${mod}"] = (function()\n${dstp(`${mod}.lua`)}\nend)()`, `load ${mod}`)
 }
 // Stub land_claims (its own logic is tested elsewhere).
