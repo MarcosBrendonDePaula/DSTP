@@ -26,6 +26,8 @@ import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_
 import { ui as landClaimUi } from '@shared/automation/nodes/data/world/land_claim/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
+import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
+import { ui as listFlowsUi } from '@shared/automation/nodes/data/store/list_flows/ui'
 import { meta as httpMeta } from '@shared/automation/nodes/actions/http/http_request/meta'
 import { ui as httpUi } from '@shared/automation/nodes/actions/http/http_request/ui'
 import { meta as scriptMeta } from '@shared/automation/nodes/actions/code/script/meta'
@@ -46,6 +48,8 @@ import { meta as randomMeta } from '@shared/automation/nodes/data/random/random/
 import { ui as randomUi } from '@shared/automation/nodes/data/random/random/ui'
 import { meta as transformMeta } from '@shared/automation/nodes/data/transform/transform/meta'
 import { ui as transformUi } from '@shared/automation/nodes/data/transform/transform/ui'
+import { meta as splitMeta } from '@shared/automation/nodes/data/transform/split/meta'
+import { ui as splitUi } from '@shared/automation/nodes/data/transform/split/ui'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
@@ -96,6 +100,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: callComponentMeta, ui: callComponentUi },
   { meta: landClaimMeta, ui: landClaimUi },
   { meta: memoryMeta, ui: memoryUi },
+  { meta: listFlowsMeta, ui: listFlowsUi },
   { meta: httpMeta, ui: httpUi },
   { meta: scriptMeta, ui: scriptUi },
   { meta: uiBuilderMeta, ui: uiBuilderUi },
@@ -106,6 +111,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: logMeta, ui: logUi },
   { meta: randomMeta, ui: randomUi },
   { meta: transformMeta, ui: transformUi },
+  { meta: splitMeta, ui: splitUi },
   { meta: actionMeta, ui: actionUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },

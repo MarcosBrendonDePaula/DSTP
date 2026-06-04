@@ -1,0 +1,116 @@
+{
+  "name": "!curar — cura o próprio player (admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!curar"
+      }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "params": {
+          "userid": "{{cmd.userid}}"
+        },
+        "alias": "player"
+      }
+    },
+    {
+      "id": "admin",
+      "type": "condition",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "field": "{{player.admin}}",
+        "operator": "equals",
+        "value": "true"
+      }
+    },
+    {
+      "id": "heal",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 0
+      },
+      "data": {
+        "action_type": "heal",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "amount": "max"
+        }
+      }
+    },
+    {
+      "id": "pm",
+      "type": "action",
+      "position": {
+        "x": 1500,
+        "y": 0
+      },
+      "data": {
+        "action_type": "private_message",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "message": "Você foi curado."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_who_true",
+      "source": "is",
+      "target": "who",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_who_admin",
+      "source": "who",
+      "target": "admin"
+    },
+    {
+      "id": "e_admin_heal_true",
+      "source": "admin",
+      "target": "heal",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_heal_pm",
+      "source": "heal",
+      "target": "pm"
+    }
+  ]
+}

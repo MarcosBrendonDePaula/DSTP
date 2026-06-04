@@ -17,6 +17,7 @@ export const TRIGGER_EVENTS = [
   { value: 'container_closed', label: '📦 Container Closed', category: 'griefing' },
   // Chat
   { value: 'chat_message', label: '💬 Chat Message', category: 'chat' },
+  { value: 'command', label: '⌨ Comando (!cmd) — suprime do chat', category: 'chat' },
   // Combat
   { value: 'player_kill', label: '⚔ Player Kill', category: 'combat' },
   { value: 'player_attacked', label: '🛡 Player Attacked', category: 'combat' },

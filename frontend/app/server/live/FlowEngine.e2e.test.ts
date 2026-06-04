@@ -129,6 +129,18 @@ describe('FlowEngine e2e — trigger → action', () => {
     expect(commands).toHaveLength(0)
   })
 
+  it('command trigger fires on a `command` event and carries the player data', async () => {
+    const nodes = [
+      trigger('t', 'command', { alias: 'cmd' }),
+      action('a', 'announce', { message: '{{cmd.name}} disse {{cmd.message}}' }),
+    ]
+    await run(nodes, [edge('t', 'a')], {
+      type: 'command',
+      data: { userid: 'KU_1', name: 'Wilson', prefab: 'wilson', message: '!oi mundo', is_command: true },
+    })
+    expect(commands[0]).toMatchObject({ type: 'announce', data: { message: 'Wilson disse !oi mundo' } })
+  })
+
   it('does NOT fire a disabled flow', async () => {
     const id = uid()
     const nodes = [trigger('t', 'player_death'), action('a', 'announce', { message: 'RIP' })]
@@ -778,6 +790,32 @@ describe('FlowEngine e2e — wallet (live money HUD)', () => {
     // patches BOTH the wallet HUD and the shop panel so neither goes stale
     expect(sets.map(c => c.data.cmd.id).sort()).toEqual(['shop', 'wallet'])
     expect(String(sets[0].data.cmd.props.text)).toContain('100')
+  })
+})
+
+describe('FlowEngine e2e — command example flows', () => {
+  const load = (f: string) => JSON.parse(readFileSync(join(import.meta.dir, `../../../examples/flows/commands/${f}`), 'utf8'))
+
+  it('cmd-eco: !eco repeats the text after the command (Split rest)', async () => {
+    const flow = load('cmd-eco.dstp.json')
+    await run(flow.nodes, flow.edges, { type: 'command', data: { userid: 'KU_1', name: 'Wilson', message: '!eco ola pessoal', is_command: true } })
+    const pm = commands.find(c => c.type === 'private_message')
+    expect(pm).toBeDefined()
+    expect(pm!.data.message).toBe('Eco: ola pessoal')
+  })
+
+  it('cmd-hora: only fires for !hora, carrying the player + world context', async () => {
+    const flow = load('cmd-hora.dstp.json')
+    await run(flow.nodes, flow.edges, { type: 'command', data: { userid: 'KU_1', name: 'Wilson', message: '!hora', phase: 'dusk', day: 5, season: 'autumn', is_command: true } })
+    const pm = commands.find(c => c.type === 'private_message')
+    expect(pm!.data).toMatchObject({ userid: 'KU_1' })
+    expect(pm!.data.message).toContain('dusk')
+  })
+
+  it('a !command flow ignores a non-matching command', async () => {
+    const flow = load('cmd-hora.dstp.json')
+    await run(flow.nodes, flow.edges, { type: 'command', data: { userid: 'KU_1', message: '!outracoisa', is_command: true } })
+    expect(commands).toHaveLength(0)
   })
 })
 

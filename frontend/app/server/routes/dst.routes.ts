@@ -39,6 +39,16 @@ export function handleDstSync(data: any) {
       try { schemaRepo.autoDetect(evt.type, evt.data || {}) } catch {}
       try { processAutomationEvent(server_id, evt) } catch (e) { console.error('[DSTP Automation]', e) }
 
+      // A chat message flagged as a command ("!...") ALSO fires a dedicated
+      // `command` event, carrying the same player data (userid/name/prefab) plus
+      // the raw message — so a `command` trigger can react without a chat filter.
+      // (No parse: use the Split node + get_player for args/admin/position.)
+      if (evt.type === 'chat_message' && evt.data?.is_command) {
+        const cmdEvt = { type: 'command', data: { ...evt.data } }
+        try { schemaRepo.autoDetect('command', cmdEvt.data) } catch {}
+        try { processAutomationEvent(server_id, cmdEvt) } catch (e) { console.error('[DSTP Automation]', e) }
+      }
+
       if (evt.raw) {
         const fs = require('fs')
         const path = require('path')

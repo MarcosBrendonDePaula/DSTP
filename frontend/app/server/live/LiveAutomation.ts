@@ -8,7 +8,7 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
-import { FlowRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge } from '../db'
+import { FlowRepository, FolderRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge } from '../db'
 import { invalidateAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { FlowEngine, type EngineHost } from './FlowEngine'
@@ -79,6 +79,13 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'saveFlow',
     'deleteFlow',
     'toggleFlow',
+    'moveFlow',
+    'createFolder',
+    'deleteFolder',
+    'reorderFolder',
+    'moveFolder',
+    'renameFolder',
+    'toggleFolder',
     'loadFlows',
     'clearLogs',
     'getEventSchemas',
@@ -136,13 +143,15 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   // ─── Helpers ───────────────────────────────────────
 
   private flowRepo(serverId: string) { return new FlowRepository(serverId) }
+  private folderRepo(serverId: string) { return new FolderRepository(serverId) }
   private logRepo(serverId: string) { return new AutomationLogRepository(serverId) }
 
   private syncState(serverId: string) {
     const flows = this.flowRepo(serverId).findAll()
     const logs = this.logRepo(serverId).findRecent()
+    const folders = this.folderRepo(serverId).findAll()
     console.log(`[DSTP Automation] syncState(${serverId}): ${flows.length} flows, ${logs.length} logs`)
-    this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs } as any)
+    this.setState({ [`flows:${serverId}`]: flows, [`logs:${serverId}`]: logs, [`folders:${serverId}`]: folders } as any)
   }
 
   // ─── Flow CRUD ─────────────────────────────────────
@@ -170,12 +179,20 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
         enabled: flow.enabled ?? true,
         nodes: flow.nodes || [],
         edges: flow.edges || [],
+        // Organization fields are partial-updated by the repo (undefined = leave
+        // as-is), so import/create can seed a folder without an editor save wiping it.
+        folderPath: flow.folderPath ?? flow.folder_path,
+        sortOrder: flow.sortOrder ?? flow.sort_order,
       })
       console.log(`[DSTP Automation] saveFlow: DB write OK for ${flow.id} (${nodesLen} nodes)`)
     } catch (err: any) {
       console.error(`[DSTP Automation] saveFlow ERROR:`, err.message, err.stack)
       throw err
     }
+
+    // Register the folder so it sticks even if this flow later leaves it.
+    const fp = (flow.folderPath ?? flow.folder_path ?? '').trim?.() ?? ''
+    if (fp) this.folderRepo(flow.server_id).create(fp)
 
     invalidateAnalysis(flow.id)
     this._ensureEngine().ensureEventCategories(flow)
@@ -198,6 +215,103 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     this.flowRepo(payload.server_id).toggle(payload.flow_id, payload.enabled)
     this.syncState(payload.server_id)
     return { success: true }
+  }
+
+  // Move/reorder a flow in the panel list (drag-and-drop). Touches only the
+  // folder + order, never nodes/edges. `order` lets a single drag renumber several
+  // siblings in one round-trip (one syncState).
+  async moveFlow(payload: {
+    server_id: string
+    flow_id?: string
+    folder_path?: string
+    sort_order?: number
+    order?: Array<{ flow_id: string; folder_path: string; sort_order: number }>
+  }) {
+    const repo = this.flowRepo(payload.server_id)
+    const folders = this.folderRepo(payload.server_id)
+    if (Array.isArray(payload.order) && payload.order.length) {
+      for (const o of payload.order) { repo.move(o.flow_id, o.folder_path ?? '', o.sort_order ?? 0); if (o.folder_path) folders.create(o.folder_path) }
+    } else if (payload.flow_id) {
+      repo.move(payload.flow_id, payload.folder_path ?? '', payload.sort_order ?? 0)
+      if (payload.folder_path) folders.create(payload.folder_path)
+    } else {
+      return { success: false, reason: 'no flow_id or order' }
+    }
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Create an empty folder (and its ancestors). Lets the panel make a folder
+  // before any flow lives in it.
+  async createFolder(payload: { server_id: string; path: string }) {
+    const path = (payload.path || '').trim()
+    if (!path) return { success: false, reason: 'empty path' }
+    this.folderRepo(payload.server_id).create(path)
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Delete a folder. Blocked if any flow still lives in it or a subfolder — the
+  // user must empty/move those flows first (no accidental flow loss). With
+  // `force`, the contained flows are MOVED TO ROOT (never deleted) and then the
+  // folder is removed.
+  async deleteFolder(payload: { server_id: string; path: string; force?: boolean }) {
+    const folders = this.folderRepo(payload.server_id)
+    const n = folders.flowCountUnder(payload.path)
+    if (n > 0 && !payload.force) return { success: false, reason: 'not_empty', count: n }
+    if (n > 0 && payload.force) {
+      // Move every flow under this folder out to root, then drop the folder.
+      const repo = this.flowRepo(payload.server_id)
+      const prefix = payload.path + '/'
+      for (const f of repo.findAll()) {
+        if (f.folderPath === payload.path || (f.folderPath ?? '').startsWith(prefix)) {
+          repo.move(f.id, '', f.sortOrder ?? 0)
+        }
+      }
+    }
+    folders.delete(payload.path)
+    this.syncState(payload.server_id)
+    return { success: true, moved: payload.force ? n : 0 }
+  }
+
+  // Reorder a folder among its siblings (drag a folder up/down).
+  async reorderFolder(payload: { server_id: string; path: string; sort_order: number }) {
+    this.folderRepo(payload.server_id).setOrder(payload.path, payload.sort_order ?? 0)
+    this.syncState(payload.server_id)
+    return { success: true }
+  }
+
+  // Move a folder under a new parent ("" = root), cascading the rename to its
+  // subfolders and the flows inside. Rejected if dropped into itself/its subtree.
+  async moveFolder(payload: { server_id: string; path: string; new_parent: string; sort_order?: number }) {
+    const result = this.folderRepo(payload.server_id).reparent(payload.path, payload.new_parent ?? '', payload.sort_order ?? 0)
+    if (result === null) return { success: false, reason: 'into_self' }
+    this.syncState(payload.server_id)
+    return { success: true, newPath: result }
+  }
+
+  // Rename a folder's leaf segment, cascading to subfolders + flows.
+  async renameFolder(payload: { server_id: string; path: string; new_name: string }) {
+    const result = this.folderRepo(payload.server_id).rename(payload.path, payload.new_name ?? '')
+    if (result === null) return { success: false, reason: 'invalid' }
+    this.syncState(payload.server_id)
+    return { success: true, newPath: result }
+  }
+
+  // Enable/disable all flows in a folder (and subfolders) at once.
+  async toggleFolder(payload: { server_id: string; path: string; enabled: boolean }) {
+    const repo = this.flowRepo(payload.server_id)
+    const ids = repo.findAll()
+      .filter(f => f.folderPath === payload.path || (f.folderPath ?? '').startsWith(payload.path + '/'))
+      .map(f => f.id)
+    const n = this.folderRepo(payload.server_id).setEnabledUnder(payload.path, payload.enabled)
+    // Mirror toggleFlow's side-effects: clear pending waits for flows being disabled.
+    if (!payload.enabled) {
+      const store = WorkflowInstanceStore.getInstance()
+      for (const id of ids) store.clearFlow(id)
+    }
+    this.syncState(payload.server_id)
+    return { success: true, count: n }
   }
 
   async loadFlows(payload: { server_id: string }) {

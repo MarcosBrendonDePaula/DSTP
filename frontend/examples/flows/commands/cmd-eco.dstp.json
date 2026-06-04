@@ -1,0 +1,79 @@
+{
+  "name": "!eco <texto> — repete o que vem depois (usa Split)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "event_type": "command",
+        "alias": "cmd"
+      }
+    },
+    {
+      "id": "is",
+      "type": "condition",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "field": "{{cmd.message}}",
+        "operator": "starts_with",
+        "value": "!eco"
+      }
+    },
+    {
+      "id": "sp",
+      "type": "split",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "params": {
+          "value": "{{cmd.message}}",
+          "separator": "",
+          "trim": "true"
+        },
+        "alias": "p"
+      }
+    },
+    {
+      "id": "pm",
+      "type": "action",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "action_type": "private_message",
+        "params": {
+          "userid": "{{cmd.userid}}",
+          "message": "Eco: {{p.rest}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_trg_is",
+      "source": "trg",
+      "target": "is"
+    },
+    {
+      "id": "e_is_sp_true",
+      "source": "is",
+      "target": "sp",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_sp_pm",
+      "source": "sp",
+      "target": "pm"
+    }
+  ]
+}

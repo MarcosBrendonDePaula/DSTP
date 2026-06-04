@@ -15,9 +15,32 @@ export const flows = sqliteTable('flows', {
   // environments.id; null means the flow has no default (only {{environment.x.y}}
   // explicit refs will resolve).
   defaultEnvironmentId: integer('default_environment_id'),
+  // Organization in the panel's flow list. folderPath is a "/"-separated path
+  // ("" = root, "Loja/Eventos" = nested); the tree is derived from these paths in
+  // the UI (no separate folders table). sortOrder is the manual order within a
+  // folder (tie-break: createdAt). Both mutated by FlowRepository.move via the
+  // drag-and-drop in AutomationPage.
+  folderPath: text('folder_path').notNull().default(''),
+  sortOrder: integer('sort_order').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+// ─── Flow Folders ────────────────────────────────────
+// Lets folders exist on their own (empty) so the panel can "create folder" before
+// any flow lives in it. A flow's membership is still its flows.folderPath string;
+// this table just registers folder paths that should appear even when empty. The
+// UI tree merges these with the paths derived from flows. `path` is the full
+// "/"-separated path; ("" root is implicit and never stored).
+export const flowFolders = sqliteTable('flow_folders', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  serverId: text('server_id').notNull(),
+  path: text('path').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, (t) => ({
+  uniqServerPath: uniqueIndex('flow_folders_server_path').on(t.serverId, t.path),
+}))
 
 // ─── Automation Logs ─────────────────────────────────
 
@@ -134,5 +157,6 @@ export interface FlowEdge {
 
 export type Flow = typeof flows.$inferSelect
 export type NewFlow = typeof flows.$inferInsert
+export type FlowFolder = typeof flowFolders.$inferSelect
 export type AutomationLog = typeof automationLogs.$inferSelect
 export type EventHistoryEntry = typeof eventHistory.$inferSelect
