@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useReactFlow, useStore, Handle, Position } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 // Models offered per provider (a sensible default list; the field is free-text
 // too, so any model id works).
@@ -21,7 +22,7 @@ const MODELS: Record<string, string[]> = {
 // runs them for real). The normal top handle is the flow entry; bottom is the
 // flow continuation after the agent finishes.
 export const ui = function AIAgentNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const set = useCallback((patch: Record<string, any>) => updateNodeData(id, { ...data, ...patch }), [id, data, updateNodeData])
 
   const provider = data.provider || 'anthropic'

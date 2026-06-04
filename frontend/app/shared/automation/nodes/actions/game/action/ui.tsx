@@ -1,10 +1,10 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 import { ACTION_TYPES } from '@client/src/automation/nodes/actions/actionTypes'
 
 export const ui = function ActionNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
 
   const updateAction = useCallback((action_type: string) => {
     const action = ACTION_TYPES.find(a => a.value === action_type)

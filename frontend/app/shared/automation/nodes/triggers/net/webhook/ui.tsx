@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 const METHODS = [
   { value: 'ANY', label: 'ANY (qualquer método)' },
@@ -14,7 +14,7 @@ const METHODS = [
 // Entry point fired by an inbound HTTP request, not a game event. The request
 // body/query/headers arrive in {{trigger.body}}, {{trigger.query}}, etc.
 export const ui = function WebhookNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const [copied, setCopied] = useState(false)
 
   const setParam = useCallback((key: string, val: string) => {

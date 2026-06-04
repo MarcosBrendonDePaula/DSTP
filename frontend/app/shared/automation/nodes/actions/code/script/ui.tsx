@@ -1,6 +1,7 @@
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react'
 import { BaseNode, NodeField } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 import Editor from '@monaco-editor/react'
 import { buildContextTypeDefinition } from '@client/src/automation/nodeOutputSchemas'
 
@@ -78,7 +79,7 @@ interface DSTPlayer {
 `
 
 export const ui = function ScriptNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const allNodes = useNodes()
   const allEdges = useEdges()
   const [expanded, setExpanded] = useState(false)

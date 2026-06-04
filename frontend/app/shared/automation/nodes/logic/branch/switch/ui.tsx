@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 export const ui = function SwitchNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const cases: { value: string }[] = Array.isArray(data.cases) ? data.cases : [{ value: '' }]
 
   const setField = useCallback((field: string) => {

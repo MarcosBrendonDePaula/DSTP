@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 const OPERATORS = [
   { value: 'equals', label: '== Igual' },
@@ -14,7 +14,7 @@ const OPERATORS = [
 ]
 
 export const ui = function FilterNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const update = useCallback((key: string, value: string) => {
     updateNodeData(id, { ...data, [key]: value })
   }, [id, data, updateNodeData])

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
-import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { Handle, Position } from '@xyflow/react'
+import { useNodeDataUpdater } from '../BaseNode'
 
 // Shared bits for the UI composition nodes. UI nodes describe STRUCTURE (a tree
 // the backend renders), not sequential actions. Each stores its props under
@@ -51,7 +52,7 @@ export function field(label: string, value: string, onChange: (v: string) => voi
 
 // Update a single param key on data.params.
 export function useParam(id: string, data: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   return useCallback((key: string, value: string) => {
     updateNodeData(id, { ...data, params: { ...data.params, [key]: value } })
   }, [id, data, updateNodeData])

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Node } from '@xyflow/react'
+import { ReactFlowProvider } from '@xyflow/react'
 import {
   triggerOutputSchemas,
   nodeOutputSchemas,
@@ -8,7 +9,8 @@ import {
 } from '../nodeOutputSchemas'
 import { TRIGGER_EVENTS } from '../nodes'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
-import { registryMetaByType } from '../nodes/registry'
+import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
+import { ConfigOnlyContext } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -252,7 +254,7 @@ const HTTP_METHODS = [
   { value: 'DELETE', label: 'DELETE' },
 ]
 
-function NodeConfigEditor({ type, data, updateData }: { type: string; data: Record<string, any>; updateData: (patch: Record<string, any>) => void }) {
+function NodeConfigEditor({ nodeId, type, data, updateData }: { nodeId: string; type: string; data: Record<string, any>; updateData: (patch: Record<string, any>) => void }) {
   const updateParam = (key: string, value: string) => {
     updateData({ params: { ...(data.params || {}), [key]: value } })
   }
@@ -538,6 +540,24 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
     )
   }
 
+  // Default: render the node's OWN ui.tsx (from the module registry) as the config
+  // editor — single source of truth. The modal renders OUTSIDE <ReactFlow>, so:
+  //  - wrap in a local ReactFlowProvider so the node's useReactFlow() calls don't
+  //    throw (its result is ignored — see useNodeDataUpdater),
+  //  - provide the real persist fn via ConfigOnlyContext (setNodes-backed),
+  //  - ConfigOnly makes BaseNode emit just the fields.
+  const RegistryNode = registryNodeTypes[type as keyof typeof registryNodeTypes]
+  if (RegistryNode) {
+    return (
+      <ReactFlowProvider>
+        <ConfigOnlyContext.Provider value={{ setNodeData: (_id, full) => updateData(full) }}>
+          <RegistryNode id={nodeId} data={data} selected={false} />
+        </ConfigOnlyContext.Provider>
+      </ReactFlowProvider>
+    )
+  }
+
+  // Last resort for any non-module type: generic param inputs.
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
       {Object.entries(data.params || {}).map(([key, value]) => (
@@ -632,7 +652,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
           <div className="flex min-h-0 flex-1">
             <aside className="w-[360px] shrink-0 border-r border-white/10 bg-[#0f0f0f] p-4 overflow-y-auto">
               <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Configuracao</h3>
-              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
             </aside>
             <div className="flex-1 overflow-y-auto p-4 min-h-0">
               <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
@@ -668,7 +688,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               <span className="text-[9px] text-gray-600">auto-save</span>
             </div>
             <div className="space-y-3">
-              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
             </div>
           </section>
 

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 // Menu node: a panel with a title + a list of clickable buttons. Each button
 // carries a `callback` string that comes back as a `ui_callback` trigger event
@@ -14,7 +14,7 @@ import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/Bas
 type Btn = { label: string; callback: string }
 
 export const ui = function MenuNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
 
   const buttons: Btn[] = Array.isArray(data.buttons) ? data.buttons : []
 

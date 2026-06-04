@@ -1,12 +1,12 @@
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 // ai_memory — the AI's own key/value store, used as a TOOL. Connect its output to
 // an ai_agent's `tools` handle. There's nothing to configure: the AI decides the
 // operation (save/get/list/delete), the key (free-form, e.g. "player:joe:house"
 // or "server:pvp") and the value at runtime.
 export const ui = function AIMemoryNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   return (
     <BaseNode
       type="ai_agent"

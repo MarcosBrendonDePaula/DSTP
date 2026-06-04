@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 // HUD Reativo (rules engine, client-side). Installs a declarative when/do rule
 // on the player's client. The rule reacts to LOCAL DST events (healthdelta,
@@ -57,7 +57,7 @@ function buildRule(data: any) {
 }
 
 export const ui = function HudRuleNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
 
   const sync = useCallback((patch: any) => {
     const next = { ...data, ...patch, action_type: 'rule_install' }

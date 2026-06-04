@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 export const ui = function RandomNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
   const setParam = useCallback((key: string, value: string) => {
     updateNodeData(id, { ...data, params: { ...data.params, [key]: value } })
   }, [id, data, updateNodeData])

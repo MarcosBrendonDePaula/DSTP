@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 // Canvas render for the delay node. Reads from params.delay_ms (new) but falls
 // back to the legacy flat data.delay_ms so old flows still display correctly.
 export const ui = function DelayNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
 
   const value = data.params?.delay_ms ?? data.delay_ms ?? '1000'
 

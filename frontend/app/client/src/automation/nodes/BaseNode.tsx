@@ -1,4 +1,26 @@
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { createContext, useContext } from 'react'
+
+// Config-only mode: when the detail modal renders a node's ui.tsx as its config
+// editor, it provides this context. `configOnly` makes BaseNode emit ONLY the
+// config fields (no handles/header/border). `setNodeData` is the persist function
+// — the modal renders OUTSIDE <ReactFlow>, so ui.tsx CANNOT use useReactFlow()
+// there; the modal passes a setNodes-backed updater instead. On the canvas the
+// context is absent and ui.tsx uses useReactFlow().updateNodeData as usual.
+export interface ConfigOnlyValue {
+  setNodeData: (id: string, data: any) => void
+}
+export const ConfigOnlyContext = createContext<ConfigOnlyValue | null>(null)
+
+// Hook every node ui.tsx should use to persist data changes. Prefers the modal's
+// updater (config-only); falls back to useReactFlow().updateNodeData on the canvas.
+export function useNodeDataUpdater(): (id: string, data: any) => void {
+  const cfg = useContext(ConfigOnlyContext)
+  // useReactFlow is always called (hook rules); it's valid on the canvas. In the
+  // modal we ignore its result and use the context updater instead.
+  const rf = useReactFlow()
+  return cfg ? cfg.setNodeData : rf.updateNodeData
+}
 
 const typeColors: Record<string, { bg: string; border: string; accent: string }> = {
   trigger: { bg: '#0d1f0d', border: '#22c55e30', accent: '#22c55e' },
@@ -57,6 +79,28 @@ function outputPreviewEntries(output: any): Array<[string, string]> {
 }
 
 export function BaseNode({ type, icon, label, selected, children, hasInput = true, hasOutput = true, outputLabels, executionStatus, executionOutput, executionError, hasCaptureData, alias, onAliasChange }: BaseNodeProps) {
+  const configOnly = useContext(ConfigOnlyContext)
+  // In the detail modal we only want the config fields + the alias input, not the
+  // canvas chrome (handles/header/border/preview).
+  if (configOnly) {
+    return (
+      <div className="space-y-2">
+        {children}
+        {onAliasChange && (
+          <label className="block">
+            <span className="text-[9px] text-gray-500 block mb-1">Alias</span>
+            <input
+              value={alias || ''}
+              onChange={e => onAliasChange(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+              placeholder="apelido para {{alias.campo}}"
+              className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-[11px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+            />
+          </label>
+        )}
+      </div>
+    )
+  }
+
   const colors = typeColors[type]
 
   const execBorder = executionStatus === 'running' ? '#3b82f6'

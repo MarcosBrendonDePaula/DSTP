@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect } from '@client/src/automation/nodes/BaseNode'
+import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
 export const TRIGGER_EVENTS = [
   // Players
@@ -96,7 +96,7 @@ export const TRIGGER_EVENTS = [
 ]
 
 export const ui = function TriggerNode({ id, data, selected }: any) {
-  const { updateNodeData } = useReactFlow()
+  const updateNodeData = useNodeDataUpdater()
 
   const onChange = useCallback((event_type: string) => {
     updateNodeData(id, { ...data, event_type })
