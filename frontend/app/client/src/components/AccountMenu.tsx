@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { logoutServer } from './AuthGate'
+import { apiPost, seg } from '../lib/api'
 
 interface AccountMenuProps {
   serverId: string
@@ -67,13 +68,7 @@ function ChangePasswordModal({ serverId, onClose }: { serverId: string; onClose:
     if (newPassword !== newPassword2) { setError('As senhas não coincidem'); return }
     setBusy(true)
     try {
-      const res = await fetch(`/api/panel-auth/change-password/${encodeURIComponent(serverId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ currentPassword, newPassword }),
-      })
-      const data = await res.json()
+      const { data } = await apiPost(`/api/panel-auth/change-password/${seg(serverId)}`, { currentPassword, newPassword })
       if (!data.success) {
         setError(
           data.reason === 'invalid_password' ? 'Senha atual incorreta' :

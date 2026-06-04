@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { resolve } from 'path'
+import { bunTestExcludeGlobs } from './scripts/bun-test-files'
 
 // Dedicated config for server-side unit tests (pure logic, node environment).
 // Kept separate from vite.config.ts, whose `root` points at app/client and so
@@ -20,14 +21,11 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     include: ['app/server/**/*.{test,spec}.ts'],
-    // These import bun:test and/or hit the real bun:sqlite DB; they run under
-    // `bun test`, not vitest. See the test:unit script.
+    // Tests that import `bun:test` run under `bun test`, not vitest — discovered
+    // automatically by content (see scripts/bun-test-files.ts), so this list
+    // never needs hand-editing when a test is added.
     exclude: [
-      'app/server/services/PanelAuthStore.test.ts',
-      'app/server/db/repositories/EnvironmentRepository.test.ts',
-      'app/server/db/connection.test.ts',
-      'app/server/live/vault-context.test.ts',
-      'app/server/routes/environments.routes.test.ts',
+      ...bunTestExcludeGlobs(),
       '**/node_modules/**',
     ],
   },

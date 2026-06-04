@@ -1,0 +1,56 @@
+{
+  "name": "Boss Roulette — !boss spawna um boss aleatório (admin)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "cmd",
+      "type": "condition",
+      "position": { "x": 320, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "boss" }
+    },
+    {
+      "id": "who",
+      "type": "get_player",
+      "position": { "x": 640, "y": 0 },
+      "data": { "params": { "userid": "{{chat.userid}}" }, "alias": "player" }
+    },
+    {
+      "id": "isadmin",
+      "type": "condition",
+      "position": { "x": 960, "y": 0 },
+      "data": { "field": "{{player.admin}}", "operator": "equals", "value": "true" }
+    },
+    {
+      "id": "roll",
+      "type": "script",
+      "position": { "x": 1280, "y": -60 },
+      "data": {
+        "action_type": "script",
+        "params": {
+          "code": "// Sorteia um boss e o spawna perto do jogador que digitou !boss.\n// Roda só depois do gate de admin no flow.\nfunction run(context) {\n  const userid = context.trigger && context.trigger.userid;\n  if (!userid) return { skipped: 'no userid' };\n\n  const BOSSES = [\n    'deerclops', 'bearger', 'moose', 'dragonfly', 'antlion',\n    'minotaur', 'klaus', 'toadstool', 'beequeen', 'crabking',\n    'malbatross', 'stalker', 'warg'\n  ];\n  const pick = BOSSES[Math.floor(Math.random() * BOSSES.length)];\n\n  // Spawna 1 do boss sorteado, com um pequeno offset pra não nascer em cima.\n  context.sendCommand('spawn_at_player', {\n    userid: userid, prefab: pick, count: 1, offset_x: 4, offset_z: 0\n  });\n\n  return { boss: pick };\n}"
+        }
+      }
+    },
+    {
+      "id": "warn",
+      "type": "action",
+      "position": { "x": 1600, "y": -60 },
+      "data": {
+        "action_type": "announce",
+        "params": { "message": "A roleta girou... {{roll.boss}} foi invocado!" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_cmd", "source": "trg", "target": "cmd" },
+    { "id": "e_cmd_who", "source": "cmd", "target": "who", "sourceHandle": "true" },
+    { "id": "e_who_admin", "source": "who", "target": "isadmin" },
+    { "id": "e_admin_roll", "source": "isadmin", "target": "roll", "sourceHandle": "true" },
+    { "id": "e_roll_warn", "source": "roll", "target": "warn" }
+  ]
+}

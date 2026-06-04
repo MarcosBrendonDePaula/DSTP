@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Node } from '@xyflow/react'
+import { ReactFlowProvider } from '@xyflow/react'
 import {
   triggerOutputSchemas,
   nodeOutputSchemas,
@@ -8,6 +9,8 @@ import {
 } from '../nodeOutputSchemas'
 import { TRIGGER_EVENTS } from '../nodes'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
+import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
+import { ConfigOnlyContext } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -68,6 +71,7 @@ function CollapsibleJson({ label, children, depth }: { label: string; children: 
 
 const nodeTypeMeta: Record<string, { icon: string; label: string; color: string }> = {
   trigger:      { icon: '⚡', label: 'Trigger',   color: '#22c55e' },
+  webhook:      { icon: '🪝', label: 'Webhook',   color: '#22c55e' },
   condition:    { icon: '❓', label: 'Condição',  color: '#eab308' },
   action:       { icon: '🎯', label: 'Ação',      color: '#3b82f6' },
   delay:        { icon: '⏱', label: 'Delay',     color: '#a855f7' },
@@ -250,7 +254,7 @@ const HTTP_METHODS = [
   { value: 'DELETE', label: 'DELETE' },
 ]
 
-function NodeConfigEditor({ type, data, updateData }: { type: string; data: Record<string, any>; updateData: (patch: Record<string, any>) => void }) {
+function NodeConfigEditor({ nodeId, type, data, updateData }: { nodeId: string; type: string; data: Record<string, any>; updateData: (patch: Record<string, any>) => void }) {
   const updateParam = (key: string, value: string) => {
     updateData({ params: { ...(data.params || {}), [key]: value } })
   }
@@ -418,6 +422,89 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
     )
   }
 
+  if (type === 'ai_agent') {
+    const provider = data.provider || 'anthropic'
+    const MODELS: Record<string, string[]> = {
+      anthropic: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+      openai: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+      google: ['gemini-2.0-flash', 'gemini-2.0-pro'],
+    }
+    return (
+      <div className="space-y-2">
+        <ConfigField label="Provider">
+          <ConfigSelect
+            value={provider}
+            onChange={v => updateData({ provider: v, model: (MODELS[v] || [])[0] || '' })}
+            options={[
+              { value: 'anthropic', label: 'Anthropic (Claude)' },
+              { value: 'openai', label: 'OpenAI (GPT)' },
+              { value: 'google', label: 'Google (Gemini)' },
+            ]}
+          />
+        </ConfigField>
+        <ConfigField label="Modelo">
+          <ConfigInput value={data.model || ''} onChange={v => updateData({ model: v })} placeholder={(MODELS[provider] || [])[0] || 'modelo'} />
+        </ConfigField>
+        <ConfigField label="API Key (use o cofre)">
+          <ConfigInput value={data.api_key || ''} onChange={v => updateData({ api_key: v })} placeholder="{{environment.prod.OPENAI_KEY}}" />
+        </ConfigField>
+        <ConfigField label="System (instruções fixas)">
+          <ConfigTextarea value={data.system || ''} onChange={v => updateData({ system: v })} placeholder="Você é um assistente do servidor DST..." rows={4} />
+        </ConfigField>
+        <ConfigField label="Prompt">
+          <ConfigTextarea value={data.prompt || ''} onChange={v => updateData({ prompt: v })} placeholder='Jogador "{{trigger.name}}" disse: "{{trigger.message}}"' rows={3} />
+        </ConfigField>
+        <div className="grid grid-cols-2 gap-2">
+          <ConfigField label="Max steps">
+            <ConfigInput value={data.max_steps || ''} onChange={v => updateData({ max_steps: v })} placeholder="8" />
+          </ConfigField>
+          <ConfigField label="Temperature">
+            <ConfigInput value={data.temperature || ''} onChange={v => updateData({ temperature: v })} placeholder="0.7" />
+          </ConfigField>
+        </div>
+
+        <div className="pt-2 mt-1 border-t border-white/5">
+          <div className="text-[10px] text-gray-500 mb-1">🧠 Memória de conversa (histórico)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <ConfigField label="Memória">
+              <ConfigSelect
+                value={data.memory_enabled ? 'on' : 'off'}
+                onChange={v => updateData({ memory_enabled: v === 'on' })}
+                options={[{ value: 'off', label: 'Desligada' }, { value: 'on', label: 'Ligada' }]}
+              />
+            </ConfigField>
+            <ConfigField label="Escopo">
+              <ConfigSelect
+                value={data.memory_scope || 'player'}
+                onChange={v => updateData({ memory_scope: v })}
+                options={[{ value: 'player', label: 'Por jogador' }, { value: 'global', label: 'Global do servidor' }]}
+              />
+            </ConfigField>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ConfigField label="Limite (nº de mensagens)">
+              <ConfigInput value={data.memory_limit || ''} onChange={v => updateData({ memory_limit: v })} placeholder="10" />
+            </ConfigField>
+            <ConfigField label="Modo ao atingir limite">
+              <ConfigSelect
+                value={data.memory_mode || 'rotate'}
+                onChange={v => updateData({ memory_mode: v })}
+                options={[
+                  { value: 'rotate', label: 'Rotativo (descarta antiga)' },
+                  { value: 'compact', label: 'Compactar (resume antigas)' },
+                ]}
+              />
+            </ConfigField>
+          </div>
+        </div>
+
+        <div className="text-[10px] text-gray-500">
+          🔧 Conecte nós (action, ai_memory, etc.) no handle <span className="text-fuchsia-400">tools</span> — a IA os chama como ferramentas.
+        </div>
+      </div>
+    )
+  }
+
   if (type === 'set_variable') {
     const entries = Object.entries(data.params || {})
     const setKey = (oldKey: string, newKey: string) => {
@@ -453,6 +540,24 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
     )
   }
 
+  // Default: render the node's OWN ui.tsx (from the module registry) as the config
+  // editor — single source of truth. The modal renders OUTSIDE <ReactFlow>, so:
+  //  - wrap in a local ReactFlowProvider so the node's useReactFlow() calls don't
+  //    throw (its result is ignored — see useNodeDataUpdater),
+  //  - provide the real persist fn via ConfigOnlyContext (setNodes-backed),
+  //  - ConfigOnly makes BaseNode emit just the fields.
+  const RegistryNode = registryNodeTypes[type as keyof typeof registryNodeTypes]
+  if (RegistryNode) {
+    return (
+      <ReactFlowProvider>
+        <ConfigOnlyContext.Provider value={{ setNodeData: (_id, full) => updateData(full) }}>
+          <RegistryNode id={nodeId} data={data} selected={false} />
+        </ConfigOnlyContext.Provider>
+      </ReactFlowProvider>
+    )
+  }
+
+  // Last resort for any non-module type: generic param inputs.
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
       {Object.entries(data.params || {}).map(([key, value]) => (
@@ -471,7 +576,12 @@ function NodeConfigEditor({ type, data, updateData }: { type: string; data: Reco
 
 export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, captureContext, allNodes = [], allEdges = [], onUpdateTree }: NodeDetailPanelProps) {
   const type = node.type || 'unknown'
-  const meta = nodeTypeMeta[type] || { icon: '?', label: type, color: '#888' }
+  // Prefer the node's registry meta (icon/label/color); fall back to the local
+  // map for any non-module type, then a generic default.
+  const regMeta = registryMetaByType[type]
+  const meta = regMeta
+    ? { icon: regMeta.icon, label: regMeta.label, color: regMeta.color }
+    : (nodeTypeMeta[type] || { icon: '?', label: type, color: '#888' })
   const data = node.data as Record<string, any>
   const alias = data?.alias as string | undefined
 
@@ -542,7 +652,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
           <div className="flex min-h-0 flex-1">
             <aside className="w-[360px] shrink-0 border-r border-white/10 bg-[#0f0f0f] p-4 overflow-y-auto">
               <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Configuracao</h3>
-              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
             </aside>
             <div className="flex-1 overflow-y-auto p-4 min-h-0">
               <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
@@ -578,7 +688,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               <span className="text-[9px] text-gray-600">auto-save</span>
             </div>
             <div className="space-y-3">
-              <NodeConfigEditor type={type} data={data} updateData={updateData} />
+              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
             </div>
           </section>
 

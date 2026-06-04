@@ -1,4 +1,26 @@
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { createContext, useContext } from 'react'
+
+// Config-only mode: when the detail modal renders a node's ui.tsx as its config
+// editor, it provides this context. `configOnly` makes BaseNode emit ONLY the
+// config fields (no handles/header/border). `setNodeData` is the persist function
+// — the modal renders OUTSIDE <ReactFlow>, so ui.tsx CANNOT use useReactFlow()
+// there; the modal passes a setNodes-backed updater instead. On the canvas the
+// context is absent and ui.tsx uses useReactFlow().updateNodeData as usual.
+export interface ConfigOnlyValue {
+  setNodeData: (id: string, data: any) => void
+}
+export const ConfigOnlyContext = createContext<ConfigOnlyValue | null>(null)
+
+// Hook every node ui.tsx should use to persist data changes. Prefers the modal's
+// updater (config-only); falls back to useReactFlow().updateNodeData on the canvas.
+export function useNodeDataUpdater(): (id: string, data: any) => void {
+  const cfg = useContext(ConfigOnlyContext)
+  // useReactFlow is always called (hook rules); it's valid on the canvas. In the
+  // modal we ignore its result and use the context updater instead.
+  const rf = useReactFlow()
+  return cfg ? cfg.setNodeData : rf.updateNodeData
+}
 
 const typeColors: Record<string, { bg: string; border: string; accent: string }> = {
   trigger: { bg: '#0d1f0d', border: '#22c55e30', accent: '#22c55e' },
@@ -6,10 +28,11 @@ const typeColors: Record<string, { bg: string; border: string; accent: string }>
   action: { bg: '#0d0d1f', border: '#3b82f630', accent: '#3b82f6' },
   delay: { bg: '#1a1518', border: '#a855f730', accent: '#a855f7' },
   wait: { bg: '#1a0d1f', border: '#ec489930', accent: '#ec4899' },
+  ai_agent: { bg: '#170d1f', border: '#d946ef30', accent: '#d946ef' },
 }
 
 interface BaseNodeProps {
-  type: 'trigger' | 'condition' | 'action' | 'delay' | 'wait'
+  type: 'trigger' | 'condition' | 'action' | 'delay' | 'wait' | 'ai_agent'
   icon: string
   label: string
   selected?: boolean
@@ -56,6 +79,30 @@ function outputPreviewEntries(output: any): Array<[string, string]> {
 }
 
 export function BaseNode({ type, icon, label, selected, children, hasInput = true, hasOutput = true, outputLabels, executionStatus, executionOutput, executionError, hasCaptureData, alias, onAliasChange }: BaseNodeProps) {
+  const configOnly = useContext(ConfigOnlyContext)
+  // In the detail modal we only want the config fields + the alias input, not the
+  // canvas chrome (handles/header/border/preview).
+  if (configOnly) {
+    // `dstp-config` scales up the canvas-sized fields (labels/inputs/selects) for
+    // the roomy modal — see the CSS rules in index.css. No per-node changes.
+    return (
+      <div className="dstp-config space-y-3">
+        {children}
+        {onAliasChange && (
+          <label className="block pt-2 border-t border-white/5">
+            <span className="text-[11px] text-gray-400 block mb-1">Alias</span>
+            <input
+              value={alias || ''}
+              onChange={e => onAliasChange(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+              placeholder="apelido para {{alias.campo}}"
+              className="w-full bg-white/5 border border-white/10 rounded px-2.5 py-2 text-[13px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+            />
+          </label>
+        )}
+      </div>
+    )
+  }
+
   const colors = typeColors[type]
 
   const execBorder = executionStatus === 'running' ? '#3b82f6'
@@ -80,9 +127,9 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
     >
-      {/* Input handle */}
+      {/* Input handle — left side (data flows left → right) */}
       {hasInput && (
-        <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
+        <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
       )}
 
       {/* Header */}
@@ -124,23 +171,27 @@ export function BaseNode({ type, icon, label, selected, children, hasInput = tru
         </div>
       )}
 
-      {/* Output handle(s) */}
+      {/* Output handle — right side */}
       {hasOutput && !outputLabels && (
-        <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
+        <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: colors.accent }} />
       )}
 
-      {/* Named output handles (for conditions: true/false) */}
+      {/* Named output handles (condition true/false, switch cases, foreach
+          each/done) — stacked on the RIGHT edge, one row each with its label. */}
       {outputLabels && (
-        <div className="flex justify-around px-2 pb-2 pt-1">
-          {outputLabels.map((out, i) => (
-            <div key={out.id} className="relative flex flex-col items-center">
-              <span className="text-[9px] text-gray-500 mb-1">{out.label}</span>
+        <div className="flex flex-col items-end gap-1.5 px-3 pb-2 pt-1">
+          {outputLabels.map((out) => (
+            <div key={out.id} className="relative flex items-center gap-1 pr-1">
+              <span className="text-[9px] text-gray-500">{out.label}</span>
               <Handle
                 type="source"
-                position={Position.Bottom}
+                position={Position.Right}
                 id={out.id}
-                className="!w-2.5 !h-2.5 !border-2 !relative !transform-none !top-0 !left-0"
-                style={{ background: '#2a2a2a', borderColor: out.id === 'true' ? '#22c55e' : '#ef4444' }}
+                className="!w-2.5 !h-2.5 !border-2 !relative !transform-none !top-0 !right-0"
+                style={{
+                  background: '#2a2a2a',
+                  borderColor: out.id === 'true' ? '#22c55e' : out.id === 'false' ? '#ef4444' : colors.accent,
+                }}
               />
             </div>
           ))}

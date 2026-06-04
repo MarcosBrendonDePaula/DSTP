@@ -2,17 +2,17 @@
 // {{environment.ENV.KEY}} (explicit) and {{env.KEY}} (flow default), plus the
 // masking that must scrub resolved values from any emitted snapshot, and the
 // fail-loud behavior when a secret/env is missing.
-import { describe, it, expect, afterAll } from 'bun:test'
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { __setKeyForTest } from '../services/SecretCrypto'
+import { EnvironmentRepository, FlowRepository } from '../db'
+import { installVaultAccessors } from './vault-context'
+import { maskSecrets, __resetGlobalSecrets } from './vault-mask'
+import { resolveValue } from './expressions'
 
-process.env.DSTP_SECRET_KEY = 'test-master-key-vault-ctx'
-
-const { EnvironmentRepository } = await import('../db')
-const { FlowRepository } = await import('../db')
-const { installVaultAccessors } = await import('./vault-context')
-const { maskSecrets, __resetGlobalSecrets } = await import('./vault-mask')
-const { resolveValue } = await import('./expressions')
+// Force the vault key deterministically (no env mutation).
+beforeAll(() => __setKeyForTest('test-master-key-vault-ctx'))
 
 // Each test gets its own server id (=> its own sqlite file) for isolation.
 const createdServers: string[] = []
@@ -114,17 +114,16 @@ describe('vault accessors — flow default {{env.KEY}}', () => {
 })
 
 describe('vault accessors — vault disabled', () => {
-  it('throws VaultDisabledError when DSTP_SECRET_KEY is absent', async () => {
+  it('throws VaultDisabledError when the master key is absent', () => {
     __resetGlobalSecrets()
     const { SERVER } = seed()
-    const saved = process.env.DSTP_SECRET_KEY
-    delete process.env.DSTP_SECRET_KEY
+    __setKeyForTest(null) // disable the vault
     try {
       const ctx: Record<string, any> = { _flowId: 'flow-x', _serverId: SERVER }
       installVaultAccessors(ctx, SERVER)
       expect(() => resolveValue('{{environment.prod.OPENAI_KEY}}', ctx)).toThrow()
     } finally {
-      process.env.DSTP_SECRET_KEY = saved
+      __setKeyForTest('test-master-key-vault-ctx') // restore for any later test
     }
   })
 })

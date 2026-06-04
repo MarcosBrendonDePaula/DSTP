@@ -544,6 +544,15 @@ export const nodeOutputSchemas: Record<string, NodeOutputSchema> = {
     description: 'Script return value',
     fields: [], // dynamic — whatever run() returns
   },
+  ai_agent: {
+    description: 'AI agent result (agentic loop over connected tool nodes)',
+    fields: [
+      { name: 'text', type: 'string', description: "The agent's final text response" },
+      { name: 'steps', type: 'number', description: 'Number of tool-call rounds taken' },
+      { name: 'toolCalls', type: 'object', description: 'List of tools the agent invoked, with args' },
+      { name: 'usage', type: 'object', description: 'Token usage (input/output/total)' },
+    ],
+  },
   memory: {
     description: 'Persistent key-value storage (SQLite)',
     fields: [

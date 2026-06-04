@@ -4,12 +4,12 @@
 import { describe, it, expect, beforeAll } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { Elysia } from 'elysia'
+import { __setKeyForTest } from '../services/SecretCrypto'
+import { environmentsRoutes } from './environments.routes'
+import { grantSession } from '../services/PanelAuthStore'
 
-process.env.DSTP_SECRET_KEY = 'test-master-key-routes'
-
-const { Elysia } = await import('elysia')
-const { environmentsRoutes } = await import('./environments.routes')
-const { grantSession } = await import('../services/PanelAuthStore')
+beforeAll(() => __setKeyForTest('test-master-key-routes'))
 
 const SERVER = `__test_routes_${Date.now()}`
 const app = new Elysia().use(environmentsRoutes)

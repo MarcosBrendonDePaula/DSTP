@@ -46,8 +46,11 @@ export function AutomationPage() {
 
   // Extract the latest log context for the currently editing flow
   const latestExecutionContext = useMemo(() => {
-    // If capture just completed for this flow, use its context
-    if (captureData && !captureData.active && captureData.flowId === editingFlow && captureData.context) {
+    // Use the capture context as soon as one is available for this flow. Capture
+    // now stays active and emits after every execution (multi-trigger flows), so
+    // we no longer wait for active===false — any captured context for the edited
+    // flow wins.
+    if (captureData && captureData.flowId === editingFlow && captureData.context) {
       return captureData.context
     }
     if (!editingFlow || logs.length === 0) return null

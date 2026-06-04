@@ -35,7 +35,7 @@ function findUpstreamTriggers(nodeId: string, nodes: FlowNode[], edges: FlowEdge
     if (visited.has(currentId)) return
     visited.add(currentId)
     const node = nodes.find(n => n.id === currentId)
-    if (node?.type === 'trigger') {
+    if (node?.type === 'trigger' || node?.type === 'webhook') {
       triggers.push(currentId)
       return
     }

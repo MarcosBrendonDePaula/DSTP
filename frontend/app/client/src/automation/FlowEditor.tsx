@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { nodeTypes, TRIGGER_EVENTS } from './nodes'
 import { ACTION_TYPES } from './nodes/actions/actionTypes'
+import { registryDefaults, registryCatalog, registryMetaByType } from './nodes/registry'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 
 export interface CaptureData {
@@ -78,29 +79,10 @@ const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
   },
 }))
 
-const NODE_CATALOG: NodeCatalogItem[] = [
-  { type: 'condition', label: 'Condition', description: 'Divide o fluxo em verdadeiro/falso.', category: 'Logica', icon: '?', accent: 'text-yellow-400' },
-  { type: 'wait', label: 'Wait / Merge', description: 'Espera outros eventos ou junta caminhos.', category: 'Logica', icon: '↔', accent: 'text-pink-400' },
-  { type: 'delay', label: 'Delay', description: 'Pausa a execucao por um tempo.', category: 'Logica', icon: '⏱', accent: 'text-gray-400' },
-  { type: 'http_request', label: 'HTTP', description: 'Chama uma API externa.', category: 'Acoes', icon: '🌐', accent: 'text-cyan-400' },
-  { type: 'script', label: 'Script', description: 'Executa codigo customizado.', category: 'Acoes', icon: '{}', accent: 'text-orange-400' },
-  { type: 'get_player', label: 'Get Player', description: 'Busca dados de um jogador por userid.', category: 'Dados', icon: '👤', accent: 'text-teal-400' },
-  { type: 'find_player', label: 'Find Player', description: 'Localiza jogador por nome.', category: 'Dados', icon: '⌕', accent: 'text-teal-400' },
-  { type: 'set_variable', label: 'Variable', description: 'Grava valor no contexto do fluxo.', category: 'Dados', icon: 'x=', accent: 'text-purple-400' },
-  { type: 'memory', label: 'Memory', description: 'Le ou escreve memoria persistente.', category: 'Dados', icon: '▣', accent: 'text-amber-400' },
-  { type: 'ui_menu', label: 'Menu', description: 'Abre menu interativo para jogador.', category: 'UI', icon: '▤', accent: 'text-indigo-300' },
-  { type: 'ui_rule', label: 'HUD Rule', description: 'Instala regra dinamica de HUD.', category: 'UI', icon: '▥', accent: 'text-indigo-300' },
-  { type: 'ui_builder', label: 'UI Builder', description: 'Monta uma UI por arvore visual.', category: 'UI', icon: '✦', accent: 'text-violet-300' },
-  { type: 'ui_panel', label: 'Panel', description: 'Container visual de UI.', category: 'UI Primitivos', icon: '▢', accent: 'text-violet-300' },
-  { type: 'ui_col', label: 'Column', description: 'Agrupa filhos na vertical.', category: 'UI Primitivos', icon: '↕', accent: 'text-violet-300' },
-  { type: 'ui_row', label: 'Row', description: 'Agrupa filhos na horizontal.', category: 'UI Primitivos', icon: '↔', accent: 'text-violet-300' },
-  { type: 'ui_tabs', label: 'Tabs', description: 'Cria abas de UI.', category: 'UI Primitivos', icon: '▦', accent: 'text-violet-300' },
-  { type: 'ui_text', label: 'Text', description: 'Texto dinamico.', category: 'UI Primitivos', icon: 'T', accent: 'text-violet-300' },
-  { type: 'ui_icon', label: 'Icon', description: 'Icone por prefab.', category: 'UI Primitivos', icon: '◈', accent: 'text-violet-300' },
-  { type: 'ui_button', label: 'Button', description: 'Botao com callback.', category: 'UI Primitivos', icon: '●', accent: 'text-violet-300' },
-  { type: 'ui_bar', label: 'Bar', description: 'Barra de progresso.', category: 'UI Primitivos', icon: '▰', accent: 'text-violet-300' },
-  { type: 'ui_spacer', label: 'Spacer', description: 'Espacamento fixo.', category: 'UI Primitivos', icon: '␣', accent: 'text-violet-300' },
-]
+// All node-type palette entries now come from the registry (one per module).
+// TRIGGER_CATALOG (game events) and ACTION_NODE_CATALOG (action subtypes) are
+// separate — those are not node modules.
+const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
 export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -110,6 +92,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   const [catalogFilter, setCatalogFilter] = useState<'all' | 'events' | 'nodes'>('all')
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  // Live preview of the node being dragged from the library, following the cursor
+  // over the canvas. {type, data} + screen position; null when not dragging.
+  const [dragPreview, setDragPreview] = useState<{ item: NodeCatalogItem; x: number; y: number } | null>(null)
+  const draggingItemRef = useRef<NodeCatalogItem | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
 
   // Undo/Redo history
@@ -214,8 +200,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     const contextItems = catalogFilter === 'events'
       ? TRIGGER_CATALOG
       : catalogFilter === 'nodes'
-        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG]
-        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG]
+        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
+        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
     const visible = contextItems.filter(item => {
       if (!query) return true
       return `${item.label} ${item.description} ${item.category} ${item.type}`.toLowerCase().includes(query)
@@ -278,36 +264,12 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   }, [setEdges])
 
   const createNode = useCallback((type: string, position?: XYPosition, dataOverride?: Record<string, any>): Node => {
-    const defaults: Record<string, any> = {
-      trigger: {},
-      condition: {},
-      action: { action_type: '', params: {} },
-      delay: { delay_ms: '3000' },
-      get_player: { params: { userid: '' } },
-      find_player: { params: { name: '' } },
-      http_request: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
-      set_variable: { action_type: 'set_variable', params: {} },
-      script: { action_type: 'script', params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: \"ok\"\n  }\n}' } },
-      wait: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
-      memory: { action: 'read', params: { key: '' } },
-      ui_menu: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
-      ui_rule: { action_type: 'rule_install', preset: 'vital', vital: 'health', anchor: 'bottom', x: 0, y: 80, params: { userid: '{{trigger.userid}}', rules: JSON.stringify([{ id: 'health_bar', when: { event: 'healthdelta' }, do: [{ action: 'update_widget', id: 'health_bar_w', type: 'progress_bar', value: '{{player.health_current}}', max: '{{player.health_max}}', label: 'HP', color: [0.2, 0.9, 0.2, 1], anchor: 'bottom', x: 0, y: 80, width: 220, height: 16 }] }]) } },
-      ui_builder: { params: { userid: '{{trigger.userid}}', id: 'ui' }, tree: { type: 'panel', title: 'Painel', children: [] } },
-      ui_panel: { params: { userid: '{{trigger.userid}}', id: 'ui', title: '', gap: '8', anchor: 'center' } },
-      ui_col: { params: { gap: '8' } },
-      ui_row: { params: { gap: '8' } },
-      ui_tabs: { params: { active: '0' } },
-      ui_text: { params: { text: 'Texto', size: '18' } },
-      ui_icon: { params: { prefab: 'log', size: '56' } },
-      ui_button: { params: { text: 'Comprar', callback: 'click' } },
-      ui_bar: { params: { value: '1', max: '1' } },
-      ui_spacer: { params: { height: '8' } },
-    }
+    // Initial node.data comes from the node's registry meta.defaults.
     return {
       id: genId(),
       type,
       position: position || { x: 250 + Math.random() * 100, y: 100 + nodes.length * 120 },
-      data: { ...(defaults[type] || {}), ...(dataOverride || {}) },
+      data: { ...(registryDefaults[type] || {}), ...(dataOverride || {}) },
     }
   }, [nodes.length])
 
@@ -326,11 +288,23 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   const onNodeDragStart = useCallback((event: React.DragEvent, item: NodeCatalogItem) => {
     event.dataTransfer.setData('application/dstp-node-item', JSON.stringify({ type: item.type, data: item.data || {} }))
     event.dataTransfer.effectAllowed = 'move'
+    draggingItemRef.current = item
+    // Hide the native drag image (a blurry clone) — we render our own ghost.
+    const empty = document.createElement('div')
+    event.dataTransfer.setDragImage(empty, 0, 0)
+  }, [])
+
+  const onNodeDragEnd = useCallback(() => {
+    draggingItemRef.current = null
+    setDragPreview(null)
   }, [])
 
   const onCanvasDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
+    // Follow the cursor with the node ghost.
+    const item = draggingItemRef.current
+    if (item) setDragPreview({ item, x: event.clientX, y: event.clientY })
   }, [])
 
   const onCanvasDrop = useCallback((event: React.DragEvent) => {
@@ -345,8 +319,13 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     try {
       const item = JSON.parse(raw) as NodeCatalogItem
       addCatalogItemAt(item, position)
+      // Re-open the library after a drop so you can keep dropping nodes in a row.
+      setNodeDrawerOpen(true)
     } catch {
       return
+    } finally {
+      draggingItemRef.current = null
+      setDragPreview(null)
     }
   }, [addCatalogItemAt])
 
@@ -432,6 +411,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           onConnect={onConnect}
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
+          // Drop handlers on ReactFlow itself — it fills the <main> and consumes
+          // drag events, so the wrapper's onDragOver/onDrop never fire. Must be here.
+          onDragOver={onCanvasDragOver}
+          onDrop={onCanvasDrop}
           onInit={instance => { reactFlowRef.current = instance }}
           nodeTypes={nodeTypes}
           fitView
@@ -447,6 +430,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           />
           <MiniMap
             nodeColor={n => {
+              // Migrated nodes carry their color in the registry meta.
+              const regColor = n.type ? registryMetaByType[n.type]?.color : undefined
+              if (regColor) return regColor
               if (n.type === 'trigger') return '#22c55e'
               if (n.type === 'condition') return '#eab308'
               if (n.type === 'http_request') return '#06b6d4'
@@ -487,9 +473,17 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       {/* Node drawer */}
       {nodeDrawerOpen && (
         <div className="absolute inset-0 z-30 pointer-events-none">
-          <button
+          {/* Backdrop: closes on click, but must let a node DROP pass through to
+              the canvas underneath (delegate to the same drop handlers) — else the
+              drop lands here and is blocked. */}
+          <div
+            role="button"
+            tabIndex={0}
             className="absolute inset-0 bg-black/10 pointer-events-auto"
             onClick={() => setNodeDrawerOpen(false)}
+            onKeyDown={e => { if (e.key === 'Escape') setNodeDrawerOpen(false) }}
+            onDragOver={onCanvasDragOver}
+            onDrop={onCanvasDrop}
             aria-label="Fechar biblioteca de nodes"
           />
           <aside className="absolute right-0 top-[68px] bottom-9 w-[396px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
@@ -531,12 +525,19 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                 <div key={category} className="mb-2">
                   <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400">{category}</div>
                   {items.map(item => (
-                    <button
+                    // A real <div> (not <button>) — `draggable` on a button is
+                    // unreliable across browsers (Firefox ignores it), which broke
+                    // drag-to-canvas. Keep click-to-add via onClick + keyboard.
+                    <div
                       key={`${item.type}:${item.data?.event_type || item.label}`}
+                      role="button"
+                      tabIndex={0}
                       draggable
                       onDragStart={event => onNodeDragStart(event, item)}
+                      onDragEnd={onNodeDragEnd}
                       onClick={() => addCatalogItem(item)}
-                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60"
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCatalogItem(item) } }}
+                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60 cursor-grab active:cursor-grabbing"
                       title="Arraste para o canvas ou clique para adicionar"
                     >
                       <div className="flex items-center gap-3">
@@ -547,7 +548,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                         </div>
                         <span className="text-gray-500 group-hover:text-white">›</span>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ))}
@@ -591,6 +592,27 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           allEdges={edges.map(e => ({ source: e.source, target: e.target }))}
         />
       )}
+
+      {/* Drag ghost — follows the cursor while dragging a node from the library
+          onto the canvas. A light card (icon + label) so we don't run the node's
+          ReactFlow hooks outside the provider. */}
+      {dragPreview && (() => {
+        const color = registryMetaByType[dragPreview.item.type]?.color ?? '#3b82f6'
+        return (
+          <div
+            className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 opacity-80"
+            style={{ left: dragPreview.x, top: dragPreview.y }}
+          >
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-2 min-w-[160px] text-xs shadow-2xl"
+              style={{ background: '#141414', border: `1px solid ${color}66`, boxShadow: `0 0 24px ${color}40` }}
+            >
+              <span className="text-base">{dragPreview.item.icon}</span>
+              <span className="font-semibold text-[11px]" style={{ color }}>{dragPreview.item.label}</span>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

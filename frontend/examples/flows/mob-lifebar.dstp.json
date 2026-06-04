@@ -1,0 +1,40 @@
+{
+  "name": "Lifebar de mobs — !hp mostra a barra do mob mais próximo",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "cond",
+      "type": "condition",
+      "position": { "x": 360, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "hp" }
+    },
+    {
+      "id": "bar",
+      "type": "action",
+      "position": { "x": 720, "y": -60 },
+      "data": {
+        "action_type": "ui_track",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "id": "mob_hp",
+          "prefab": "",
+          "nearest": "true",
+          "label": "Mob",
+          "max_dist": "40",
+          "offset_y": "60",
+          "width": "90",
+          "color": "[0.9,0.2,0.2,1]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_cond", "source": "trg", "target": "cond" },
+    { "id": "e_cond_bar", "source": "cond", "target": "bar", "sourceHandle": "true" }
+  ]
+}

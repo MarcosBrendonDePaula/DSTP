@@ -89,8 +89,11 @@ Key files:
 - `app/server/services/DSTStateStore.ts` — in-memory cache (players, shards, command queues)
 - `app/server/routes/dst.routes.ts` — POST /api/dst/sync (DST game calls this)
 - `app/server/db/` — Drizzle schema, repositories (FlowRepository, AutomationLogRepository, FlowMemoryRepository, etc)
+- `app/server/live/nodes/` — backend node registry + `NodeRunContext`/`NodeHandler` contract (see **Node Module System**)
+- `app/shared/automation/nodes/` — the node modules (one folder per type: meta/ui/exec)
 - `app/client/src/live/DSTPanel.tsx` — main admin panel UI
-- `app/client/src/automation/` — React Flow editor, 11 node types, NodeDetailPanel modal
+- `app/client/src/automation/` — React Flow editor, node registry, NodeDetailPanel modal
+- `app/server/services/SyncRecorder.ts` + `services/replay.ts` — dev tool: record real `/dst/sync` traffic and replay it against the engine (`bun run scripts/replay.ts`)
 
 ## Commands
 
@@ -134,23 +137,113 @@ store the id in `modinfo.lua` — the mod↔Workshop link lives in the ModUpload
 To update the Workshop entry, re-select DSTP in `ModUploader.exe` and re-upload;
 bump `version` in `modinfo.lua` and add a `DST_MOD/CHANGELOG.md` entry first.
 
-## Node Types (11)
+## Node Types
+
+Each node is a **module** (one folder) — see **Node Module System** below.
 
 | Node | Purpose |
 |------|---------|
 | `trigger` | Event-based entry point (40+ DST events across 11 categories) |
-| `condition` | Binary branch (true/false), 6 operators |
-| `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 30+ types) |
-| `delay` | Wait N ms before continuing |
+| `webhook` | Entry point fired by an inbound HTTP request (`POST /api/webhook/:serverId/:webhookId`), with optional per-node token + method |
+| `condition` | Binary branch (true/false). Operators: equals, not_equals, greater_than, less_than, contains, **starts_with**, **ends_with**, exists |
+| `switch` | Route by value: N exact-value cases → `case_<i>` handles, else `default` |
+| `filter` | Stop the flow unless a condition passes (single output, halts on fail) |
+| `foreach` | Iterate a list: run the `each` branch per item (`{{loop.item}}`/`{{loop.index}}`) then `done`. Capped at 40 items |
+| `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 50+ subtypes via `action_type`) |
+| `delay` | Wait N ms before continuing (capped at 1h) |
 | `http_request` | External HTTP call (GET/POST with templates) |
 | `set_variable` | Store custom key-value in context |
+| `transform` | Safe value ops without the `script` RCE: upper/lower/trim/length/number/round, add/sub/mul/div, json parse/stringify |
+| `random` | Pick a random list item or integer in [min,max] |
+| `log` | Write a template-resolved, secret-masked debug line to the server log |
 | `script` | JavaScript via `new Function()` (admin-only, runs in Node) |
-| `get_player` | Fetch player data by userid (health, hunger, sanity, position, inventory) |
+| `get_player` | Fetch player data by userid (health, hunger, sanity, position, inventory, **admin**) |
 | `find_player` | Search player by name (partial, strips command prefixes like `/tp`, `#tp`) |
 | `memory` | Persistent key-value per flow (SQLite) |
 | `wait` | Multi-trigger merge: waits for N branches, 3 correlation modes, timeout support |
+| `ai_agent` | LLM agent (Vercel AI SDK). Nodes wired to its `tools` handle become callable tools; agentic loop (`stopWhen: stepCountIs`). See **AI Agent Node** below. |
+| `ai_memory` | The AI's own key/value store, used as a tool by `ai_agent` (save/get/list/delete, free-form key). |
+| `ui_*` | In-game UI: `ui_builder`, `ui_panel`, `ui_menu`, `ui_rule`, and primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`) |
 
 All nodes support `alias` for friendly context keys (`{{myAlias.field}}` instead of `{{node_id.field}}`).
+
+## Node Module System
+
+Every flow node is a **self-contained module = one folder** under
+`frontend/app/shared/automation/nodes/<category>/<subcategory>/<type>/`:
+
+```
+<type>/
+  meta.ts   # NodeMeta (SHARED, client+server): type, icon, color, category,
+            #   defaults, outputSchema, aiDescription/aiParamDescriptions, flow
+            #   flags (isTrigger/pausable). ZERO runtime deps (no React, no sqlite).
+  ui.tsx    # export const ui — the React canvas component (FRONTEND only).
+  exec.ts   # export const handler — the execution handler (BACKEND only).
+            #   Absent for triggers/wait (they don't run via the dispatcher).
+```
+
+**Adding a node = create the folder + one import line in each registry.** No more
+hunting ~13 scattered edit points. The registries:
+- `app/server/live/nodes/registry.ts` — imports `meta` + `exec` (handler)
+- `app/client/src/automation/nodes/registry.ts` — imports `meta` + `ui`
+
+Registration is **explicit static import**, NOT a glob: the backend ships as one
+bundled `dist/index.js`, so runtime FS globs (`Bun.Glob`) or `import.meta.glob`
+(unsupported by Bun) would break in production. Static imports are bundle-safe.
+
+**Bundle isolation:** `meta.ts` is the only file imported by BOTH sides. The
+registries import `meta`+`ui` (client) and `meta`+`exec` (server) by exact
+filename, so `ui.tsx` (React) never reaches the backend bundle and `exec.ts`
+(bun:sqlite) never reaches the frontend — even though all three live in one folder.
+
+**Everything derives from the registry** (no hand-maintained per-type lists):
+`nodeTypes`, the palette catalog, create-defaults, output schemas, minimap colors,
+the detail-modal config editor, FlowAnalyzer's isTrigger/pausable flags.
+
+### Execution dispatch (`FlowEngine.processNode`)
+`processNode` is a **dispatcher**: loop-guard → `wait` early-return → registry
+dispatch. The handler receives a `NodeRunContext` (injects `resolve`, `param`,
+`setContext`, `pushCommand`, `findPlayerInServer`, `followOutEdges`,
+`executeHttpRequest`/`Script`, `runFlowAction`, `buildUITree`, `executeAIAgent`,
+`log`, etc.) and returns one of:
+- `'continue'` — engine traces the node, then follows ALL out-edges
+- `'stop'` — traces, does NOT follow edges (`ui_panel` consumes children)
+- `{ followEdges: filterFn }` — traces, then follows only matching edges
+  (`condition` true/false, `switch` cases, `foreach` each/done)
+- `{ wait: FlowNode }` — bubble a paused wait node up
+
+Heavy helpers stay in `FlowEngine` and are injected — handlers stay small.
+
+**`wait` is the lone exception OUTSIDE the registry**: its stateful pause
+(`executeStatefulBranch` + `WorkflowInstanceStore`) lives in the orchestrator, not
+a handler. Triggers (`trigger`/`webhook`) have no `exec` — they're entry points
+matched in `evaluateEvent`.
+
+### The detail modal reuses each node's `ui.tsx`
+`NodeDetailPanel` renders the node's own `ui.tsx` (via a `ConfigOnlyContext` that
+makes `BaseNode` emit just the fields) — single source of truth, so a new node's
+config form works with zero modal edits. The modal renders OUTSIDE `<ReactFlow>`,
+so `ui.tsx` uses the `useNodeDataUpdater()` hook (context updater in the modal,
+`useReactFlow().updateNodeData` on the canvas) instead of `useReactFlow` directly.
+
+### AI tool descriptions live on the node
+`meta.aiDescription` / `meta.aiParamDescriptions` document a node for the
+`ai_agent` (replacing the old central `ACTION_DESCRIPTIONS` map) — each node that
+can be wired as a tool describes itself.
+
+## AI Agent Node
+
+`ai_agent` runs an LLM agent whose **tools are the nodes wired into its `tools` input handle** (left side). The model picks a tool, fills its params, and the engine runs that node for real via the same `runFlowAction`/`executeHttpRequest`/etc pipeline, feeds the result back, and loops until the model answers or `max_steps` is hit. See `app/server/live/ai/executeAIAgent.ts`.
+
+- **Provider** configurable per-node: `anthropic` / `openai` / `google` (Vercel AI SDK). **API key** comes from the vault, e.g. `api_key: {{environment.prod.OPENAI_KEY}}` — resolved lazily, only feeds the provider client, masked in output.
+- **Tool schema** is generated dynamically from each connected node's params. Only **empty/template** params become model inputs; params the author already set (e.g. `chat_send name="[IA]"`) are FIXED and not overridable by the model. `ACTION_DESCRIPTIONS` gives the model human descriptions of common actions (the rich client catalog isn't on the backend).
+- **Conversation memory** (optional, embedded): `memory_enabled`, `memory_scope` (`player` keyed by userid | `global` per flow), `memory_limit` (N message-pairs), `memory_mode`:
+  - `rotate` — FIFO: oldest pairs fall off as new ones arrive.
+  - `compact` — when over the limit, the overflow is summarized into a single summary turn (context preserved, tokens saved); the summary compounds, never nests.
+  - Persisted per-flow via `FlowMemoryRepository` (`aichat:<scope>`).
+- **`ai_memory`** is a separate tool: the model picks `operation` (save/get/list/delete) and a **free-form key** so it chooses the scope itself (`player:joe:house`, `server:pvp`). Persisted under `aimem:`.
+- **Gating pattern**: validate admin in the FLOW before the agent (e.g. `chat_message → condition(contains "!ia") → get_player → condition({{player.admin}}==true) → ai_agent`) so dangerous tools (kill/respawn) only run for authorized users — don't rely on the model to self-gate.
+- **Important — the agent's text output is NOT sent anywhere by itself.** To reply in-game the model must call a tool like `chat_send`; the node's `text` is just its final message for the context. The system prompt must make this explicit.
 
 ## Event Categories
 
@@ -216,7 +309,8 @@ Each DST server has 1-2 shards: master (overworld) and caves. The mod sends `sha
 - The **admin panel** is gated by per-server auth: a password (hashed in `panel_auth`) plus cookie sessions, authorized per `server_id`. Setup token is announced per server on first `/dst/sync`. In-game magic links (`/panel-auth/issue-link`) let an admin grant access from chat. See `PanelAuthStore.ts`.
 
 ### Secrets Vault (Environments)
-- **Environments** group encrypted secrets per server: `server → environments → secrets`. Stored encrypted at rest (AES-256-GCM, `SecretCrypto.ts`); the master key is `DSTP_SECRET_KEY` (env var, NOT in the DB/git). DB stolen without the key = useless blobs.
+- **Environments** group encrypted secrets per server: `server → environments → secrets`. Stored encrypted at rest (AES-256-GCM, `SecretCrypto.ts`); the master key is `DSTP_SECRET_KEY`, read via FluxStack config (`servicesConfig.vault.secretKey`, frozen at boot — a SINGLE stable source, not a raw `process.env` read). NOT in the DB/git. DB stolen without the key = useless blobs.
+- **Key stability is critical:** the master key MUST stay constant across restarts — if it changes, every stored secret becomes undecryptable. Keep it ONLY in `.env`; never set `DSTP_SECRET_KEY` as a shell/session env var (it would shadow `.env` and drift). Tests force the key via `__setKeyForTest`, never via `process.env`, so they can't leak a key into the environment.
 - Reference in flows: `{{environment.<env>.<KEY>}}` (explicit) or `{{env.<KEY>}}` (the flow's `defaultEnvironmentId`). Decrypted **lazily at execution time** (`vault-context.ts`), never eagerly, never sent to the client (UI lists keys only, values are write-only).
 - **Masking** (`vault-mask.ts`): resolved secret values are scrubbed to `***` in every observable sink — logs, capture traces, WebSocket `STATE_DELTA`, masked `console.error`. Fail-closed via a per-worker global registry; linear (single regex) and size-capped to avoid DoS.
 - **Masking boundary — important:** masking defends against *accidental verbatim* leakage to observers (someone reading logs / stealing the DB). It is **NOT** a containment boundary against a flow author. The `script` node runs arbitrary JS and can transform a secret (`btoa(secret)`, slice it, `fetch()` it out) — those forms are intentionally not masked. A flow author is already an admin who can read the secret directly; that's accepted, same trust level as the `script` RCE.

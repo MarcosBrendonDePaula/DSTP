@@ -12,7 +12,11 @@ export class FlowMemoryRepository {
       .where(and(eq(flowMemory.flowId, flowId), eq(flowMemory.key, key)))
       .get()
     if (!row) return undefined
-    return typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+    // The `value` column is text({ mode: 'json' }) — Drizzle already JSON-parses
+    // on read, so `row.value` is the deserialized value. A second JSON.parse here
+    // would throw on any value that serialized to a non-JSON string (e.g. the raw
+    // string "cabin" → stored as "cabin" → JSON.parse("cabin") explodes).
+    return row.value
   }
 
   set(flowId: string, key: string, value: any): void {
@@ -44,7 +48,8 @@ export class FlowMemoryRepository {
       .all()
     const result: Record<string, any> = {}
     for (const row of rows) {
-      result[row.key] = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+      // Drizzle already JSON-parses the mode:'json' column — see get().
+      result[row.key] = row.value
     }
     return result
   }

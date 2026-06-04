@@ -3,6 +3,7 @@ import { dstStateStore } from "../services/DSTStateStore"
 import { processAutomationEvent } from "../live/LiveAutomation"
 import { EventHistoryRepository, EventSchemaRepository } from "../db"
 import { announceSetupTokenIfNeeded } from "../services/PanelAuthStore"
+import { syncRecorder } from "../services/SyncRecorder"
 
 setInterval(() => dstStateStore.checkHealth(), 15000)
 
@@ -11,6 +12,9 @@ setInterval(() => dstStateStore.checkHealth(), 15000)
 export function handleDstSync(data: any) {
   const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = data
   if (!server_id || !shard_id) return { error: 'missing server_id or shard_id' }
+
+  // Dev replay recorder — no-op unless a session is active (DSTP_RECORD).
+  syncRecorder.record({ server_id, shard_id, shard_type, server, players, events, active_events })
 
   announceSetupTokenIfNeeded(server_id)
 
@@ -142,6 +146,23 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
       console.log('[DSTP Relay WS] disconnected')
     },
   })
+
+  // Dev replay recorder controls. Start/stop a capture session and inspect status.
+  // Off by default; recording adds one disk-append per sync while active.
+  .post("/record/start", ({ query }) => {
+    const label = (query as any)?.label || 'session'
+    const file = syncRecorder.start(String(label))
+    return { recording: true, file }
+  }, { detail: { tags: ['DST'], summary: 'Start replay recording' } })
+  .post("/record/stop", () => {
+    const { file, count } = syncRecorder.stop()
+    return { recording: false, file, count }
+  }, { detail: { tags: ['DST'], summary: 'Stop replay recording' } })
+  .get("/record/status", () => ({
+    recording: syncRecorder.isActive(),
+    file: syncRecorder.sessionFile || null,
+    count: syncRecorder.recorded,
+  }), { detail: { tags: ['DST'], summary: 'Replay recording status' } })
 
   .get("/servers", () => {
     return dstStateStore.getServerGroups().map(g => ({
