@@ -17,6 +17,7 @@ type Props = {
   onDeleteFolder?: (path: string) => void
   onCreateSubfolder?: (parentPath: string) => void
   onRenameFolder?: (path: string) => void
+  onExportFolder?: (path: string) => void
   renderFlow: (flow: FlowLike) => React.ReactNode
 }
 
@@ -31,7 +32,7 @@ const childFoldersOf = (n: TreeNode) => [...n.folders.values()].sort((a, b) => (
 
 export function FlowExplorer({
   flows, folders = [], search,
-  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, renderFlow,
+  onMove, onMoveFolder, onReorderFolder, onDeleteFolder, onCreateSubfolder, onRenameFolder, onExportFolder, renderFlow,
 }: Props) {
   const tree = useMemo(() => buildTree(flows, folders), [flows, folders])
   const [cwd, setCwd] = useState('')            // current folder path ("" = root)
@@ -109,6 +110,19 @@ export function FlowExplorer({
   const visibleSubs = childFoldersOf(current)
   const visibleFlows = current.flows.filter(matchFlow)
 
+  // When searching, switch to a FLAT list of every matching flow across ALL
+  // folders (Explorer "search results" mode), each tagged with its folder path.
+  const searchResults = useMemo(() => {
+    if (!needle) return null
+    const out: Array<{ flow: FlowLike; path: string }> = []
+    const walk = (n: TreeNode) => {
+      for (const f of n.flows) if (f.name.toLowerCase().includes(needle)) out.push({ flow: f, path: n.path })
+      n.folders.forEach(walk)
+    }
+    walk(tree)
+    return out
+  }, [needle, tree])
+
   return (
     <div className="flex gap-3 min-h-[300px]">
       {/* LEFT: folder tree */}
@@ -122,20 +136,44 @@ export function FlowExplorer({
 
       {/* RIGHT: contents */}
       <div className="flex-1 min-w-0">
-        {/* breadcrumb */}
-        <div className="flex items-center gap-1 text-xs text-gray-400 mb-2 flex-wrap">
-          <button onClick={() => setCwd('')} className={`px-1.5 py-0.5 rounded hover:bg-white/5 ${!cwd ? 'text-blue-300' : ''}`}>🗂 Todos</button>
-          {crumbs.map((seg, i) => {
-            const path = crumbs.slice(0, i + 1).join('/')
-            return (
-              <span key={path} className="flex items-center gap-1">
-                <span className="text-gray-600">›</span>
-                <button onClick={() => setCwd(path)} className={`px-1.5 py-0.5 rounded hover:bg-white/5 ${i === crumbs.length - 1 ? 'text-blue-300' : ''}`}>{seg}</button>
-              </span>
-            )
-          })}
-        </div>
+        {/* breadcrumb (or search-results header) */}
+        {searchResults ? (
+          <div className="text-xs text-gray-400 mb-2">
+            🔎 {searchResults.length} resultado(s) para "<span className="text-blue-300">{search.trim()}</span>" em todas as pastas
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-xs text-gray-400 mb-2 flex-wrap">
+            <button onClick={() => setCwd('')} className={`px-1.5 py-0.5 rounded hover:bg-white/5 ${!cwd ? 'text-blue-300' : ''}`}>🗂 Todos</button>
+            {crumbs.map((seg, i) => {
+              const path = crumbs.slice(0, i + 1).join('/')
+              return (
+                <span key={path} className="flex items-center gap-1">
+                  <span className="text-gray-600">›</span>
+                  <button onClick={() => setCwd(path)} className={`px-1.5 py-0.5 rounded hover:bg-white/5 ${i === crumbs.length - 1 ? 'text-blue-300' : ''}`}>{seg}</button>
+                </span>
+              )
+            })}
+          </div>
+        )}
 
+        {/* SEARCH MODE: flat list of matches across all folders */}
+        {searchResults ? (
+          <div className="space-y-2">
+            {searchResults.length === 0 && (
+              <div className="text-center text-gray-600 text-xs py-10 border border-dashed border-white/5 rounded-xl">Nenhum fluxo encontrado.</div>
+            )}
+            {searchResults.map(({ flow: f, path }) => (
+              <div key={f.id} draggable onDragStart={e => startFlow(e, f.id)} onDragEnd={end} className="cursor-grab active:cursor-grabbing">
+                {path && (
+                  <button onClick={() => setCwd(path)} className="text-[10px] text-gray-500 hover:text-blue-300 mb-0.5 flex items-center gap-1">
+                    📁 {path}
+                  </button>
+                )}
+                {renderFlow(f)}
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="space-y-2">
           {/* subfolders of the current folder (double-click to open) */}
           {visibleSubs.map(s => (
@@ -154,6 +192,7 @@ export function FlowExplorer({
               <span className="text-xl">📁</span>
               <span className="text-sm font-medium text-white flex-1 truncate">{s.name}</span>
               <span className="text-[10px] text-gray-500">{countAll(s)} item(s)</span>
+              {onExportFolder && <button onClick={e => { e.stopPropagation(); onExportFolder(s.path) }} title="Exportar pasta (JSON)" className="text-[10px] text-gray-500 hover:text-white px-1">↗</button>}
               {onRenameFolder && <button onClick={e => { e.stopPropagation(); onRenameFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-white px-1">✏️</button>}
               {onDeleteFolder && <button onClick={e => { e.stopPropagation(); onDeleteFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-red-400 px-1">🗑</button>}
             </div>
@@ -175,11 +214,12 @@ export function FlowExplorer({
 
           {visibleSubs.length === 0 && visibleFlows.length === 0 && (
             <div className="text-center text-gray-600 text-xs py-10 border border-dashed border-white/5 rounded-xl">
-              Pasta vazia{needle ? ' (ou nada bate com a busca)' : ''}.
+              Pasta vazia.
               {onCreateSubfolder && <> Arraste fluxos para cá ou <button onClick={() => onCreateSubfolder(cwd)} className="text-blue-400 hover:underline">crie uma subpasta</button>.</>}
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* context menu */}
@@ -189,6 +229,7 @@ export function FlowExplorer({
           <div className="fixed z-[81] min-w-[160px] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl py-1 text-xs text-gray-200" style={{ left: menu.x, top: menu.y }}>
             <button onClick={() => { onCreateSubfolder?.(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📁 Nova subpasta</button>
             <button onClick={() => { setCwd(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📂 Abrir</button>
+            {onExportFolder && <button onClick={() => { onExportFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">↗ Exportar pasta (JSON)</button>}
             {onRenameFolder && <button onClick={() => { onRenameFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">✏️ Renomear</button>}
             {onDeleteFolder && <button onClick={() => { onDeleteFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-red-500/15 text-red-300">🗑 Excluir</button>}
           </div>

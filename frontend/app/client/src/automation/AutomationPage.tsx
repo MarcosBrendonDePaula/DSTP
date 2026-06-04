@@ -230,6 +230,36 @@ export function AutomationPage() {
     URL.revokeObjectURL(url)
   }
 
+  // Export a whole folder (its flows + subfolders) as a bundle. Each flow keeps a
+  // folderPath RELATIVE to the exported folder, so it can be re-imported anywhere.
+  const exportFolder = (path: string) => {
+    const prefix = path + '/'
+    const inFolder = (flows as any[]).filter(f => {
+      const fp = (f.folderPath ?? f.folder_path ?? '')
+      return fp === path || fp.startsWith(prefix)
+    })
+    const rel = (fp: string) => fp === path ? '' : fp.slice(prefix.length)
+    const bundle = {
+      name: `Pasta ${path}`,
+      folder: path.split('/').pop(),         // suggested root name on import
+      flows: inFolder.map(f => ({
+        name: f.name,
+        nodes: f.nodes || [],
+        edges: f.edges || [],
+        folderPath: rel(f.folderPath ?? f.folder_path ?? ''),
+      })),
+      exported_at: Date.now(),
+      version: 1,
+    }
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pasta-${(path.replace(/\//g, '-') || 'raiz').replace(/[^a-zA-Z0-9_-]/g, '_')}.dstp.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const importFlow = (file: File) => {
@@ -238,14 +268,29 @@ export function AutomationPage() {
       try {
         const parsed = JSON.parse(e.target?.result as string)
 
-        // Bundle: multiple flows at once (exported via "Exportar tudo")
+        // Bundle: multiple flows at once (exported via "Exportar tudo" or a folder).
         if (Array.isArray(parsed.flows)) {
-          if (!confirm(`Importar ${parsed.flows.length} fluxo(s)? Serão criados como novos (não sobrescrevem existentes).`)) return
+          // A folder bundle carries a `folder` root name; offer to import under a
+          // folder so the structure is recreated. Default to the original name.
+          let root = ''
+          if (parsed.folder || parsed.flows.some((f: any) => f.folderPath)) {
+            const suggested = parsed.folder || ''
+            root = (window.prompt(
+              `Importar ${parsed.flows.length} fluxo(s) dentro de qual pasta?\n(vazio = raiz; o conteúdo mantém a estrutura de subpastas)`,
+              suggested,
+            ) ?? '').trim()
+          } else if (!confirm(`Importar ${parsed.flows.length} fluxo(s)? Serão criados como novos (não sobrescrevem existentes).`)) {
+            return
+          }
           let ok = 0, fail = 0
           const base = Date.now()
+          if (root) await auto.createFolder({ server_id: urlServer, path: root })
           for (let i = 0; i < parsed.flows.length; i++) {
             const f = parsed.flows[i]
             if (!f.nodes || !f.edges) { fail++; continue }
+            // Compose the final folder path: <root>/<relative folderPath>.
+            const rel = (f.folderPath ?? '').trim()
+            const folder_path = [root, rel].filter(Boolean).join('/')
             try {
               await auto.saveFlow({
                 flow: {
@@ -257,6 +302,7 @@ export function AutomationPage() {
                   edges: f.edges,
                   created_at: base + i,
                   trigger_count: 0,
+                  folder_path,
                 }
               })
               ok++
@@ -507,6 +553,7 @@ export function AutomationPage() {
                 onDeleteFolder={deleteFolder}
                 onCreateSubfolder={(parent) => setFolderPrompt({ mode: 'subfolder', path: parent })}
                 onRenameFolder={(path) => setFolderPrompt({ mode: 'rename', path })}
+                onExportFolder={exportFolder}
                 renderFlow={(flow: any) => (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-colors">
                     <div className="flex items-center gap-3">
