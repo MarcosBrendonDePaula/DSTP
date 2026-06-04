@@ -1,14 +1,14 @@
 -- DSTP Land Claims — server-side terrain protection
 --
--- ⚠️ EXPERIMENT / NOT A KEEPER. This whole land-claim feature (this module, the
--- workable/burnable/builder overrides in modmain, the claim_* commands, and the
--- `land_claim` node) is a PROTOTYPE for initial testing of in-frame vetoing. It
--- deliberately VIOLATES DSTP's dynamic-system idea (mod = generic dumb primitives,
--- flow = logic) by hardcoding the "claim" concept into Lua. Do NOT build on it or
--- treat it as an official feature. When protection is taken seriously, REWRITE it
--- over a generic region-veto primitive (a flow defines the protected regions + who
--- may act; the mod only answers "is this point vetoed for this doer?") — or remove
--- it. See the memory note `project-landclaim-debt`.
+-- REFERENCE "MECHANIC MODULE". A hardcoded Lua mechanic is fine in DSTP as long as
+-- it's a clean, self-contained module — this file is the model to copy. The pattern:
+-- a single scripts/dstp/<mechanic>.lua singleton holds all the state + logic with a
+-- small public API; modmain only adds the MINIMUM hook (the overrides below call
+-- IsProtected); persistence is a real world component (dstp_landclaims.lua) that
+-- delegates here; and control is exposed to flows via mod commands (claim_*) + a
+-- node, so the POLICY (who/when/limits) stays in the flow. Use Lua only for what
+-- truly needs the frame/engine (here: an in-frame veto); prefer a flow otherwise.
+-- See CLAUDE.md "Hardcoded mechanics ARE fine — as clean, isolated mod modules".
 --
 -- A generic protection ENGINE. The policy (who may claim, limits, cost) lives in
 -- the panel flows; this module only answers "is this point protected from this

@@ -1,10 +1,10 @@
 import type { NodeMeta } from '@shared/automation/nodeMeta'
 
-// ⚠️ EXPERIMENT / NOT A KEEPER. This node (and the whole land-claim feature) is a
-// prototype to test in-frame vetoing. It hardcodes the "claim" concept into the mod
-// (Lua), which violates DSTP's dynamic-system idea. Do not build on it; when
-// protection is taken seriously, rewrite it over a generic region-veto primitive or
-// remove it. See DST_MOD/scripts/dstp/land_claims.lua header + the project notes.
+// Terrain protection. The mechanism (in-frame veto) is a hardcoded Lua "mechanic
+// module" (DST_MOD/scripts/dstp/land_claims.lua + workable/burnable/builder
+// overrides) — the reference example of that pattern. This node only queues the
+// claim_* commands; the POLICY (who may claim) stays in the flow. See CLAUDE.md
+// "Hardcoded mechanics ARE fine — as clean, isolated mod modules".
 export const meta: NodeMeta = {
   type: 'land_claim',
   label: 'Land Claim',

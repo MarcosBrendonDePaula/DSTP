@@ -1,19 +1,18 @@
 # Exemplos — proteção de terreno (land claims)
 
-> ## ⚠️ EXPERIMENTO — NÃO É PARA MANTER
+> ## ℹ️ Exemplo de referência: "módulo de mecânica" hardcoded
 >
-> Esta feature de land-claim (o node **Land Claim**, os comandos `claim_*` e os
-> overrides `workable`/`burnable`/`builder` no mod) é um **protótipo para testes
-> iniciais** da mecânica de **veto no frame**. Ela **viola conscientemente a ideia
-> de sistema dinâmico** do DSTP: o conceito de "claim" (área/dono/raio/trusted) foi
-> **hardcodado no mod (Lua)**, em vez de ser dado/regra definido pelo fluxo.
+> Esta feature é o **modelo a copiar** para uma mecânica que precisa de Lua. O
+> *bloqueio* (veto no frame) **tem** que ser Lua — a ação do jogo é síncrona e um
+> fluxo faria o round-trip pelo backend tarde demais. Tudo bem hardcodar isso
+> **porque está isolado como um módulo limpo**: `land_claims.lua` é um arquivo
+> auto-contido (store + lógica), o `modmain` só tem o hook mínimo (os overrides
+> `workable`/`burnable`/`builder`), e o controle é exposto ao fluxo via comandos
+> (`claim_*`) + o node — então a **política** (quem pode reivindicar) fica no fluxo.
 >
-> **Não construa nada em cima disto.** Quando a proteção for levada a sério, ela
-> deve ser **reescrita** sobre um **primitivo de veto genérico** — o fluxo define as
-> regiões protegidas e quem pode agir; o mod só responde *"este ponto está vetado
-> para este doer?"*. Assim proteção de casa, zona PvP e anti-fogo viram fluxos
-> diferentes sobre o MESMO primitivo, sem comando/node/re-upload por mecânica.
-> (Contraste: a carteira em `../shop/` é 100% fluxo, zero Lua novo — esse é o padrão.)
+> Regra: prefira o fluxo quando a lógica **puder** ser fluxo (a carteira em `../shop/`
+> é 100% fluxo, zero Lua); use um módulo Lua só para o que realmente precisa do
+> frame/engine. Ver `CLAUDE.md` → "Hardcoded mechanics ARE fine — clean mod modules".
 
 Reivindicação e proteção de áreas. **Requer o mod DSTP v0.6.0+**, que faz o
 *bloqueio* real (martelo/fogo/construção) via overrides server-side — isso NÃO
