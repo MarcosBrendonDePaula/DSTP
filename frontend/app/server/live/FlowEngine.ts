@@ -358,11 +358,10 @@ export class FlowEngine {
       return null
     }
 
-    // ── Registry dispatch (new) ──
-    // If this node type has a migrated module, run its handler and let the engine
-    // centralize tracing + edge-following. Unmigrated types fall through to the
-    // legacy if/else below. `wait` is intentionally NOT in the registry — its
-    // stateful pause/early-return lives in the orchestrator (see line above).
+    // ── Registry dispatch ──
+    // Every node type is a migrated module EXCEPT `wait` (its stateful pause /
+    // early-return lives in the orchestrator — handled below). Run the handler and
+    // centralize tracing + edge-following here.
     const entry = node.type !== 'wait' ? getNodeEntry(node.type) : undefined
     if (entry) {
       const rc = this.buildRunContext(node, nodes, edges, context, serverId, executedActions, setContext, stopAtWait, followOutEdges)
@@ -371,7 +370,7 @@ export class FlowEngine {
         this.traceCompleted(serverId, node.id, inputSnapshot, context)
         if (typeof result === 'object') {
           if ('wait' in result) return result.wait
-          // Filtered follow (condition true/false). Traced above, like the legacy.
+          // Filtered follow (condition true/false). Traced above.
           return await followOutEdges(result.followEdges)
         }
         if (result === 'stop') return null
@@ -382,169 +381,13 @@ export class FlowEngine {
       }
     }
 
+    // `wait` — the only node NOT in the registry. In simple-flow mode
+    // (stopAtWait=false) it just passes through; the stateful pause is the
+    // early-return at the top of this method.
     try {
       if (node.type === 'wait') {
-        // In simple flow mode (stopAtWait=false), wait nodes just pass through
         setContext(node.id, { waited: true, passthrough: true })
         this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-      } else if (node.type === 'condition') {
-        const result = this.evaluateCondition(node, context)
-        setContext(node.id, { result, field: node.data.field, value: node.data.value })
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges(condEdge => {
-          return condEdge.sourceHandle === 'true' ? result
-            : condEdge.sourceHandle === 'false' ? !result
-            : result
-        })
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'delay') {
-        const raw = Number(this.resolveValue(node.data.params?.delay_ms || node.data.delay_ms || '1000', context))
-        // Clamp: no negative/NaN, and cap so a flow can't hold an execution (and
-        // its resolved-secret context) alive for an unbounded time.
-        const ms = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), MAX_DELAY_MS) : 0
-        setContext(node.id, { delayed: true, ms })
-        await new Promise(resolve => setTimeout(resolve, ms))
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'get_player') {
-        const userid = this.resolveValue(this.param(node, 'userid'), context)
-        if (userid) {
-          const playerData = this.findPlayerInServer(serverId, (p: any) => p.userid === userid)
-          setContext(node.id, playerData || { error: 'player not found', userid })
-        } else {
-          setContext(node.id, { error: 'no userid provided' })
-        }
-
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'find_player') {
-        let searchName = String(this.resolveValue(this.param(node, 'name'), context) || '')
-        searchName = stripCommandPrefix(searchName)
-        if (searchName) {
-          const needle = searchName.toLowerCase()
-          const playerData = this.findPlayerInServer(serverId, (p: any) =>
-            p.name && p.name.toLowerCase().includes(needle)
-          )
-          setContext(node.id, playerData || { error: 'player not found', search: searchName })
-        } else {
-          setContext(node.id, { error: 'no name provided' })
-        }
-
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'memory') {
-        const memRepo = new FlowMemoryRepository(serverId)
-        // `flow` param overrides the namespace, so flows can share memory
-        // (e.g. a shop-open flow reading the balance written by shop-buy).
-        const flowId = (node.data.params?.flow && String(node.data.params.flow)) || context._flowId || ''
-        const action = node.data.action || 'read' // 'read', 'write', 'delete', 'read_all'
-        const key = this.resolveValue(node.data.params?.key || '', context)
-
-        if (action === 'write' && key) {
-          const value = this.resolveValue(node.data.params?.value, context)
-          memRepo.set(flowId, String(key), value)
-          setContext(node.id, { action: 'write', key, value })
-        } else if (action === 'read' && key) {
-          const value = memRepo.get(flowId, String(key))
-          setContext(node.id, { action: 'read', key, value: value ?? null })
-        } else if (action === 'delete' && key) {
-          memRepo.delete(flowId, String(key))
-          setContext(node.id, { action: 'delete', key })
-        } else if (action === 'read_all') {
-          const all = memRepo.getAll(flowId)
-          setContext(node.id, { action: 'read_all', data: all })
-        } else {
-          setContext(node.id, { error: 'invalid action or missing key' })
-        }
-
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'ui_builder') {
-        // A ui_builder carries the whole UI tree as data (built in its own
-        // in-node editor), instead of as a subgraph of ui_* nodes. We resolve
-        // {{templates}} throughout the tree and push it. Unlike ui_panel, this
-        // continues the action chain afterwards (it's a normal action node).
-        const rawTree = node.data.tree || {}
-        const tree = this.resolveTree(rawTree, context)
-        const uiId = this.uiNodeId(node)
-        const userid = this.resolveValue(this.param(node, 'userid', ''), context)
-        if (userid) {
-          this.host.pushCommand(serverId, 'ui_command', { userid, cmd: {
-            action: 'create', type: 'tree', id: uiId, group: uiId, tree,
-            anchor: this.param(node, 'anchor', 'center'), seq: Date.now(),
-          }})
-        }
-        setContext(node.id, { rendered: true })
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (node.type === 'ui_panel') {
-        // A ui_panel is the ROOT of a UI composed from connected ui_* nodes.
-        // Its outgoing edges mean "child of", not "next action": we walk the
-        // subgraph, build a render tree, and push one ui_render. We do NOT
-        // continue the normal action chain from here (children are consumed).
-        const tree = this.buildUITree(node, nodes, edges, context)
-        const userid = this.resolveValue(this.param(node, 'userid', ''), context)
-        const uiId = this.uiNodeId(node)
-        const payload: any = {
-          id: uiId,
-          group: uiId,
-          tree,
-          anchor: this.param(node, 'anchor', 'center'),
-          seq: Date.now(),
-        }
-        if (userid) {
-          this.host.pushCommand(serverId, 'ui_command', { userid, cmd: { action: 'create', type: 'tree', ...payload } })
-        }
-        setContext(node.id, { rendered: true, tree })
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-        // Intentionally do not follow edges as actions.
-
-      } else if (node.type === 'ai_agent') {
-        // Agentic loop: the tools are the nodes wired into this node's `tools`
-        // input handle. The model fills params; we execute the real node.
-        const output = await this.runAiAgentNode(node, nodes, edges, context, serverId)
-        setContext(node.id, output)
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-        executedActions.push('ai_agent')
-
-        const waitResult = await followOutEdges()
-        if (waitResult) return waitResult
-
-      } else if (['action', 'http_request', 'set_variable', 'script', 'ui_menu', 'ui_rule'].includes(node.type)) {
-        const actionType = node.data.action_type || node.type
-
-        if (actionType === 'http_request') {
-          setContext(node.id, await this.executeHttpRequest(node, context))
-        } else if (actionType === 'set_variable') {
-          setContext(node.id, this.executeSetVariable(node, context))
-        } else if (actionType === 'script') {
-          setContext(node.id, await this.executeScript(node, context, serverId))
-        } else {
-          this.runFlowAction(serverId, node, context)
-          setContext(node.id, { executed: true, action: actionType })
-        }
-
-        this.traceCompleted(serverId, node.id, inputSnapshot, context)
-        executedActions.push(actionType)
 
         const waitResult = await followOutEdges()
         if (waitResult) return waitResult
