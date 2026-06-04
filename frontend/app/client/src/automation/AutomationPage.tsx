@@ -28,13 +28,15 @@ export function AutomationPage() {
   const [showEnvironments, setShowEnvironments] = useState(false)
   const [flowSearch, setFlowSearch] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
-  const [folderWarning, setFolderWarning] = useState<string | null>(null)
+  const [folderWarning, setFolderWarning] = useState<{ path: string; count: number } | null>(null)
   // Subfolder/rename prompt: { mode, path } — path is the parent (subfolder) or the
   // folder being renamed.
   const [folderPrompt, setFolderPrompt] = useState<{ mode: 'subfolder' | 'rename'; path: string } | null>(null)
   // Import flow: a parsed bundle awaiting a destination folder + a result message.
   const [importState, setImportState] = useState<{ flows: any[]; suggested: string } | null>(null)
   const [importResult, setImportResult] = useState<string | null>(null)
+  // Flow pending delete confirmation (avoids accidental loss on a misclick).
+  const [confirmDeleteFlow, setConfirmDeleteFlow] = useState<{ id: string; name: string } | null>(null)
 
   // Sync editingFlow to URL
   useEffect(() => {
@@ -184,10 +186,10 @@ export function AutomationPage() {
     await auto.createFolder({ server_id: urlServer, path })
   }
 
-  const deleteFolder = async (path: string) => {
-    const res: any = await auto.deleteFolder({ server_id: urlServer, path })
+  const deleteFolder = async (path: string, force = false) => {
+    const res: any = await auto.deleteFolder({ server_id: urlServer, path, force })
     if (res && res.success === false && res.reason === 'not_empty') {
-      setFolderWarning(`Não dá para excluir a pasta "${path}": ainda tem ${res.count} fluxo(s) dentro.\nMova-os para outra pasta antes de excluir.`)
+      setFolderWarning({ path, count: res.count })
     }
   }
 
@@ -473,11 +475,23 @@ export function AutomationPage() {
           onClose={() => setShowNewFolder(false)}
         />
       )}
+      {confirmDeleteFlow && (
+        <ConfirmModal
+          title="Excluir fluxo"
+          message={`Tem certeza que deseja excluir o fluxo "${confirmDeleteFlow.name}"?\n\nEsta ação não pode ser desfeita.`}
+          confirmLabel="Excluir"
+          danger
+          onConfirm={() => deleteFlow(confirmDeleteFlow.id)}
+          onClose={() => setConfirmDeleteFlow(null)}
+        />
+      )}
       {folderWarning && (
         <ConfirmModal
           title="Pasta não vazia"
-          message={folderWarning}
-          confirmLabel="Entendi"
+          message={`A pasta "${folderWarning.path}" ainda tem ${folderWarning.count} fluxo(s) dentro.\n\nForçar exclusão: a pasta é removida e os fluxos vão para a raiz (nenhum fluxo é apagado).`}
+          confirmLabel="Forçar exclusão"
+          danger
+          onConfirm={() => deleteFolder(folderWarning.path, true)}
           onClose={() => setFolderWarning(null)}
         />
       )}
@@ -598,9 +612,10 @@ export function AutomationPage() {
                         className="text-[10px] px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5 transition-colors"
                       >↗ Exportar</button>
                       <button
-                        onClick={() => deleteFlow(flow.id)}
-                        className="text-[10px] px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors"
-                      >🗑</button>
+                        onClick={() => setConfirmDeleteFlow({ id: flow.id, name: flow.name })}
+                        title="Excluir fluxo"
+                        className="text-base px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+                      >🗑️</button>
                     </div>
                   </div>
                 )}

@@ -252,14 +252,26 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   }
 
   // Delete a folder. Blocked if any flow still lives in it or a subfolder — the
-  // user must empty/move those flows first (no accidental flow loss).
-  async deleteFolder(payload: { server_id: string; path: string }) {
-    const repo = this.folderRepo(payload.server_id)
-    const n = repo.flowCountUnder(payload.path)
-    if (n > 0) return { success: false, reason: 'not_empty', count: n }
-    repo.delete(payload.path)
+  // user must empty/move those flows first (no accidental flow loss). With
+  // `force`, the contained flows are MOVED TO ROOT (never deleted) and then the
+  // folder is removed.
+  async deleteFolder(payload: { server_id: string; path: string; force?: boolean }) {
+    const folders = this.folderRepo(payload.server_id)
+    const n = folders.flowCountUnder(payload.path)
+    if (n > 0 && !payload.force) return { success: false, reason: 'not_empty', count: n }
+    if (n > 0 && payload.force) {
+      // Move every flow under this folder out to root, then drop the folder.
+      const repo = this.flowRepo(payload.server_id)
+      const prefix = payload.path + '/'
+      for (const f of repo.findAll()) {
+        if (f.folderPath === payload.path || (f.folderPath ?? '').startsWith(prefix)) {
+          repo.move(f.id, '', f.sortOrder ?? 0)
+        }
+      }
+    }
+    folders.delete(payload.path)
     this.syncState(payload.server_id)
-    return { success: true }
+    return { success: true, moved: payload.force ? n : 0 }
   }
 
   // Reorder a folder among its siblings (drag a folder up/down).

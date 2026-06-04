@@ -220,9 +220,9 @@ export function FlowExplorer({
                   </>
                 )
               })()}
-              {onExportFolder && <button onClick={e => { e.stopPropagation(); onExportFolder(s.path) }} title="Exportar pasta (JSON)" className="text-xs text-gray-500 hover:text-white px-1">⬇</button>}
-              {onRenameFolder && <button onClick={e => { e.stopPropagation(); onRenameFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-white px-1">✏️</button>}
-              {onDeleteFolder && <button onClick={e => { e.stopPropagation(); onDeleteFolder(s.path) }} className="text-[10px] text-gray-500 hover:text-red-400 px-1">🗑</button>}
+              {onExportFolder && <button onClick={e => { e.stopPropagation(); onExportFolder(s.path) }} title="Exportar pasta (JSON)" className="text-base text-gray-400 hover:text-white px-1.5">↗</button>}
+              {onRenameFolder && <button onClick={e => { e.stopPropagation(); onRenameFolder(s.path) }} title="Renomear" className="text-base text-gray-400 hover:text-white px-1.5">✏️</button>}
+              {onDeleteFolder && <button onClick={e => { e.stopPropagation(); onDeleteFolder(s.path) }} title="Excluir pasta" className="text-base text-gray-400 hover:text-red-400 px-1.5">🗑️</button>}
             </div>
           ))}
 
@@ -259,7 +259,7 @@ export function FlowExplorer({
             <button onClick={() => { setCwd(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">📂 Abrir</button>
             {onToggleFolder && <button onClick={() => { onToggleFolder(menu.path, true); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⏻ Ligar todos</button>}
             {onToggleFolder && <button onClick={() => { onToggleFolder(menu.path, false); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⭘ Desligar todos</button>}
-            {onExportFolder && <button onClick={() => { onExportFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">⬇ Exportar pasta (JSON)</button>}
+            {onExportFolder && <button onClick={() => { onExportFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">↗ Exportar pasta (JSON)</button>}
             {onRenameFolder && <button onClick={() => { onRenameFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-white/10">✏️ Renomear</button>}
             {onDeleteFolder && <button onClick={() => { onDeleteFolder(menu.path); setMenu(null) }} className="w-full text-left px-3 py-1.5 hover:bg-red-500/15 text-red-300">🗑 Excluir</button>}
           </div>
