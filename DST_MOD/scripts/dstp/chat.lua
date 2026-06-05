@@ -138,17 +138,43 @@ local function HandleBuiltinCommand(userid, name, message, player)
     local trimmed = message:match("^%s*(.-)%s*$") or message
     local cmd = trimmed:lower()
 
+    -- Resolve admin once (shared by #panel and #selftest).
+    local function IsAdmin()
+        for _, client in pairs(_G.TheNet:GetClientTable() or {}) do
+            if client.userid == userid and client.admin then return true end
+        end
+        return false
+    end
+
     if cmd == "#painel" or cmd == "/painel" or cmd == "#panel" or cmd == "/panel" then
         -- Only admins get the panel link
-        local is_admin = false
-        for _, client in pairs(_G.TheNet:GetClientTable() or {}) do
-            if client.userid == userid and client.admin then
-                is_admin = true
-                break
-            end
-        end
-        if is_admin and player and player:IsValid() then
+        if IsAdmin() and player and player:IsValid() then
             SendUrlToAdmin(player)
+        end
+        return true -- suppress
+    end
+
+    -- #selftest — run the in-game self-test (admin ONLY). Results go to the server log
+    -- (server_log.txt) AND a one-line PASS/FAIL summary is PM'd back to the admin so
+    -- they don't need to open the log. Arbitrary engine-side assertions (coalescing,
+    -- debounce, loop watchdog, execute gate) on the live master sim.
+    if cmd == "#selftest" or cmd == "/selftest" then
+        if not IsAdmin() then
+            if player and player:IsValid() then
+                SendPrivateMessage(player, "selftest: apenas admin.")
+            end
+            return true
+        end
+        if core.RunSelfTest then
+            local ok, run = _G.pcall(core.RunSelfTest)
+            if ok and run and player and player:IsValid() then
+                local verdict = (run.failed == 0) and "TODOS OK" or (run.failed .. " FALHARAM")
+                SendPrivateMessage(player, string.format("selftest: %d passou, %d falhou (%s) — ver server_log.txt", run.passed, run.failed, verdict))
+            elseif player and player:IsValid() then
+                SendPrivateMessage(player, "selftest: erro ao rodar (ver server_log.txt)")
+            end
+        elseif player and player:IsValid() then
+            SendPrivateMessage(player, "selftest: indisponivel (core.RunSelfTest nao registrado)")
         end
         return true -- suppress
     end

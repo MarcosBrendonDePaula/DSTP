@@ -67,6 +67,8 @@ local Commands = require("dstp/commands")
 -- + event hot-toggle moved to dstp/chat. Both wired in DSTP.Init below.
 local Http = require("dstp/http")
 local Chat = require("dstp/chat")
+-- In-game self-test (run by an admin via #selftest). Isolated mechanic module.
+local SelfTest = require("dstp/selftest")
 
 -- Game event listeners moved to dstp/events (per-player/world/weather/boss/grief).
 -- Bodies unchanged; gated by core.evt_config. Wired via Events.RegisterGameEvents in
@@ -116,6 +118,8 @@ function DSTP.Init(mod_env, mod_config)
     -- + core.HotToggleEvents, which events/http read).
     Collectors.Init(Core)
     Commands.RegisterAll(Core)        -- register the ~55 command handlers
+    SelfTest.Init(Core)               -- in-game test runner; publishes core.RunSelfTest
+    Core.RunSelfTest = SelfTest.Run   -- chat.lua's #selftest (admin) calls this
     Chat.Init(Core)                   -- sets core.MaybeNotifyOwnerSetup + core.HotToggleEvents
     Events.Init(Core)                 -- event listeners (read core.evt_config + the chat hooks)
     Http.Init(Core, Collectors)       -- poll loop (needs the collectors)
