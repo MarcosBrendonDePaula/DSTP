@@ -321,6 +321,40 @@ end
 -- riding the SAME ctx.callback_fn(cb, root_id) path the tree `button` uses → no new
 -- RPC/event/trigger. The overlay is a child of the primitive, co-located at (0,0); it
 -- does NOT change the (w,h) RenderNode returns, so layout is unaffected.
+-- Build an INVISIBLE, CLICKABLE hit target (an ImageButton) over a primitive. This is
+-- the load-bearing pattern for the whole "make a HUD thing clickable" problem:
+--
+-- HUD click routing is FOCUS-based: the engine hit-test (GetEntitiesAtScreenPoint) only
+-- returns entities with a REAL clickable region; that entity gains focus on hover, and
+-- only a FOCUSED widget's OnControl fires (button.lua:59). A blank/transparent texture
+-- wins NO hit-test, so a transparent overlay never focuses and the click falls through
+-- to the world (the player walks). So: an OPAQUE tex (square.tex) for a real hit region,
+-- made invisible via per-state alpha-0 colours (NOT a one-time tint — OnGainFocus would
+-- re-show it), scale_on_focus=false (else hover grows it 1.2x and resets the texture to a
+-- square), ForceImageSize for the region, SetClickable(true), MoveToFront. Returns the
+-- ImageButton; caller wires SetOnClick / OnMouseButton.
+local function MakeHitTarget(parent, w, h, pad, debug)
+    local ImageButton = _G.require("widgets/imagebutton")
+    local hit = parent:AddChild(ImageButton("images/global.xml", "square.tex", "square.tex", "square.tex"))
+    hit.scale_on_focus = false
+    pad = pad or 0
+    if hit.ForceImageSize and w and h and w > 0 and h > 0 then
+        hit:ForceImageSize(w + pad * 2, h + pad * 2)
+    end
+    local a = debug and { 1, 0, 0, 0.35 } or { 1, 1, 1, 0 }
+    if hit.SetImageNormalColour then
+        hit:SetImageNormalColour(a[1], a[2], a[3], a[4])
+        hit:SetImageFocusColour(a[1], a[2], a[3], a[4])
+        if hit.SetImageDisabledColour then hit:SetImageDisabledColour(a[1], a[2], a[3], a[4]) end
+    elseif hit.image and hit.image.SetTint then
+        hit.image:SetTint(a[1], a[2], a[3], a[4])
+    end
+    hit:SetPosition(0, 0, 0)
+    if hit.SetClickable then hit:SetClickable(true) end
+    hit:MoveToFront()
+    return hit
+end
+
 local function MaybeClickable(widget, node, ctx, w, h)
     if not node.callback then return end
     local cb = node.callback
@@ -331,47 +365,59 @@ local function MaybeClickable(widget, node, ctx, w, h)
         last = now
         if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
     end
-    local ImageButton = _G.require("widgets/imagebutton")
-    -- HUD click routing is FOCUS-based: the engine hit-test (GetEntitiesAtScreenPoint)
-    -- only returns entities with a REAL clickable region; that entity gains focus on
-    -- hover, and only a FOCUSED widget's OnControl fires (button.lua:59). A blank/
-    -- transparent texture wins NO hit-test, so the overlay never focuses and the click
-    -- falls through to the world (the player walks — the bug we hit). The working tree
-    -- `button` works because its OPAQUE carny texture registers a clickable region.
-    --
-    -- So: use an OPAQUE tex (square.tex) for a real hit region, make it INVISIBLE via an
-    -- alpha-0 tint, give it a real size (ForceImageSize), SetClickable(true) to force it
-    -- into the hit-test, and MoveToFront so the primitive's own glyphs/siblings don't
-    -- steal entitiesundermouse[1].
-    local hit = widget:AddChild(ImageButton("images/global.xml", "square.tex", "square.tex", "square.tex"))
-    -- An ImageButton re-scales (focus_scale 1.2) AND re-tints its image on hover/focus
-    -- (imagebutton.lua:120-133) — that's why the invisible overlay popped to a visible
-    -- square when the mouse entered. Kill BOTH so the hit target stays the same size and
-    -- stays invisible in every state (normal/focus/down/disabled).
-    hit.scale_on_focus = false   -- don't grow 1.2x on hover (would shrink the texture to a square)
-    -- Inflate the hit region by a small padding so it covers the WHOLE primitive: a
-    -- Text's GetRegionSize can come back a touch smaller than the rendered glyphs (and
-    -- the region is centered on origin, like the Text), so a bare w×h box leaves the
-    -- edges of the text unclickable. node.hit_pad lets a caller tune it; default 8px.
+    -- pad: Text's GetRegionSize can under-report the glyphs, so inflate a touch so the
+    -- whole string is clickable. node.hit_pad tunes it; default 8.
     local pad = (node.hit_pad ~= nil) and node.hit_pad or 8
-    if hit.ForceImageSize and w and h and w > 0 and h > 0 then
-        hit:ForceImageSize(w + pad * 2, h + pad * 2)  -- real hit region (size_x/size_y), padded
-    end
-    -- Set the per-state image colours so OnGainFocus/_RefreshImageState can't re-show
-    -- the texture. alpha 0 in every state = invisible but still clickable. (For debug,
-    -- a faint red on all states so the region is visible without popping on hover.)
-    local a = node.hit_debug and { 1, 0, 0, 0.35 } or { 1, 1, 1, 0 }
-    if hit.SetImageNormalColour then
-        hit:SetImageNormalColour(a[1], a[2], a[3], a[4])
-        hit:SetImageFocusColour(a[1], a[2], a[3], a[4])
-        if hit.SetImageDisabledColour then hit:SetImageDisabledColour(a[1], a[2], a[3], a[4]) end
-    elseif hit.image and hit.image.SetTint then
-        hit.image:SetTint(a[1], a[2], a[3], a[4])
-    end
-    hit:SetPosition(0, 0, 0)                    -- centered on the primitive (Text is centered too)
-    if hit.SetClickable then hit:SetClickable(true) end  -- force into the engine hit-test
-    hit:MoveToFront()                          -- win z-order vs the primitive/siblings
+    local hit = MakeHitTarget(widget, w, h, pad, node.hit_debug)
     hit:SetOnClick(fire)
+end
+
+-- Make a window draggable by a title-bar hit target. `dragArea` is the invisible
+-- ImageButton the user grabs; `target` is the widget that MOVES (the panel holder /
+-- tree root). On mouse-down we record the cursor→target offset and start a per-frame
+-- OnUpdate that pins the target under the cursor; on mouse-up we stop. Uses
+-- TheInput:GetScreenPosition (vanilla's own drag input, e.g. widget.lua:537) — the
+-- engine fully supports this; nothing DST-specific blocks it.
+local function MakeDraggable(dragArea, target)
+    local dragging = false
+    local lastx, lasty = 0, 0
+    local function cursor()
+        local p = _G.TheInput:GetScreenPosition()
+        return p.x, p.y
+    end
+    -- Drag by the cursor DELTA between frames, not absolute position: the target lives in
+    -- the HUD's proportional space while GetScreenPosition is in screen pixels, so the two
+    -- don't map 1:1. Applying the same pixel delta to the target's local position keeps
+    -- the window tracking the cursor closely without a space conversion. (For HUD scale
+    -- modes other than 1:1 there can be slight drift; good enough for a draggable panel.)
+    dragArea.OnUpdate = function()
+        if not dragging then return end
+        if not _G.TheInput:IsControlPressed(_G.CONTROL_PRIMARY) then
+            dragging = false; dragArea:StopUpdating(); return  -- mouse released off-area
+        end
+        local mx, my = cursor()
+        local dx, dy = mx - lastx, my - lasty
+        lastx, lasty = mx, my
+        if dx ~= 0 or dy ~= 0 then
+            local tp = target:GetPosition()
+            target:SetPosition(tp.x + dx, tp.y + dy)
+        end
+    end
+    dragArea.OnMouseButton = function(self, button, down, x, y)
+        if button == _G.MOUSEBUTTON_LEFT then
+            if down then
+                lastx, lasty = cursor()
+                dragging = true
+                target:MoveToFront()
+                dragArea:StartUpdating()
+            else
+                dragging = false
+                dragArea:StopUpdating()
+            end
+            return true
+        end
+        return false
+    end
 end
 
 RenderNode = function(node, parent, ctx)
@@ -622,13 +668,24 @@ RenderNode = function(node, parent, ctx)
         end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
-        -- close button
+        -- Draggable window: a title-bar hit target the user grabs to move the whole panel.
+        -- Created BEFORE the close button so the close button's later MoveToFront keeps it
+        -- ON TOP and clickable. The bar leaves a gap on the right for the close button.
+        if node.draggable then
+            local barH = node.drag_height or 44
+            local barW = (node.closeable ~= false) and (pw - 44) or pw  -- avoid the close hitbox
+            local drag = MakeHitTarget(holder, barW, barH, 0, node.hit_debug)
+            drag:SetPosition(-(pw - barW) / 2, ph / 2 - barH / 2, 0)  -- top strip, shifted left of close
+            MakeDraggable(drag, holder)
+        end
+        -- close button (after the drag bar so its MoveToFront wins z-order over the bar)
         if node.closeable ~= false then
             local close_btn = holder:AddChild(ImageButton(
                 "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
             close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetScale(0.4)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
+            close_btn:MoveToFront()
         end
         -- Make title/body addressable so update-by-name patches them in place.
         Register(ctx, node, holder, function(props)

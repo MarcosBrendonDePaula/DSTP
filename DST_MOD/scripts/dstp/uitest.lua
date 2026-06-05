@@ -71,10 +71,11 @@ function M.Run(userid)
           color = { 0.2, 0.9, 0.2, 1 } },
         "left", 160, 120)
 
-    -- 3) PANEL with title + body (fixed size), center-left.
+    -- 3) PANEL with title + body (fixed size), center-left. DRAGGABLE: grab the title
+    -- bar and move it; the close X stays clickable.
     send("uitest_panel",
-        { type = "panel", width = 360, height = 200,
-          title = "[UITEST] painel", body = "Se voce ve titulo + este corpo + um X de fechar, o panel OK. Clique no X para fechar este painel." },
+        { type = "panel", width = 360, height = 200, draggable = true,
+          title = "[UITEST] painel (arraste o topo)", body = "Janela arrastavel: segure o topo e mova. O X fecha. Se arrastar e fechar funcionam, o sistema de janela OK." },
         "center", -260, 0)
 
     -- 4) BUTTON — real clickable button, center.
