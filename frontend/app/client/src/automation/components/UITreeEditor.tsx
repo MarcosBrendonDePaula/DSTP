@@ -42,9 +42,11 @@ function defaults(type: string): UINode {
   }
 }
 
-// Editable prop fields per type (key, label, placeholder).
+// Editable prop fields per type (key, label, placeholder). Kept as free-text inputs so
+// any field — including booleans like draggable/closeable — can take a template
+// ({{...}}) instead of a fixed value.
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
   col: [{ key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
   row: [{ key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
@@ -85,6 +87,7 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
   // current drop target (for the highlight). pathKey = the dropPath serialized.
   const [dragType, setDragType] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
+  const [movePath, setMovePath] = useState<Step[] | null>(null)  // a tree row being dragged to move
   const pathKey = (p: Step[]) => p.map(s => s.kind + s.i).join('/') || 'root'
 
   const root: UINode = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
@@ -147,6 +150,37 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
   }
 
   const samePath = (a: Step[], b: Step[]) => a.length === b.length && a.every((s, i) => s.kind === b[i].kind && s.i === b[i].i)
+  const isAncestor = (a: Step[], b: Step[]) => a.length < b.length && a.every((s, i) => s.kind === b[i].kind && s.i === b[i].i)
+
+  // Move an EXISTING node (at fromPath) INTO the container at destPath (drag a tree row
+  // onto another container row). Detaches from its old parent, appends to the new one.
+  // No-ops if you drop a node onto itself or a descendant (would orphan the subtree).
+  const moveNodeInto = (fromPath: Step[], destPath: Step[]) => {
+    if (fromPath.length === 0) return                         // can't move the root
+    if (samePath(fromPath, destPath) || isAncestor(fromPath, destPath)) return
+    save(update(root, r => {
+      // Resolve BOTH nodes by object reference on this clone, so a splice that shifts
+      // indices doesn't invalidate the destination.
+      const moving = getNode(r, fromPath)
+      const dest = getNode(r, destPath) || r
+      if (!moving || !CONTAINER.has(dest.type)) return
+      // detach from old parent
+      const fp = fromPath[fromPath.length - 1]
+      const oldParent = getNode(r, fromPath.slice(0, -1)) || r
+      if (fp.kind === 'tab') { if (oldParent.tabs) oldParent.tabs.splice(fp.i, 1) }
+      else if (oldParent.children) oldParent.children.splice(fp.i, 1)
+      // append to the destination (dest is the same object ref, valid after the splice)
+      if (dest.type === 'tabs') {
+        dest.tabs = dest.tabs || []
+        dest.tabs.push({ label: `Aba ${dest.tabs.length + 1}`,
+          child: moving.type === 'col' || moving.type === 'row' ? moving : { type: 'col', gap: 6, children: [moving] } })
+      } else {
+        dest.children = dest.children || []
+        dest.children.push(moving)
+      }
+    }))
+    setSelPath([])
+  }
 
   // Recursive tree rows
   const renderRow = (n: UINode, path: Step[], label?: string): React.ReactNode => {
@@ -156,18 +190,29 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
     if (n.children) n.children.forEach((c: UINode, i: number) => kids.push(renderRow(c, [...path, { kind: 'child', i }])))
     if (n.tabs) n.tabs.forEach((tb: any, i: number) => kids.push(renderRow(tb.child, [...path, { kind: 'tab', i }], tb.label)))
     const isContainer = CONTAINER.has(n.type)
-    const isDropTarget = isContainer && dragType != null && dropKey === pathKey(path)
+    // A container is a drop target for the palette (new block) AND for moving an existing
+    // row into it. Highlight while either drag hovers it.
+    const isDropTarget = isContainer && (dragType != null || movePath != null) && dropKey === pathKey(path)
     return (
       <div key={pathKey(path)}>
         <div
           onClick={() => setSelPath(path)}
+          // Drag THIS row (existing node) to move it into another container.
+          draggable={path.length > 0}
+          onDragStart={path.length > 0 ? (e => { e.stopPropagation(); setMovePath(path); e.dataTransfer.setData('text/dstp-treemove', pathKey(path)); e.dataTransfer.effectAllowed = 'move' }) : undefined}
+          onDragEnd={() => { setMovePath(null); setDropKey(null) }}
           onDragOver={isContainer ? (e => { e.preventDefault(); e.stopPropagation(); if (dropKey !== pathKey(path)) setDropKey(pathKey(path)) }) : undefined}
           onDragLeave={isContainer ? (e => { e.stopPropagation(); if (dropKey === pathKey(path)) setDropKey(null) }) : undefined}
           onDrop={isContainer ? (e => {
             e.preventDefault(); e.stopPropagation()
-            const t = dragType || e.dataTransfer.getData('text/plain')
-            if (t) addChildAt(path, t)
-            setDragType(null); setDropKey(null); setSelPath(path)
+            if (movePath) {
+              moveNodeInto(movePath, path)          // move an existing node here
+            } else {
+              const t = dragType || e.dataTransfer.getData('text/plain')
+              if (t) addChildAt(path, t)             // drop a new block from the palette
+              setSelPath(path)
+            }
+            setDragType(null); setMovePath(null); setDropKey(null)
           }) : undefined}
           className={`flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-[11px] ${isDropTarget ? 'bg-emerald-500/30 ring-1 ring-emerald-400 text-white' : isSel ? 'bg-indigo-500/30 text-white' : 'hover:bg-white/5 text-gray-300'}`}
           style={{ paddingLeft: 6 + depth * 14 }}

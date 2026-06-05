@@ -725,6 +725,16 @@ export class FlowEngine {
     // Common props per type. Numeric fields are coerced.
     const out: any = { type }
     const num = (v: any) => { const n = Number(r(v)); return Number.isFinite(n) ? n : undefined }
+    // Resolve a possibly-templated boolean. Unset/'' -> fallback. Falsey strings
+    // (false/no/0/off/não) -> false; anything else truthy -> true.
+    const bool = (v: any, fallback: boolean): boolean => {
+      if (v === undefined || v === null || v === '') return fallback
+      if (typeof v === 'boolean') return v
+      const s = String(v).trim().toLowerCase()
+      if (['false', 'no', '0', 'off', 'nao', 'não'].includes(s)) return false
+      if (['true', 'yes', '1', 'on', 'sim'].includes(s)) return true
+      return !!v
+    }
     const color = (v: any) => {
       const rv = r(v)
       if (Array.isArray(rv)) return rv
@@ -740,8 +750,10 @@ export class FlowEngine {
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
       if (p.body) out.body = r(p.body)
-      out.closeable = p.closeable !== false && p.closeable !== 'false'
-      if (p.draggable === true || p.draggable === 'true') out.draggable = true
+      // closeable/draggable accept a template ({{...}}): resolve, THEN read truthiness so
+      // a flow can drive them. closeable defaults ON; draggable defaults OFF.
+      out.closeable = bool(r(p.closeable), true)
+      if (bool(r(p.draggable), false)) out.draggable = true
       if (p.width != null) out.width = num(p.width)
       if (p.height != null) out.height = num(p.height)
       if (p.gap != null) out.gap = num(p.gap)
