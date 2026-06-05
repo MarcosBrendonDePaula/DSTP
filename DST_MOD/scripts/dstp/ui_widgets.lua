@@ -379,44 +379,52 @@ end
 -- TheInput:GetScreenPosition (vanilla's own drag input, e.g. widget.lua:537) — the
 -- engine fully supports this; nothing DST-specific blocks it.
 local function MakeDraggable(dragArea, target)
-    local dragging = false
+    -- The title bar's OnMouseButton only STARTS the drag. The tracking + end are done by
+    -- GLOBAL input handlers (TheInput:AddMoveHandler / AddMouseButtonHandler), which fire
+    -- regardless of focus/hover — so a fast move that leaves the bar doesn't stop the drag
+    -- (the earlier OnUpdate+IsControlPressed approach was focus-gated and stalled), and
+    -- there's no 1-frame startup delay (the move handler fires immediately).
     local lastx, lasty = 0, 0
-    local function cursor()
-        local p = _G.TheInput:GetScreenPosition()
-        return p.x, p.y
-    end
-    -- Drag by the cursor DELTA between frames, not absolute position: the target lives in
-    -- the HUD's proportional space while GetScreenPosition is in screen pixels, so the two
-    -- don't map 1:1. Applying the same pixel delta to the target's local position keeps
-    -- the window tracking the cursor closely without a space conversion. (For HUD scale
-    -- modes other than 1:1 there can be slight drift; good enough for a draggable panel.)
-    dragArea.OnUpdate = function()
-        if not dragging then return end
-        if not _G.TheInput:IsControlPressed(_G.CONTROL_PRIMARY) then
-            dragging = false; dragArea:StopUpdating(); return  -- mouse released off-area
+    local move_handle, btn_handle = nil, nil
+
+    local function scaleXY()
+        local parent = target.parent
+        if parent and parent.GetScale then
+            local s = parent:GetScale()
+            if s then return (s.x ~= 0 and s.x) or 1, (s.y ~= 0 and s.y) or 1 end
         end
-        local mx, my = cursor()
-        local dx, dy = mx - lastx, my - lasty
-        lastx, lasty = mx, my
-        if dx ~= 0 or dy ~= 0 then
-            local tp = target:GetPosition()
-            target:SetPosition(tp.x + dx, tp.y + dy)
-        end
+        return 1, 1   -- target is in PROPORTIONAL HUD space; divide screen px by its scale
     end
+
+    local function stop()
+        if move_handle then move_handle:Remove(); move_handle = nil end
+        if btn_handle then btn_handle:Remove(); btn_handle = nil end
+    end
+
     dragArea.OnMouseButton = function(self, button, down, x, y)
-        if button == _G.MOUSEBUTTON_LEFT then
-            if down then
-                lastx, lasty = cursor()
-                dragging = true
-                target:MoveToFront()
-                dragArea:StartUpdating()
-            else
-                dragging = false
-                dragArea:StopUpdating()
-            end
-            return true
+        if button ~= _G.MOUSEBUTTON_LEFT then return false end
+        if down then
+            if move_handle then return true end  -- already dragging
+            local p = _G.TheInput:GetScreenPosition(); lastx, lasty = p.x, p.y
+            target:MoveToFront()
+            -- Global move: fires on EVERY cursor move during the drag, no focus needed.
+            move_handle = _G.TheInput:AddMoveHandler(function(mx, my)
+                local dx, dy = mx - lastx, my - lasty
+                lastx, lasty = mx, my
+                if dx ~= 0 or dy ~= 0 then
+                    local sx, sy = scaleXY()
+                    local tp = target:GetPosition()
+                    target:SetPosition(tp.x + dx / sx, tp.y + dy / sy)
+                end
+            end)
+            -- Global mouse-up: ends the drag even if released off the bar.
+            btn_handle = _G.TheInput:AddMouseButtonHandler(function(btn, bdown)
+                if btn == _G.MOUSEBUTTON_LEFT and not bdown then stop() end
+            end)
+        else
+            stop()
         end
-        return false
+        return true
     end
 end
 
