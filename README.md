@@ -79,9 +79,10 @@ n8n-style drag-and-drop editor. **11 node types**, **74 triggers**, **56 actions
 
 ### 🖥 In-game UI — *built by flows*
 - **🎨 UI Builder** — assemble the whole interface **in a single node**, with a visual tree editor (clean canvas)
-- **Generic client-side renderer** with **auto-layout**: panel, column, row, **tabs**, text, **real item icon**, image, button, progress bar, spacer
+- **Generic client-side renderer** with **auto-layout**: panel, column, row, **tabs**, text, **real item icon**, image, button, progress bar, spacer, **text input**
 - **`ui_set`** — update **any property** of any node in real time, without redrawing (balance, health bar, show/hide)
-- **Click any widget** → becomes a `ui_callback` trigger in the flow
+- **Click any widget** (text/icon/image/button) → becomes a `ui_callback` trigger in the flow
+- **Draggable windows** (`panel draggable=true`) and an **editable text field** (Enter returns the typed value to the flow) — all validated on the real engine
 - Client-side **tabs** (switch with no round-trip) and **follow-entity** (a HUD that tracks a mob/boss in the world)
 - Declarative **rules engine**: reactive local HUD (live HP bar) with no backend round-trip
 
@@ -143,7 +144,7 @@ input/focus hit-test, `debug.sethook` preemption, strict mode, net_string):
 | Command | What it does |
 |---------|--------------|
 | `#selftest` | Runs assertions in the **live master sim** (coalescing, per-player debounce, loop watchdog, execute gate) and PMs a PASS/FAIL summary; full results in `server_log.txt` (`DSTP SELF-TEST`). |
-| `#uitest` / `#uitest clear` | Spawns one of each HUD widget (label, panel, bar, button, **clickable text/icon/image**) on the admin's screen; each click logs `UITEST CLICK`. Add `hit_debug=true` on a node to tint its clickable region. |
+| `#uitest` / `#uitest clear` | Spawns one of each HUD widget — label, bar, button, **clickable text/icon/image**, a **draggable panel** (drag the title bar, X closes), and an **editable text field** (type, Enter sends) — on the admin's screen; clicks/inputs log `UITEST CLICK`. Add `hit_debug=true` on a node to tint its clickable region. |
 
 Both are gated to admins and never reach public chat. Each has a fengari **meta-test**
 (`selftest-module.test.ts` / `uitest-module.test.ts`) that runs the real module so a

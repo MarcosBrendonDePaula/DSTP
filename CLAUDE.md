@@ -67,7 +67,7 @@ Two separate codebases in one repo:
 - `DST_MOD/scripts/dstp/core.lua` — shared state + ubiquitous helpers (event queue + per-player debounce, command registry `ProcessCommands`/`ExecuteCommand`, `RunGuarded` loop watchdog, logging, JSON)
 - `DST_MOD/scripts/dstp/{collectors,commands,http,chat}.lua` — server data collectors · ~55 command handlers · poll loop · chat hook + `#`-commands
 - `DST_MOD/scripts/dstp/events.lua` + `events/<category>.lua` — event listeners, one file per category (facade fans out per-player/world); all register at boot, gate on `core.evt_config`
-- `DST_MOD/scripts/dstp/ui_widgets.lua` — client-side widget renderer: a generic **tree renderer** (col/row/tabs/text/icon/image/button/bar/panel) + thin flat adapters (label/panel/button/progress_bar) + `notification`/`follow`. `MaybeClickable` makes text/icon/image clickable (see HUD-focus note under Testing)
+- `DST_MOD/scripts/dstp/ui_widgets.lua` — client-side widget renderer: a generic **tree renderer** (col/row/tabs/text/icon/image/button/bar/panel/**text_input**) + thin flat adapters (label/panel/button/progress_bar) + `notification`/`follow`. `MakeHitTarget`/`MaybeClickable` make text/icon/image clickable; `panel` supports `draggable=true` (drag by the title bar via a global `TheInput:AddMoveHandler`); `text_input` is an editable HUD field (TextEdit + `SetForceEdit` grabs the keyboard / suppresses WASD; Enter returns the typed string via `ui_callback` `callback_data.value`). All three are the same focus-based HUD-input pattern — see the HUD-focus note under **Testing the mod**
 - `DST_MOD/scripts/dstp/rules_engine.lua` — client-side interpreter for declarative `when/do` rules pushed from the backend
 - `DST_MOD/scripts/dstp/{selftest,uitest}.lua` — in-game test runners (`#selftest`/`#uitest`, admin-only) — see **Testing the mod**
 - `DST_MOD/scripts_extracted/` (and `/tmp/dstscripts/scripts`) — vanilla DST scripts extracted for reference (git-ignored, not part of the mod)
@@ -348,7 +348,21 @@ only when `self.focus`. So a bare Text/Image is never clickable; to make one cli
 overlay an **opaque** `ImageButton` (square.tex), make it invisible via per-state alpha-0
 colours (`SetImageNormalColour/FocusColour/DisabledColour`) + `scale_on_focus=false` (so
 hover doesn't resize/re-show it), `ForceImageSize(w,h)` for the hit region, `SetClickable(true)`,
-`MoveToFront()`. See `ui_widgets.lua` `MaybeClickable`.
+`MoveToFront()`. See `ui_widgets.lua` `MakeHitTarget`. The same HUD-input family, each
+solved and validated in-game (the engine input/focus path is NOT testable in fengari):
+- **Click** → `MakeHitTarget`/`MaybeClickable` (above).
+- **Drag** (`panel draggable=true`) → on mouse-down register a GLOBAL `TheInput:AddMoveHandler`
+  (fires every cursor move regardless of focus — vanilla's own `Widget:FollowMouse`) +
+  `AddMouseButtonHandler` for the up; `:Remove()` both on release. The widget's
+  focus-gated `OnUpdate` is NOT enough (a fast move off the bar drops focus and stalls).
+  Convert the screen-pixel delta to HUD-local by dividing by the parent's accumulated
+  scale (HUD is `SCALEMODE_PROPORTIONAL`).
+- **Text input** (`text_input`) → a `widgets/textedit` child with `SetForceEdit(true)` then
+  `SetEditing(true)` (on the click overlay) routes all keys to the field via
+  `TheFrontEnd:SetForceProcessTextInput` AND suppresses WASD/hotkeys (player controller
+  `IsEnabled` goes false); Enter→`OnTextEntered`→`ctx.callback_fn(cb, root_id, {value,id})`,
+  riding the existing `ui_callback` as `callback_data`. Release the grab (`SetEditing(false)`)
+  on destroy so the player isn't left unable to move.
 
 ## Branches
 - `main` — stable releases
