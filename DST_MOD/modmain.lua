@@ -247,6 +247,7 @@ dstp.Init(env, {
     panel_url_base = PANEL_URL,
     poll_interval = POLL_INTERVAL,
     debug_logs = GetModConfigData("DEBUG_LOGS") == true,
+    allow_execute = GetModConfigData("ALLOW_EXECUTE") == true,
     events = {
         players = GetModConfigData("EVT_PLAYERS") ~= false,
         chat = GetModConfigData("EVT_CHAT") ~= false,

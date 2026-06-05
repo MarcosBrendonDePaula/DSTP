@@ -67,6 +67,13 @@ configuration_options = {
         options = {{description = "Off (recomendado)", data = false}, {description = "On", data = true}},
         default = false,
     },
+    {
+        name = "ALLOW_EXECUTE",
+        label = "Permitir Execute (Lua)",
+        hover = "Permite que fluxos rodem Lua ARBITRÁRIO no servidor via o comando 'execute' (RCE de admin). ON por padrão (não quebra fluxos que já usam). Desligue num servidor onde você não confia totalmente em quem edita os fluxos — o comando é gated por 'um admin desenhou o fluxo'. O watchdog contra loop infinito fica sempre ativo, independente desta opção.",
+        options = {{description = "On (padrão)", data = true}, {description = "Off (mais seguro)", data = false}},
+        default = true,
+    },
     -- Event categories
     {
         name = "EVT_PLAYERS",
