@@ -21,4 +21,20 @@ describe('mod selftest.lua — in-game self-test is correct and side-effect-free
     })
     expect(result).toBe('OK')
   })
+
+  // The entity-control case (#57-59) skips when there's no engine (the harness above).
+  // This one injects a fake engine (SpawnPrefab + Ents + components) so the case runs
+  // its REAL assertions + cleanup — proving the in-game path is correct before anyone
+  // types #selftest on a live server.
+  it('the entity-control case passes on a live (faked-engine) path and cleans up', () => {
+    const result = runLuaHarness({
+      modules: {
+        CORE: modSource('core.lua'),
+        COMMANDS: modSource('commands.lua'),
+        SELFTEST: modSource('selftest.lua'),
+      },
+      harness: readFileSync(join(import.meta.dir, '__lua__', 'selftest-entity-harness.lua'), 'utf8'),
+    })
+    expect(result).toBe('OK')
+  })
 })

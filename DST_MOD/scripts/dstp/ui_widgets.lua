@@ -449,11 +449,17 @@ RenderNode = function(node, parent, ctx)
         local atlas, tex
         if node.atlas and node.tex then atlas, tex = node.atlas, node.tex
         else atlas, tex = ResolveItemAtlas(node.prefab or "log") end
-        local size = node.size or 56
+        local size = tonumber(node.size) or 56
         local img
-        local ok = _G.pcall(function() img = parent:AddChild(Image(atlas, tex)) end)
-        if ok and img then
+        -- Build AND size inside the pcall: a missing/invalid .tex makes the engine's
+        -- Image construct a widget whose SetSize then errors ("SetSize on bad self") —
+        -- so SetSize must be guarded too, not just the constructor. Any failure here
+        -- falls through to the empty placeholder below instead of crashing the render.
+        local ok = _G.pcall(function()
+            img = parent:AddChild(Image(atlas, tex))
             img:SetSize(size, size)
+        end)
+        if ok and img then
             MaybeClickable(img, node, ctx, size, size)
             Register(ctx, node, img, function(props)
                 if not img.inst:IsValid() then return end
@@ -463,21 +469,32 @@ RenderNode = function(node, parent, ctx)
             end)
             return img, size, size
         end
+        -- Build failed (bad texture) — drop the half-built image and use a placeholder.
+        if img and img.Kill then _G.pcall(function() img:Kill() end) end
         return parent:AddChild(Widget("noicon")), size, size
 
     elseif t == "image" then
-        local size = node.size or 64
-        local iw, ih = node.width or size, node.height or size
-        local img = parent:AddChild(Image(node.atlas or "images/global.xml", node.tex or "square.tex"))
-        img:SetSize(iw, ih)
-        if node.tint then local c = ResolveColor(node.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
-        MaybeClickable(img, node, ctx, iw, ih)
-        Register(ctx, node, img, function(props)
-            if not img.inst:IsValid() then return end
-            if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
-            if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+        local size = tonumber(node.size) or 64
+        local iw, ih = tonumber(node.width) or size, tonumber(node.height) or size
+        local img
+        -- Guard build+size together: a bad atlas/tex makes the engine's Image error in
+        -- SetSize ("SetSize on bad self"), which must not crash the whole render tree.
+        local ok = _G.pcall(function()
+            img = parent:AddChild(Image(node.atlas or "images/global.xml", node.tex or "square.tex"))
+            img:SetSize(iw, ih)
         end)
-        return img, node.width or size, node.height or size
+        if ok and img then
+            if node.tint then local c = ResolveColor(node.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+            MaybeClickable(img, node, ctx, iw, ih)
+            Register(ctx, node, img, function(props)
+                if not img.inst:IsValid() then return end
+                if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
+                if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
+            end)
+            return img, iw, ih
+        end
+        if img and img.Kill then _G.pcall(function() img:Kill() end) end
+        return parent:AddChild(Widget("noimage")), iw, ih
 
     elseif t == "button" then
         local bw = node.width or 160

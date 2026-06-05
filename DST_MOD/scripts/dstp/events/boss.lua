@@ -32,6 +32,17 @@ function M.RegisterWorld(inst)
     -- entity_death (notable-mob death) is now dispatched centrally by the facade via
     -- M.OnEntityDeath (single world listener fanned out) — see events.lua.
 
+    -- Toadstool (mushroom boss) spawner state machine changed
+    -- ("toadstoolstatechanged", toadstoolspawner.lua:70; data = { spawner, state }).
+    -- The closest thing to "a boss is now spawnable" — no generic boss-spawn event
+    -- exists (giants are SpawnPrefab'd with no PushEvent). state is a number/enum.
+    inst:ListenForEvent("toadstoolstatechanged", function(world, data)
+        if not evt_config.bosses then return end
+        DSTP.PushEvent("toadstool_state_changed", {
+            state = data and tostring(data.state) or "unknown",
+        }, data)
+    end)
+
     -- NOTE: ms_registerfire was REMOVED. It is NOT a real fire-START event — burnable.lua
     -- fires `onignite` per-burnable (burnable.lua:375), never an `ms_registerfire` on the
     -- world, so this listener was dead (never fired). A genuine "fire started" detector

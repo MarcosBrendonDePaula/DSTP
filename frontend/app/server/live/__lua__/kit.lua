@@ -61,11 +61,22 @@ function KIT.make_G(overrides)
     type = type,
     pairs = pairs,
     ipairs = ipairs,
+    -- rawset/rawget/next: DST's real _G has them, and strict-mode-safe code (e.g. the
+    -- self-test writing a sentinel into _G without tripping the strict metatable) calls
+    -- rawset/rawget. Mirror them so that code behaves under fengari as in-game.
+    rawset = rawset,
+    rawget = rawget,
+    rawequal = rawequal,
+    next = next,
     math = math,
     string = string,
     table = table,
   }
   if overrides then for k, v in pairs(overrides) do G[k] = v end end
+  -- Self-reference: DST's real _G has _G._G == _G, so code run with setfenv(fn, _G)
+  -- (the `execute` command) can name `_G` inside the chunk (e.g. rawset(_G, k, v)).
+  -- Set it last so an override can't accidentally drop it.
+  G._G = G
   return G
 end
 

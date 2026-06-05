@@ -59,6 +59,55 @@ export const ACTION_TYPES = [
   { value: 'remove_near_player', label: '🗑 Remove Near Player', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'prefab', label: 'Prefab', placeholder: 'skeleton' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
   { value: 'remove_near', label: '🗑 Remove Near (coords)', params: [{ key: 'prefab', label: 'Prefab' }, { key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'radius', label: 'Raio', placeholder: '10' }, { key: 'limit', label: 'Limite', placeholder: '999' }] },
   { value: 'destroy_structure', label: '🔨 Destroy Structure', params: [{ key: 'x', label: 'X' }, { key: 'z', label: 'Z' }, { key: 'prefab', label: 'Prefab (opcional)' }, { key: 'radius', label: 'Raio', placeholder: '3' }] },
+  // Entity control (key por guid de um evento, OU prefab+x+z+radius). Token correlaciona o resultado.
+  { value: 'get_entity', label: '🔎 Ler Entidade (por GUID)', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: 'beefalo' },
+    { key: 'x', label: 'X', placeholder: '' },
+    { key: 'z', label: 'Z', placeholder: '' },
+    { key: 'radius', label: 'Raio', placeholder: '8' },
+    { key: 'token', label: 'Token (correlação)', placeholder: '{{trigger.callback}}' },
+  ] },
+  { value: 'entity_set_health', label: '❤ Entidade: Set Health', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+    { key: 'percent', label: '% (0-1) OU', placeholder: '1' },
+    { key: 'amount', label: 'Delta (+/-)', placeholder: '' },
+  ] },
+  { value: 'entity_kill', label: '💀 Entidade: Matar (smite)', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+  ] },
+  { value: 'entity_extinguish', label: '💧 Entidade: Apagar Fogo', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+  ] },
+  { value: 'entity_ignite', label: '🔥 Entidade: Incendiar (ADMIN)', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+  ] },
+  { value: 'entity_set_fuel', label: '⛽ Entidade: Set Combustível', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+    { key: 'percent', label: '% (0-1) OU', placeholder: '1' },
+    { key: 'delta', label: 'Delta (+/-)', placeholder: '' },
+  ] },
+  { value: 'entity_freeze', label: '🧊 Entidade: Congelar', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+    { key: 'coldness', label: 'Frio (intensidade)', placeholder: '1' },
+  ] },
+  { value: 'entity_unfreeze', label: '☀ Entidade: Descongelar', params: [
+    { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
+    { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
+    { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+  ] },
   // UI Widgets
   { value: 'ui_notification', label: '🔔 Notificação', params: [
     { key: 'userid', label: 'Player', placeholder: '{{trigger.userid}}' },

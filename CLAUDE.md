@@ -150,6 +150,7 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `filter` | Stop the flow unless a condition passes (single output, halts on fail) |
 | `foreach` | Iterate a list: run the `each` branch per item (`{{loop.item}}`/`{{loop.index}}`) then `done`. Capped at 40 items |
 | `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 50+ subtypes via `action_type`) |
+| `get_entity` / `entity_*` | **Entity control** — read/mutate a NON-player entity keyed by `guid` (from an entity event) OR `prefab`+`x`/`z`+`radius`. `get_entity` reads a flat per-component object (→ `entity_data` event); mutators: `entity_set_health`/`entity_kill`/`entity_extinguish`/`entity_ignite`/`entity_set_fuel`/`entity_freeze`/`entity_unfreeze`. Resolver = `Ents[guid]` + `IsValid` guard (`found:false` on stale GUID) in `commands.lua`. `spawn_prefab`/`spawn_at_player` now return the GUID via `spawn_result` when a `token` is given (the spawn→control→react loop). See `DST_MOD/specs/entity-control-catalog.md`. |
 | `delay` | Wait N ms before continuing (capped at 1h) |
 | `http_request` | External HTTP call (GET/POST with templates) |
 | `set_variable` | Store custom key-value in context |
@@ -257,14 +258,19 @@ Events are grouped and hot-toggleable at runtime. Backend auto-activates categor
 - **players**: player_spawn, player_left, player_death, player_ghost, player_respawn
 - **chat**: chat_message
 - **combat**: player_kill, player_attacked
-- **crafting**: player_craft, player_build
+- **crafting**: player_craft, player_build, structure_built (placed-build, builder DoBuild override)
 - **inventory**: player_equip, player_unequip, player_pickup, player_drop
 - **health**: health_delta, hunger_delta, sanity_delta (debounced)
 - **survival**: player_eat, insane/sane, starving/fed, freezing/warm, overheating/cooled, mounted/dismounted
 - **gathering**: player_work, resource_gathered, player_harvest, player_startfire
-- **world**: new_day, phase_changed, season_changed
+- **world**: new_day, phase_changed, season_changed, rift_closed, nightmare_phase, item_planted, object_activated, machine_toggled
 - **weather**: storm_changed, precipitation, lightning_strike
-- **bosses**: boss_event, boss_killed, fire_started
+- **bosses**: boss_event, boss_killed, toadstool_state_changed
+- **griefing**: structure_burnt/hammered, container_opened/closed; **entity-side** (which object/who): structure_worked, object_ignited, container_opened_entity, container_item_added, container_item_taken
+- **creatures** *(non-player mobs)*: beefalo_tamed, beefalo_feral, mob_transform, mob_frozen, resource_picked, mount_rider_changed
+
+### Entity & world events (non-player)
+Beyond the per-player fan-out, the mod hooks **non-player entities** via `AddComponentPostInit` in `modmain.lua` → a `Hook*` fn in `events/nonplayer.lua` (the model: cheap predicate, then `ListenForEvent`, then second-stage filter + `evt_config` gate + `PushEvent`). Common components (`workable`/`burnable`/`container`/`freezable`/`pickable`) are hard-filtered (world objects / real mobs only); rare ones (`domesticatable`/`werebeast`/`rideable`/`activatable`/`machine`) are cheap. World-scoped events (`rift_closed`, `nightmare_phase`, `item_planted`, `toadstool_state_changed`) are plain `ListenForEvent` in `events/world.lua`/`events/boss.lua`. See `DST_MOD/specs/entity-events-catalog.md` for the full survey (26 candidates ranked); the implemented set is the low/medium-effort tier.
 
 ## UI Widgets In-Game
 
