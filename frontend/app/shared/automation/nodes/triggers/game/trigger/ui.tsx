@@ -51,7 +51,6 @@ export const TRIGGER_EVENTS = [
   { value: 'player_work', label: '⛏ Player Work (chop/mine/hammer)', category: 'gathering' },
   { value: 'resource_gathered', label: '📦 Resource Gathered (loot drop)', category: 'gathering' },
   { value: 'player_harvest', label: '🌿 Player Harvest', category: 'gathering' },
-  { value: 'player_action_start', label: '▶ Começou Ação (colher/pick)', category: 'gathering' },
   { value: 'player_startfire', label: '🔥 Player Start Fire', category: 'gathering' },
   { value: 'player_pick', label: '🌸 Player Colheu (do chão)', category: 'gathering' },
   { value: 'player_mine_chop_start', label: '⛏ Começou a Minerar/Cortar', category: 'gathering' },
@@ -73,9 +72,7 @@ export const TRIGGER_EVENTS = [
   // Bosses
   { value: 'boss_event', label: '🐉 Boss Event', category: 'bosses' },
   { value: 'boss_killed', label: '🐉 Boss Killed', category: 'bosses' },
-  { value: 'fire_started', label: '🔥 Fire Started', category: 'bosses' },
   { value: 'hound_warning', label: '🐺 Hound Warning', category: 'bosses' },
-  { value: 'hound_attack', label: '🐺 Hound Attack', category: 'bosses' },
   { value: 'boss_warning', label: '😱 Boss Perto (rugido)', category: 'bosses' },
   // Survival
   { value: 'player_eat', label: '🍽 Player Eat', category: 'survival' },
@@ -106,15 +103,12 @@ export const TRIGGER_EVENTS = [
   { value: 'claim_check_result', label: '🛡 Claim Consultada (resultado)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
-  { value: 'book_read', label: '📚 Book Read', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },
   { value: 'player_sleep_start', label: '😴 Sleep Start', category: 'character' },
   { value: 'player_sleep_end', label: '☀ Sleep End', category: 'character' },
   // Exploration
   { value: 'player_sunk', label: '🌊 Player Sunk', category: 'exploration' },
   { value: 'fish_caught', label: '🐟 Fish Caught', category: 'exploration' },
-  { value: 'boat_entered', label: '⛵ Boat Entered', category: 'exploration' },
-  { value: 'boat_exited', label: '⛵ Boat Exited', category: 'exploration' },
   // Input — NOT a DST event category. Key presses ride a separate watch_keys
   // channel: the backend tells the client which keys to watch (set the key below).
   { value: 'key_pressed', label: '⌨ Tecla Pressionada', category: 'input' },

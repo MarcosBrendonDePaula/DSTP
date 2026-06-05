@@ -30,13 +30,15 @@ function M.RegisterForPlayer(player, uid, pname)
         })
     end)
 
-    -- Player left a wormhole / teleport
-    player:ListenForEvent("onleftplayer", function(inst)
+    -- Player came OUT of a wormhole. The real signal is "wormholetravel" pushed on the
+    -- traveller (wormhole.lua) — "onleftplayer" fired on the wormhole entity, not the
+    -- player, so the old listener was dead. wormholetravel marks the exit/arrival.
+    player:ListenForEvent("wormholetravel", function(inst, data)
         if not evt_config.world then return end
         DSTP.PushEvent("player_teleported", {
             userid = uid, name = pname,
             type = "wormhole_exit",
-        })
+        }, data)
     end)
 
     -- exploration
@@ -59,15 +61,9 @@ function M.RegisterForPlayer(player, uid, pname)
         }, data)
     end)
 
-    player:ListenForEvent("onboat", function(inst)
-        if not evt_config.exploration then return end
-        DSTP.PushEvent("boat_entered", { userid = uid, name = pname })
-    end)
-
-    player:ListenForEvent("onboatoff", function(inst)
-        if not evt_config.exploration then return end
-        DSTP.PushEvent("boat_exited", { userid = uid, name = pname })
-    end)
+    -- NOTE: boat_entered/boat_exited were REMOVED. "onboat"/"onboatoff" are not pushed
+    -- on the player server-side (no usable remap was found — boarding is handled via the
+    -- walkableplatform/embarker pathway, not a player event). Dead listeners dropped.
 end
 
 return M

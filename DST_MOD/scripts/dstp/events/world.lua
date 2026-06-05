@@ -89,12 +89,16 @@ function M.RegisterWorld(inst)
         end
     end)
 
-    -- Earthquake started (caves only typically)
-    inst:ListenForEvent("ms_earthquake", function(world)
+    -- Earthquake started (caves only typically). The REAL push is "startquake"
+    -- (quaker.lua:510) with { duration, debrisperiod } — "ms_earthquake" was never
+    -- fired by the engine (the old listener was dead). ("warnquake" at :522 is the
+    -- pre-quake warning, surfaced via sinkhole_warn below if needed.)
+    inst:ListenForEvent("startquake", function(world, data)
         if not evt_config.world then return end
         DSTP.PushEvent("earthquake", {
             shard_type = config.shard_type,
-        })
+            duration = data and data.duration or nil,
+        }, data)
     end)
 
     -- Sinkhole warning
@@ -111,22 +115,10 @@ function M.RegisterWorld(inst)
         DSTP.PushEvent("world_save", {})
     end)
 
-    -- Hound attack warning (houndwarningsound fires when hounds are about to attack)
-    -- This is on the hounded component of TheWorld
-    inst:ListenForEvent("houndwarningsound", function(world)
-        if not evt_config.bosses then return end
-        DSTP.PushEvent("hound_warning", {
-            shard_type = config.shard_type,
-        })
-    end)
-
-    -- Hound attack begins (when hounds actually spawn)
-    inst:ListenForEvent("ms_houndattack", function(world)
-        if not evt_config.bosses then return end
-        DSTP.PushEvent("hound_attack", {
-            shard_type = config.shard_type,
-        })
-    end)
+    -- NOTE: hound events were REMOVED here. "houndwarningsound" and "ms_houndattack"
+    -- are NOT world events — the hounded component pushes "houndwarning" onto each
+    -- PLAYER (hounded.lua), so hound_warning is now emitted per-player in combat.lua.
+    -- There is no distinct world-level "hounds spawned" signal worth a dead listener.
 
     -- A lunar/shadow rift opened ("ms_riftaddedtopool", riftspawner.lua:85;
     -- data.rift = the rift portal entity). Major late-game world event.

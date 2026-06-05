@@ -98,6 +98,18 @@ function M.RegisterForPlayer(player, uid, pname)
         }, data)
     end)
 
+    -- Hound attack incoming. The world's hounded component pushes "houndwarning" onto
+    -- EACH player (hounded.lua:862/884) — it is NOT a world event (the old
+    -- "houndwarningsound"/"ms_houndattack" world listeners never fired). data.warning is
+    -- true on the warning pulse(s); we forward it as the existing hound_warning event.
+    player:ListenForEvent("houndwarning", function(inst, data)
+        if not evt_config.bosses then return end
+        DSTP.PushEvent("hound_warning", {
+            userid = uid, name = pname,
+            level = data and data.level or nil,
+        }, data)
+    end)
+
     -- An epic/boss roar scared this player (boss is near). DST "epicscare"
     -- (epicscare.lua:23) is an AoE pulse pushed onto EVERY nearby _combat entity,
     -- so a single roar fires once per nearby player AND re-fires per roar — debounce

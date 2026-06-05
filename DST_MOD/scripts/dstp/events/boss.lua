@@ -29,43 +29,35 @@ function M.RegisterWorld(inst)
         end)
     end
 
-    inst:ListenForEvent("entity_death", function(world, data)
-        if not evt_config.bosses then return end
-        if data and data.inst and not data.inst:HasTag("player") then
-            local prefab = data.inst.prefab
-            -- Only track notable mobs
-            local notable = {
-                deerclops = true, bearger = true, moose = true, dragonfly = true,
-                antlion = true, beequeen = true, klaus = true, toadstool = true,
-                minotaur = true, stalker_atrium = true, alterguardian_phase3 = true,
-                crabking = true, malbatross = true, lordfruitfly = true,
-                shadowchesspieces = true, nightmare_werepig = true,
-            }
-            if notable[prefab] then
-                DSTP.PushEvent("boss_killed", {
-                    prefab = prefab,
-                    cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
-                }, data)
-            end
-        end
-    end)
+    -- entity_death (notable-mob death) is now dispatched centrally by the facade via
+    -- M.OnEntityDeath (single world listener fanned out) — see events.lua.
 
-    -- Fire detection (griefing)
-    inst:ListenForEvent("ms_registerfire", function(world, data)
-        if not evt_config.bosses then return end
-        local fire = data
-        if fire then
-            local x, _, z = 0, 0, 0
-            if fire.Transform then
-                x, _, z = fire.Transform:GetWorldPosition()
-            end
-            DSTP.PushEvent("fire_started", {
-                prefab = fire.prefab or "unknown",
-                x = math.floor(x),
-                z = math.floor(z),
-            }, fire)
+    -- NOTE: ms_registerfire was REMOVED. It is NOT a real fire-START event — burnable.lua
+    -- fires `onignite` per-burnable (burnable.lua:375), never an `ms_registerfire` on the
+    -- world, so this listener was dead (never fired). A genuine "fire started" detector
+    -- would need an AddComponentPostInit on `burnable` (a mechanic module), out of scope
+    -- here. structure_burnt (grief_world.lua) already covers burnt structures on death.
+end
+
+-- Central entity_death dispatch (called by the facade's single listener). Notable-mob kill.
+local NOTABLE = {
+    deerclops = true, bearger = true, moose = true, dragonfly = true,
+    antlion = true, beequeen = true, klaus = true, toadstool = true,
+    minotaur = true, stalker_atrium = true, alterguardian_phase3 = true,
+    crabking = true, malbatross = true, lordfruitfly = true,
+    shadowchesspieces = true, nightmare_werepig = true,
+}
+function M.OnEntityDeath(world, data)
+    if not evt_config.bosses then return end
+    if data and data.inst and not data.inst:HasTag("player") then
+        local prefab = data.inst.prefab
+        if NOTABLE[prefab] then
+            DSTP.PushEvent("boss_killed", {
+                prefab = prefab,
+                cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
+            }, data)
         end
-    end)
+    end
 end
 
 return M

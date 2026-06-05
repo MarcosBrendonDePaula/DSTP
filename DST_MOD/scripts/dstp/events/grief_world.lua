@@ -18,28 +18,32 @@ function M.Init(c)
     return M
 end
 
+-- RegisterWorld is now a no-op: entity_death is dispatched centrally by the facade
+-- (ONE world listener fanned out to each module's OnEntityDeath) — see events.lua.
 function M.RegisterWorld(inst)
-    inst:ListenForEvent("entity_death", function(world, data)
-        if not evt_config.griefing then return end
-        local ent = data and data.inst
-        if not ent then return end
-        -- Only report structures
-        if not (ent:HasTag("structure") or (ent.components and ent.components.workable)) then return end
-        -- Was it burnt?
-        local was_burnt = ent.components and ent.components.burnable and ent.components.burnable.burning
-        local is_fire_cause = data.cause == "fire"
-            or (data.afflicter and data.afflicter.HasTag and data.afflicter:HasTag("fire"))
-        if was_burnt or is_fire_cause then
-            local x, _, z = 0, 0, 0
-            if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
-            DSTP.PushEvent("structure_burnt", {
-                prefab = ent.prefab or "unknown",
-                cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "fire",
-                x = math.floor(x),
-                z = math.floor(z),
-            }, data)
-        end
-    end)
+end
+
+-- Central entity_death dispatch (called by the facade's single listener). Burnt structure.
+function M.OnEntityDeath(world, data)
+    if not evt_config.griefing then return end
+    local ent = data and data.inst
+    if not ent then return end
+    -- Only report structures
+    if not (ent:HasTag("structure") or (ent.components and ent.components.workable)) then return end
+    -- Was it burnt?
+    local was_burnt = ent.components and ent.components.burnable and ent.components.burnable.burning
+    local is_fire_cause = data.cause == "fire"
+        or (data.afflicter and data.afflicter.HasTag and data.afflicter:HasTag("fire"))
+    if was_burnt or is_fire_cause then
+        local x, _, z = 0, 0, 0
+        if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
+        DSTP.PushEvent("structure_burnt", {
+            prefab = ent.prefab or "unknown",
+            cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "fire",
+            x = math.floor(x),
+            z = math.floor(z),
+        }, data)
+    end
 end
 
 return M
