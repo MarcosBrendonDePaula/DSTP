@@ -865,6 +865,13 @@ function Commands.RegisterAll(core)
         if DSTP._DEBUG then Log("ui_command sent to " .. tostring(data.userid) .. ": " .. tostring(data.cmd.action)) end
     end)
 
+    -- NOTE: ui_broadcast / install_rules / uninstall_rules / set_player_state /
+    -- install_rules_all are INTERCEPTED by Core.ProcessCommands' coalescer (core.lua),
+    -- which folds them (broadcasts expanded per-player via _G.AllPlayers) into one
+    -- batched _dstp_ui envelope so concurrent writes to the same player don't clobber.
+    -- These handlers remain for any direct ExecuteCommand call, but in the normal
+    -- /dst/sync path they no longer each do their own :set() — the coalescer does.
+
     -- Broadcast UI command to all connected players
     -- data = { cmd = { action="create", ... } }
     DSTP.RegisterCommand("ui_broadcast", function(data)
