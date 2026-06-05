@@ -510,7 +510,7 @@ RenderNode = function(node, parent, ctx)
         return holder, totalW, totalH
 
     elseif t == "text" then
-        local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, node.text or ""))
+        local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, tostring(node.text or "")))
         local col = ResolveColor(node.color)
         txt:SetColour(col[1], col[2], col[3], col[4])
         if node.wrap_width then
@@ -522,13 +522,16 @@ RenderNode = function(node, parent, ctx)
         if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
         local rw, rh = txt:GetRegionSize()
         -- LAYOUT size: the measured region (with a per-char/size fallback if nil/0).
-        local w = (rw and rw > 0) and rw or (#(node.text or "") * (node.size or 18) * 0.5)
+        -- node.text may be a NUMBER (a template resolved to a number), so tostring it
+        -- before taking length (#number errors: "attempt to get length of a number").
+        local txtlen = #tostring(node.text or "")
+        local w = (rw and rw > 0) and rw or (txtlen * (node.size or 18) * 0.5)
         local h = (rh and rh > 0) and rh or (node.size or 18)
         -- HITBOX size: GetRegionSize can under-report the rendered glyphs, leaving the
         -- text edges unclickable. Feed MaybeClickable the LARGER of the measured region
         -- and a per-char estimate so the overlay always covers the whole string — this
         -- does NOT affect layout (the return below uses the measured w,h).
-        local hit_w = math.max(w, #(node.text or "") * (node.size or 18) * 0.5)
+        local hit_w = math.max(w, txtlen * (node.size or 18) * 0.5)
         MaybeClickable(txt, node, ctx, hit_w, h)
         Register(ctx, node, txt, function(props)
             if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
@@ -580,7 +583,7 @@ RenderNode = function(node, parent, ctx)
             "button_carny_long_normal.tex", "button_carny_long_hover.tex",
             "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
         btn:SetScale(bw / 340, bh / 70)
-        local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, node.text or "OK"))
+        local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, tostring(node.text or "OK")))
         local col = ResolveColor(node.color)
         label:SetColour(col[1], col[2], col[3], col[4])
         local last = -1
@@ -615,7 +618,7 @@ RenderNode = function(node, parent, ctx)
         -- constructor colour. So the field always looked black. Set BOTH to our colour
         -- (default white) so the typed text is visible in idle AND editing states.
         local col = ResolveColor(node.color)
-        local te = holder:AddChild(TextEdit(ResolveFont(node.font), node.size or 22, node.value or "", col))
+        local te = holder:AddChild(TextEdit(ResolveFont(node.font), node.size or 22, tostring(node.value or ""), col))
         te.idle_text_color = { col[1], col[2], col[3], col[4] }
         te.edit_text_color = { col[1], col[2], col[3], col[4] }
         te:SetColour(col[1], col[2], col[3], col[4])

@@ -130,6 +130,15 @@ for _, w in ipairs(created) do if w.kind == "ImageButton" then ibtn = w end end
 if ibtn and ibtn.onclick then KIT.now = 2000; ibtn.onclick() end
 check("clickable image: click fires callback 'pick'", #fired == 1 and fired[1].cb == "pick")
 
+-- ── A text node with a NUMERIC `text` must not crash (#tostring guard) ─────
+-- (a template can resolve to a number; #number errors "attempt to get length").
+created = {}; fired = {}
+local ok_num = pcall(function()
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "tn", group = "gn",
+        tree = { type = "text", text = 42 } })
+end)
+check("numeric text does not crash (tostring guard)", ok_num == true)
+
 -- ── The OLD broken path is GONE: no OnControl/SetClickable wiring remains ──
 -- (structural assertion lives in the TS test; here we just confirm behavior.)
 
