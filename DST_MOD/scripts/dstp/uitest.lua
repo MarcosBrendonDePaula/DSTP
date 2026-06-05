@@ -49,7 +49,12 @@ local function ensureTap()
     core.PushEvent = function(event_type, data, raw)
         if event_type == "ui_callback" and data and type(data.callback) == "string"
             and data.callback:sub(1, 7) == "uitest:" then
-            core.LogInfo("UITEST CLICK: " .. data.callback .. " (player " .. tostring(data.name) .. ")")
+            -- A text_input carries its typed string in callback_data.value.
+            local payload = ""
+            if type(data.callback_data) == "table" and data.callback_data.value ~= nil then
+                payload = " value='" .. tostring(data.callback_data.value) .. "'"
+            end
+            core.LogInfo("UITEST CLICK: " .. data.callback .. payload .. " (player " .. tostring(data.name) .. ")")
         end
         return real(event_type, data, raw)
     end
@@ -101,6 +106,14 @@ function M.Run(userid)
         { type = "image", tex = "square.tex", width = 64, height = 64, tint = { 1, 0.5, 0.2, 1 },
           callback = "uitest:image" },
         "center", 120, -70)
+
+    -- 8) TEXT INPUT — editable field: click it, type, press Enter. The typed string is
+    -- logged via the ui_callback payload (UITEST INPUT). Confirms keyboard capture + WASD
+    -- suppression + the value path.
+    send("uitest_input",
+        { type = "text_input", width = 280, height = 36, placeholder = "clique e digite, Enter envia",
+          callback = "uitest:input", clear_on_submit = true },
+        "bottom", 0, 80)
 
     flush(userid)  -- ONE batched net_string set (no clobber)
 

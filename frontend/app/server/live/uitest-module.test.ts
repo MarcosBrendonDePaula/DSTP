@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('mod uitest.lua — in-game UI smoke test wiring is correct', () => {
-  it('creates the 7 widgets, taps uitest: clicks (only those), and clears the group', () => {
+  it('creates the 8 widgets, taps uitest: clicks (only those), and clears the group', () => {
     const result = runLuaHarness({
       modules: { CORE: modSource('core.lua'), UITEST: modSource('uitest.lua') },
       harness: readFileSync(join(import.meta.dir, '__lua__', 'uitest-harness.lua'), 'utf8'),

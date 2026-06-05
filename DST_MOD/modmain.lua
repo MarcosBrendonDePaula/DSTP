@@ -153,14 +153,23 @@ AddPrefabPostInit("player_classified", function(inst)
                 UIWidgets = GLOBAL.require("dstp/ui_widgets")
                 UIWidgets.Init({ GLOBAL = GLOBAL })
 
-                -- Wire button callbacks: send RPC to server which queues an event
-                -- AND dispatch into the local rules engine (if loaded) as a synthetic event
-                UIWidgets.SetCallbackHandler(function(callback_name, widget_id)
+                -- Wire UI callbacks: send RPC to server which queues a ui_callback event
+                -- AND dispatch into the local rules engine. The optional `payload` (a
+                -- table, e.g. a text_input's { value=... } on Enter) is JSON-encoded into
+                -- the RPC's data_json slot — the server handler already decodes it into
+                -- the event's callback_data. 2-arg callers (button/text clicks) pass no
+                -- payload, so data_json stays "" (identical to before).
+                UIWidgets.SetCallbackHandler(function(callback_name, widget_id, payload)
+                    local dj = ""
+                    if payload ~= nil then
+                        local ok_enc, enc = GLOBAL.pcall(GLOBAL.json.encode, payload)
+                        if ok_enc and enc then dj = enc end
+                    end
                     if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["UICallback"] then
-                        SendModRPCToServer(MOD_RPC[modname]["UICallback"], callback_name, widget_id, "")
+                        SendModRPCToServer(MOD_RPC[modname]["UICallback"], callback_name, widget_id, dj)
                     end
                     if RulesEngine then
-                        RulesEngine.OnUIButtonClick(callback_name, widget_id, nil)
+                        RulesEngine.OnUIButtonClick(callback_name, widget_id, payload)
                     end
                 end)
             end

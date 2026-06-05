@@ -42,7 +42,7 @@ for _, cmd in ipairs(sent) do
     scanCmd(cmd)
 end
 check("uitest: widgets sent as ONE batch (no clobber)", batchCount == 1)
-check("uitest: 7 widgets created", creates == 7)
+check("uitest: 8 widgets created", creates == 8)
 check("uitest: clickable button present", ids["uitest_button"] == true)
 check("uitest: clickable text present (#16)", ids["uitest_text"] == true)
 check("uitest: clickable icon present (#16)", ids["uitest_icon"] == true)

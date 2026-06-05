@@ -597,6 +597,60 @@ RenderNode = function(node, parent, ctx)
         end)
         return holder, bw, bh
 
+    elseif t == "text_input" then
+        -- Editable text field. The engine supports this on the HUD via TextEdit +
+        -- SetForceEdit(true): SetEditing(true) then routes ALL keystrokes to this widget
+        -- (TheFrontEnd:SetForceProcessTextInput) AND suppresses WASD/hotkeys (the player
+        -- controller's IsEnabled goes false while a field has input focus). No modal
+        -- screen needed. On Enter the typed string rides the EXISTING ui_callback path as
+        -- callback_data (read in a flow as {{trigger.callback_data.value}}).
+        local TextEdit = _G.require("widgets/textedit")
+        local iw = node.width or 220
+        local ih = node.height or 36
+        local holder = parent:AddChild(Widget("text_input"))
+        local bg = holder:AddChild(Image("images/global.xml", "square.tex"))
+        bg:SetSize(iw, ih); bg:SetTint(0.05, 0.05, 0.07, 0.85)
+        local col = ResolveColor(node.color)
+        local te = holder:AddChild(TextEdit(ResolveFont(node.font), node.size or 22, node.value or "", col))
+        if te.SetRegionSize then te:SetRegionSize(iw - 12, ih) end
+        te:SetForceEdit(true)  -- REQUIRED on the HUD: enables the force-process keyboard grab
+        if node.max and te.SetTextLengthLimit then te:SetTextLengthLimit(node.max) end
+        if node.password and te.SetPassword then te:SetPassword(true) end
+        if node.placeholder and te.SetTextPrompt then te:SetTextPrompt(tostring(node.placeholder), { 0.6, 0.6, 0.6, 1 }) end
+        if node.valid_chars and te.SetCharacterFilter then te:SetCharacterFilter(node.valid_chars) end
+        if node.invalid_chars and te.SetInvalidCharacterFilter then te:SetInvalidCharacterFilter(node.invalid_chars) end
+
+        local cb = node.callback
+        local last = -1
+        local function submit()
+            if not cb or not ctx.callback_fn then return end
+            local now = _G.GetTime and _G.GetTime() or 0
+            if last >= 0 and (now - last) < 0.3 then return end  -- debounce vs double-fire
+            last = now
+            local s = (node.password and te.GetLineEditString) and te:GetLineEditString() or te:GetString()
+            ctx.callback_fn(cb, ctx.root_id, { value = s or "", id = node.id })
+            if node.clear_on_submit and te.SetString then te:SetString("") end
+        end
+        te.OnTextEntered = function() submit() end                          -- Enter commit
+        if node.submit_on_blur then te.OnStopForceEdit = function() submit() end end  -- blur commit
+
+        -- A bare TextEdit on the HUD isn't focusable; reuse the opaque hit target so a
+        -- click starts editing (which grabs the keyboard).
+        local hit = MakeHitTarget(holder, iw, ih, 0, node.hit_debug)
+        hit:SetOnClick(function() te:SetEditing(true) end)
+        -- Remember the field so the tree-destroy path can release the keyboard grab.
+        ctx.text_fields = ctx.text_fields or {}
+        ctx.text_fields[#ctx.text_fields + 1] = te
+
+        Register(ctx, node, holder, function(props)
+            if not te.inst:IsValid() then return end
+            if props.value ~= nil and te.SetString then te:SetString(tostring(props.value)) end
+            if props.text ~= nil and te.SetString then te:SetString(tostring(props.text)) end
+            if props.placeholder ~= nil and te.SetTextPrompt then te:SetTextPrompt(tostring(props.placeholder), { 0.6, 0.6, 0.6, 1 }) end
+            if props.color and te.SetColour then local c = ResolveColor(props.color); te:SetColour(c[1], c[2], c[3], c[4]) end
+        end)
+        return holder, iw, ih
+
     elseif t == "bar" then
         local bw = node.width or 200
         local bh = node.height or 16
@@ -723,7 +777,19 @@ CreateTree = function(cmd)
     RenderNode(cmd.tree, w, ctx)
     local ax, ay = AnchorOffset(cmd.anchor or "center")
     w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId }
+    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
+end
+
+-- Release the keyboard grab of any editing text_input in an entry, so destroying a tree
+-- while a field is being edited doesn't leave the player unable to move (force-process
+-- stays on until SetEditing(false)).
+local function ReleaseTextFields(entry)
+    if not (entry and entry.text_fields) then return end
+    for _, te in ipairs(entry.text_fields) do
+        if te.inst and te.inst:IsValid() and te.SetEditing then
+            local ok = _G.pcall(function() te:SetEditing(false) end)
+        end
+    end
 end
 
 --- Generic in-place update: patch any addressable node's props (text, color,
@@ -1021,6 +1087,10 @@ function UIWidgets.DestroyWidget(cmd)
     if entry.task then
         entry.task:Cancel()
     end
+
+    -- Release any editing text_input keyboard grab BEFORE killing, so the player isn't
+    -- left unable to move if the tree is destroyed mid-edit.
+    ReleaseTextFields(entry)
 
     -- Kill the widget tree
     if entry.widget and entry.widget.inst:IsValid() then
