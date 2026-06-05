@@ -18,6 +18,11 @@ export const TRIGGER_EVENTS = [
   { value: 'structure_hammered', label: '🔨 Structure Hammered', category: 'griefing' },
   { value: 'container_opened', label: '📦 Container Opened', category: 'griefing' },
   { value: 'container_closed', label: '📦 Container Closed', category: 'griefing' },
+  { value: 'structure_worked', label: '🔨 Estrutura Destruída (quem)', category: 'griefing' },
+  { value: 'object_ignited', label: '🔥 Objeto Incendiado (arsonista)', category: 'griefing' },
+  { value: 'container_opened_entity', label: '📦 Baú Aberto (qual baú)', category: 'griefing' },
+  { value: 'container_item_added', label: '📥 Item Depositado no Baú', category: 'griefing' },
+  { value: 'container_item_taken', label: '📤 Item Retirado do Baú', category: 'griefing' },
   // Chat
   { value: 'chat_message', label: '💬 Chat Message', category: 'chat' },
   { value: 'command', label: '⌨ Comando (!cmd) — suprime do chat', category: 'chat' },
@@ -35,6 +40,7 @@ export const TRIGGER_EVENTS = [
   { value: 'player_build', label: '🏗 Player Build', category: 'crafting' },
   { value: 'recipe_unlocked', label: '🔓 Receita Desbloqueada', category: 'crafting' },
   { value: 'tech_tree_changed', label: '🔬 Tech Tree Mudou (prototipador)', category: 'crafting' },
+  { value: 'structure_built', label: '🏠 Estrutura Construída (colocada)', category: 'crafting' },
   // Inventory
   { value: 'player_equip', label: '🎒 Player Equip', category: 'inventory' },
   { value: 'player_pickup', label: '📦 Player Pickup', category: 'inventory' },
@@ -63,6 +69,11 @@ export const TRIGGER_EVENTS = [
   { value: 'sinkhole_warn', label: '🕳 Sinkhole Warning', category: 'world' },
   { value: 'world_save', label: '💾 World Save', category: 'world' },
   { value: 'rift_spawned', label: '🌑 Rift Aberto (lunar/sombrio)', category: 'world' },
+  { value: 'rift_closed', label: '🌑 Rift Fechado', category: 'world' },
+  { value: 'nightmare_phase', label: '😈 Ciclo do Pesadelo (ruínas)', category: 'world' },
+  { value: 'item_planted', label: '🌱 Item Plantado/Colocado', category: 'world' },
+  { value: 'object_activated', label: '🗿 Objeto Ativado (estação...)', category: 'world' },
+  { value: 'machine_toggled', label: '⚙ Máquina Lig/Desl (flingomatic...)', category: 'world' },
   { value: 'tick', label: '⏲ Tick (heartbeat ~1s)', category: 'world' },
   { value: 'player_teleported', label: '🌀 Player Teleported', category: 'world' },
   // Weather
@@ -74,6 +85,14 @@ export const TRIGGER_EVENTS = [
   { value: 'boss_killed', label: '🐉 Boss Killed', category: 'bosses' },
   { value: 'hound_warning', label: '🐺 Hound Warning', category: 'bosses' },
   { value: 'boss_warning', label: '😱 Boss Perto (rugido)', category: 'bosses' },
+  { value: 'toadstool_state_changed', label: '🍄 Toadstool Mudou de Estado', category: 'bosses' },
+  // Creatures (non-player mobs)
+  { value: 'beefalo_tamed', label: '🐂 Beefalo Domesticado', category: 'creatures' },
+  { value: 'beefalo_feral', label: '🐂 Beefalo Voltou a Selvagem', category: 'creatures' },
+  { value: 'mob_transform', label: '🐺 Mob Transformou (were)', category: 'creatures' },
+  { value: 'mob_frozen', label: '🧊 Mob Congelado', category: 'creatures' },
+  { value: 'resource_picked', label: '🌸 Recurso Colhido (a planta)', category: 'creatures' },
+  { value: 'mount_rider_changed', label: '🐂 Montaria Montada/Desmontada', category: 'creatures' },
   // Survival
   { value: 'player_eat', label: '🍽 Player Eat', category: 'survival' },
   { value: 'player_insane', label: '😵 Player Insane', category: 'survival' },

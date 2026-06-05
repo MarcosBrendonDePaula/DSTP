@@ -132,9 +132,20 @@ function Events.Init(c)
     -- drive registration (on ms_playerspawn) without a circular require.
     core.RegisterPerPlayerEvents = RegisterPerPlayerEvents
     -- Publish the non-player component hooks so modmain's AddComponentPostInit can
-    -- attach them (combat→newcombattarget, trader→trade) without importing internals.
+    -- attach them (combat→newcombattarget, trader→trade, workable→workfinished,
+    -- burnable→onignite) without importing internals.
     core.HookCombatComponent = NonPlayer.HookCombat
     core.HookTraderComponent = NonPlayer.HookTrader
+    core.HookWorkableComponent = NonPlayer.HookWorkable
+    core.HookBurnableComponent = NonPlayer.HookBurnable
+    core.HookContainerComponent = NonPlayer.HookContainer
+    core.HookDomesticatableComponent = NonPlayer.HookDomesticatable
+    core.HookWerebeastComponent = NonPlayer.HookWerebeast
+    core.HookFreezableComponent = NonPlayer.HookFreezable
+    core.HookPickableComponent = NonPlayer.HookPickable
+    core.HookRideableComponent = NonPlayer.HookRideable
+    core.HookActivatableComponent = NonPlayer.HookActivatable
+    core.HookMachineComponent = NonPlayer.HookMachine
     return Events
 end
 
