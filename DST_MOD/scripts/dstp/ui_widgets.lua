@@ -610,8 +610,15 @@ RenderNode = function(node, parent, ctx)
         local holder = parent:AddChild(Widget("text_input"))
         local bg = holder:AddChild(Image("images/global.xml", "square.tex"))
         bg:SetSize(iw, ih); bg:SetTint(0.05, 0.05, 0.07, 0.85)
+        -- DST's TextEdit hardcodes idle_text_color/edit_text_color to BLACK ({0,0,0,1},
+        -- textedit.lua:28-29) and RE-APPLIES them on SetEditing in/out — overwriting the
+        -- constructor colour. So the field always looked black. Set BOTH to our colour
+        -- (default white) so the typed text is visible in idle AND editing states.
         local col = ResolveColor(node.color)
         local te = holder:AddChild(TextEdit(ResolveFont(node.font), node.size or 22, node.value or "", col))
+        te.idle_text_color = { col[1], col[2], col[3], col[4] }
+        te.edit_text_color = { col[1], col[2], col[3], col[4] }
+        te:SetColour(col[1], col[2], col[3], col[4])
         if te.SetRegionSize then te:SetRegionSize(iw - 12, ih) end
         te:SetForceEdit(true)  -- REQUIRED on the HUD: enables the force-process keyboard grab
         if node.max and te.SetTextLengthLimit then te:SetTextLengthLimit(node.max) end

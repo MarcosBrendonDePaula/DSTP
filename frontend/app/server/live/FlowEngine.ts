@@ -716,6 +716,7 @@ export class FlowEngine {
       ui_panel: 'panel', ui_col: 'col', ui_row: 'row', ui_tabs: 'tabs',
       ui_text: 'text', ui_icon: 'icon', ui_image: 'image',
       ui_button: 'button', ui_bar: 'bar', ui_spacer: 'spacer',
+      ui_text_input: 'text_input',
     }
     const type = TYPE_MAP[node.type] || node.type.replace(/^ui_/, '')
     const p = node.data.params || {}
@@ -738,7 +739,11 @@ export class FlowEngine {
 
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
+      if (p.body) out.body = r(p.body)
       out.closeable = p.closeable !== false && p.closeable !== 'false'
+      if (p.draggable === true || p.draggable === 'true') out.draggable = true
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
       if (p.gap != null) out.gap = num(p.gap)
     } else if (type === 'col' || type === 'row') {
       if (p.gap != null) out.gap = num(p.gap)
@@ -769,6 +774,18 @@ export class FlowEngine {
     } else if (type === 'spacer') {
       if (p.width != null) out.width = num(p.width)
       if (p.height != null) out.height = num(p.height)
+    } else if (type === 'text_input') {
+      // Editable field. callback fires on Enter with the typed string in callback_data.
+      out.callback = String(r(p.callback) ?? 'submit')
+      if (p.value != null) out.value = String(r(p.value))
+      if (p.placeholder != null) out.placeholder = String(r(p.placeholder))
+      if (p.size != null) out.size = num(p.size)
+      const c = color(p.color); if (c) out.color = c
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+      if (p.max != null) out.max = num(p.max)
+      if (p.password === true || p.password === 'true') out.password = true
+      if (p.clear_on_submit === true || p.clear_on_submit === 'true') out.clear_on_submit = true
     }
 
     // Children: edge targets, ordered by canvas position. col/panel stack

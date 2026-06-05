@@ -95,8 +95,22 @@ check("text_input: payload carries the typed value", fired[1] and fired[1].paylo
 check("text_input: payload carries the node id", fired[1] and fired[1].payload and fired[1].payload.id == "name")
 check("text_input: clear_on_submit wiped the field", lastTextEdit and lastTextEdit._string == "")
 
--- Backend can set the value via SetProps (the patch closure).
+-- Font colour: DST's TextEdit hardcodes idle/edit colour to BLACK, so the node must
+-- override BOTH to the configured colour (default white) or text shows black.
+local firstField = lastTextEdit
+check("text_input: idle/edit colour overridden (not black) — default white",
+    firstField and firstField.idle_text_color and firstField.idle_text_color[1] == 1
+    and firstField.edit_text_color and firstField.edit_text_color[1] == 1)
+
+-- Backend can set the value via SetProps (the patch closure) on the FIRST field.
 UIWidgets.SetProps({ id="form", node="name", props={ value="preset" } })
-check("text_input: backend SetProps sets the field value", lastTextEdit and lastTextEdit._string == "preset")
+check("text_input: backend SetProps sets the field value", firstField and firstField._string == "preset")
+
+-- A second field WITH an explicit RED colour sets idle/edit to that colour.
+UIWidgets.ProcessCommand({ action="create", type="tree", id="f2", group="f2",
+    tree = { type="text_input", id="c", callback="x", color={ 1, 0, 0, 1 }, width=200, height=36 } })
+check("text_input: explicit colour applied to idle_text_color",
+    lastTextEdit and lastTextEdit.idle_text_color and lastTextEdit.idle_text_color[1] == 1
+    and lastTextEdit.idle_text_color[2] == 0 and lastTextEdit.idle_text_color[3] == 0)
 
 return C.report()

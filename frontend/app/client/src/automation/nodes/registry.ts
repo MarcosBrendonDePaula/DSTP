@@ -64,6 +64,8 @@ import { meta as uiTabsMeta } from '@shared/automation/nodes/ui/primitives/ui_ta
 import { ui as uiTabsUi } from '@shared/automation/nodes/ui/primitives/ui_tabs/ui'
 import { meta as uiTextMeta } from '@shared/automation/nodes/ui/primitives/ui_text/meta'
 import { ui as uiTextUi } from '@shared/automation/nodes/ui/primitives/ui_text/ui'
+import { meta as uiTextInputMeta } from '@shared/automation/nodes/ui/primitives/ui_text_input/meta'
+import { ui as uiTextInputUi } from '@shared/automation/nodes/ui/primitives/ui_text_input/ui'
 import { meta as uiIconMeta } from '@shared/automation/nodes/ui/primitives/ui_icon/meta'
 import { ui as uiIconUi } from '@shared/automation/nodes/ui/primitives/ui_icon/ui'
 import { meta as uiButtonMeta } from '@shared/automation/nodes/ui/primitives/ui_button/meta'
@@ -119,6 +121,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: uiRowMeta, ui: uiRowUi },
   { meta: uiTabsMeta, ui: uiTabsUi },
   { meta: uiTextMeta, ui: uiTextUi },
+  { meta: uiTextInputMeta, ui: uiTextInputUi },
   { meta: uiIconMeta, ui: uiIconUi },
   { meta: uiButtonMeta, ui: uiButtonUi },
   { meta: uiBarMeta, ui: uiBarUi },
