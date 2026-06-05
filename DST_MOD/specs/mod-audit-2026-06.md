@@ -26,12 +26,13 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
    ouvir `phasechanged`, `seasontick`/`master_seasonsupdate`, `precipitationchanged`
    (o mod já usa `phasechanged` corretamente para a lua, linha 2010 — reusar).
 
-2. **Debounce global por tipo, sem chave por player** (`client.lua:288-297,336-346`).
-   `health_delta`/`hunger_delta`/`sanity_delta` têm debounce de 1s keyed só por
-   `event_type`. Num servidor com vários players, o delta do player B é descartado
-   porque o timer global do `health_delta` (do player A) ainda está na janela.
-   Fluxos de "curar ao apanhar" / "alerta de HP baixo" **perdem eventos** em rajadas.
-   Corrigir: incluir `userid` na chave do debounce para eventos por-player.
+2. ✅ **RESOLVIDO — Debounce global por tipo, sem chave por player** (`core.lua`
+   `PushEvent`). `health_delta`/`hunger_delta`/`sanity_delta` (debounce 1s) eram keyed
+   só por `event_type`, então o delta do player B era descartado enquanto o timer do
+   player A estava na janela. **Fix:** a chave de debounce agora é
+   `event_type .. ":" .. userid` quando o evento tem `userid` (cai para só `event_type`
+   em eventos de mundo/globais). Teste comportamental: `debounce.test.ts` (core.lua real
+   sob fengari — 2 players não se mascaram, mesmo player ainda throttla).
 
 3. **net_string clobber: rules/state/UI dividem `_dstp_ui`, só `ui_command` é
    coalescido** (`client.lua:1290+`, `ProcessCommands ~409`). 6 handlers escrevem no
