@@ -11,6 +11,12 @@ techniques that cost real debugging time to discover.
 | [ui-system.md](ui-system.md) | The full UI tree contract: node types, props, actions, events. Reference for the renderer. |
 | [dynamic-data-bindings.md](dynamic-data-bindings.md) | The binding system: a generic way to replicate server-only data (mob health, etc.) to the client via curated sources. Read before adding/changing data capture. |
 | [data-catalog.md](data-catalog.md) | What data is worth replicating to the client and what isn't — implemented sources + candidates (player HP, mob combat state, structure timers, fuel) with the "only with a UI that uses it" rule. |
+| [entity-events-catalog.md](entity-events-catalog.md) | 26 candidate ENTITY/WORLD events (mobs, structures, world objects) to turn into trigger nodes, ranked by usefulness × effort, with the hook mechanism for each. The foundation for NPC-scripted-by-flow. |
+| [mod-audit-2026-06.md](mod-audit-2026-06.md) | The June 2026 mod audit — bugs (events, net_string, debounce, RCE containment), all resolved; the record of what was wrong and how it was fixed. |
+
+`research/` holds the **raw multi-agent workflow studies** that produced the specs above
+(focus/click, drag, text input, the entity-event sweep, backend analysis, bug sweeps,
+design validations). They're the full findings; the specs are the distilled versions.
 
 Top-level docs (`/AUTOMATION.md`, `/WORKERS.md`, `/CLAUDE.md`) cover the
 automation engine, the per-server worker architecture, and project-wide rules.
