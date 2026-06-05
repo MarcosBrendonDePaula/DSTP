@@ -344,13 +344,31 @@ local function MaybeClickable(widget, node, ctx, w, h)
     -- into the hit-test, and MoveToFront so the primitive's own glyphs/siblings don't
     -- steal entitiesundermouse[1].
     local hit = widget:AddChild(ImageButton("images/global.xml", "square.tex", "square.tex", "square.tex"))
+    -- An ImageButton re-scales (focus_scale 1.2) AND re-tints its image on hover/focus
+    -- (imagebutton.lua:120-133) — that's why the invisible overlay popped to a visible
+    -- square when the mouse entered. Kill BOTH so the hit target stays the same size and
+    -- stays invisible in every state (normal/focus/down/disabled).
+    hit.scale_on_focus = false   -- don't grow 1.2x on hover (would shrink the texture to a square)
+    -- Inflate the hit region by a small padding so it covers the WHOLE primitive: a
+    -- Text's GetRegionSize can come back a touch smaller than the rendered glyphs (and
+    -- the region is centered on origin, like the Text), so a bare w×h box leaves the
+    -- edges of the text unclickable. node.hit_pad lets a caller tune it; default 8px.
+    local pad = (node.hit_pad ~= nil) and node.hit_pad or 8
     if hit.ForceImageSize and w and h and w > 0 and h > 0 then
-        hit:ForceImageSize(w, h)              -- real hit region (size_x/size_y)
+        hit:ForceImageSize(w + pad * 2, h + pad * 2)  -- real hit region (size_x/size_y), padded
     end
-    if hit.image and hit.image.SetTint then
-        hit.image:SetTint(1, 1, 1, 0)         -- invisible, but still clickable
+    -- Set the per-state image colours so OnGainFocus/_RefreshImageState can't re-show
+    -- the texture. alpha 0 in every state = invisible but still clickable. (For debug,
+    -- a faint red on all states so the region is visible without popping on hover.)
+    local a = node.hit_debug and { 1, 0, 0, 0.35 } or { 1, 1, 1, 0 }
+    if hit.SetImageNormalColour then
+        hit:SetImageNormalColour(a[1], a[2], a[3], a[4])
+        hit:SetImageFocusColour(a[1], a[2], a[3], a[4])
+        if hit.SetImageDisabledColour then hit:SetImageDisabledColour(a[1], a[2], a[3], a[4]) end
+    elseif hit.image and hit.image.SetTint then
+        hit.image:SetTint(a[1], a[2], a[3], a[4])
     end
-    hit:SetPosition(0, 0, 0)
+    hit:SetPosition(0, 0, 0)                    -- centered on the primitive (Text is centered too)
     if hit.SetClickable then hit:SetClickable(true) end  -- force into the engine hit-test
     hit:MoveToFront()                          -- win z-order vs the primitive/siblings
     hit:SetOnClick(fire)
@@ -448,10 +466,16 @@ RenderNode = function(node, parent, ctx)
         -- Optional alignment within a sized region (used by the folded panel body).
         if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
         if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
-        local w, h = txt:GetRegionSize()
-        w = w or (#(node.text or "") * (node.size or 18) * 0.5)
-        h = h or (node.size or 18)
-        MaybeClickable(txt, node, ctx, w, h)
+        local rw, rh = txt:GetRegionSize()
+        -- LAYOUT size: the measured region (with a per-char/size fallback if nil/0).
+        local w = (rw and rw > 0) and rw or (#(node.text or "") * (node.size or 18) * 0.5)
+        local h = (rh and rh > 0) and rh or (node.size or 18)
+        -- HITBOX size: GetRegionSize can under-report the rendered glyphs, leaving the
+        -- text edges unclickable. Feed MaybeClickable the LARGER of the measured region
+        -- and a per-char estimate so the overlay always covers the whole string — this
+        -- does NOT affect layout (the return below uses the measured w,h).
+        local hit_w = math.max(w, #(node.text or "") * (node.size or 18) * 0.5)
+        MaybeClickable(txt, node, ctx, hit_w, h)
         Register(ctx, node, txt, function(props)
             if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
             if props.color and txt.inst:IsValid() then local c = ResolveColor(props.color); txt:SetColour(c[1], c[2], c[3], c[4]) end

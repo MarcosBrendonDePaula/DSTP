@@ -84,6 +84,7 @@ function M.Run(userid)
         "center", 0, 60)
 
     -- 5) CLICKABLE TEXT — the #16 fix (text is not focusable; overlay makes it click).
+    -- Pass hit_debug=true on any node to tint its clickable region red (calibration).
     send("uitest_text",
         { type = "text", text = "[UITEST] CLIQUE neste TEXTO (#16)", size = 24, color = { 0.6, 0.9, 1, 1 },
           callback = "uitest:text" },
