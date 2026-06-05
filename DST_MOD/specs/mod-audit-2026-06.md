@@ -106,10 +106,21 @@ do FlowEngine: `player_action_start`, `boat_entered`, `boat_exited`, `book_read`
 - `client.lua` 2517 linhas = god-module → dividir em ~6 (collectors, commands,
   player-events, world-events, init, http-bridge).
 - 40+ forward declarations frágeis sob edição (strict mode + ordem de `local`).
-- Renderizador de UI (1108 linhas): widgets legados (Notification/Label/Panel/Button)
-  duplicam o tree renderer genérico — consolidar.
-- Nodes clicáveis de texto/ícone/imagem (`ui_widgets.lua:520-536`): `OnControl` +
-  `SetClickable` não tornam um widget de HUD focável → cliques não chegam.
+- ✅ **RESOLVIDO (#16)** — Renderizador de UI: widgets legados (Label/Panel/Button/
+  ProgressBar) duplicavam o tree renderer. **Fix (fase 2):** viraram **adapters finos
+  flat→tree** (`FlatAdapter` + 1 nó) que renderizam pelo MESMO `RenderNode` — o código
+  de desenho (carny button, fepanel bg, fill da barra) vive só no tree renderer; os
+  Update* viraram um `UpdateFlat` genérico → `SetProps`. Gaps fechados no tree renderer:
+  `bar` com label inline, `text` com halign/valign, `panel` com width/height fixos +
+  slots title/body. Notification fica builder próprio (tween + auto-dismiss não têm nó
+  de tree). Action surface (`create`/`update`) e CREATORS/UPDATERS keys preservadas →
+  flows salvos não quebram. Testes: `ui-fold.test.ts`.
+- ✅ **RESOLVIDO (#16)** — Nodes clicáveis de texto/ícone/imagem: `OnControl` +
+  `SetClickable` não tornavam um widget de HUD focável → cliques não chegavam. **Fix
+  (fase 1):** overlay de `ImageButton` transparente (`images/ui.xml`/`blank.tex`)
+  dimensionado via `ScaleToSize` + `SetOnClick` → mesmo `ctx.callback_fn`/`ui_callback`
+  do tree `button` (padrão do próprio DST, `widget.lua:757`). Testes: `ui-click.test.ts`.
+  **Validação visual de clique/posição é in-game** (hit-test do engine não é Lua).
 
 ## 📋 Gap de eventos — RESOLVIDO (18/18 implementados)
 
