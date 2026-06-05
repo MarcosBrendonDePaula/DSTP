@@ -332,17 +332,27 @@ local function MaybeClickable(widget, node, ctx, w, h)
         if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
     end
     local ImageButton = _G.require("widgets/imagebutton")
-    -- Transparent hit target overlaid on the primitive. "images/ui.xml"/"blank.tex" is
-    -- the same fully-transparent atlas/tex DST uses for its own text hit-areas.
-    local hit = widget:AddChild(ImageButton("images/ui.xml", "blank.tex", "blank.tex", "blank.tex", nil, nil, {1, 1}, {0, 0}))
-    -- CRUCIAL: ForceImageSize sets size_x/size_y — the BUTTON'S HIT REGION. Using
-    -- hit.image:ScaleToSize alone scales the texture but leaves the hit region unset, so
-    -- the click passes THROUGH to the world (the player walks). ForceImageSize is how
-    -- vanilla ImageButtons get a clickable area (imagebutton.lua:37).
+    -- HUD click routing is FOCUS-based: the engine hit-test (GetEntitiesAtScreenPoint)
+    -- only returns entities with a REAL clickable region; that entity gains focus on
+    -- hover, and only a FOCUSED widget's OnControl fires (button.lua:59). A blank/
+    -- transparent texture wins NO hit-test, so the overlay never focuses and the click
+    -- falls through to the world (the player walks — the bug we hit). The working tree
+    -- `button` works because its OPAQUE carny texture registers a clickable region.
+    --
+    -- So: use an OPAQUE tex (square.tex) for a real hit region, make it INVISIBLE via an
+    -- alpha-0 tint, give it a real size (ForceImageSize), SetClickable(true) to force it
+    -- into the hit-test, and MoveToFront so the primitive's own glyphs/siblings don't
+    -- steal entitiesundermouse[1].
+    local hit = widget:AddChild(ImageButton("images/global.xml", "square.tex", "square.tex", "square.tex"))
     if hit.ForceImageSize and w and h and w > 0 and h > 0 then
-        hit:ForceImageSize(w, h)
+        hit:ForceImageSize(w, h)              -- real hit region (size_x/size_y)
+    end
+    if hit.image and hit.image.SetTint then
+        hit.image:SetTint(1, 1, 1, 0)         -- invisible, but still clickable
     end
     hit:SetPosition(0, 0, 0)
+    if hit.SetClickable then hit:SetClickable(true) end  -- force into the engine hit-test
+    hit:MoveToFront()                          -- win z-order vs the primitive/siblings
     hit:SetOnClick(fire)
 end
 

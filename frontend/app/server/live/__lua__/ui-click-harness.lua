@@ -92,7 +92,7 @@ check("clickable text: an ImageButton overlay was created", countKind("ImageButt
 local btn = nil
 for _, w in ipairs(created) do if w.kind == "ImageButton" then btn = w end end
 check("overlay: SetOnClick was wired", btn ~= nil and type(btn.onclick) == "function")
-check("overlay: blank.tex transparent atlas used", btn ~= nil and btn.ctorArgs[1] == "images/ui.xml" and btn.ctorArgs[2] == "blank.tex")
+check("overlay: opaque square.tex used (real hit region, made invisible via alpha-0)", btn ~= nil and btn.ctorArgs[1] == "images/global.xml" and btn.ctorArgs[2] == "square.tex")
 check("overlay: ForceImageSize set the clickable hit region", btn ~= nil and btn.sized ~= nil)
 
 -- ── Clicking fires ctx.callback_fn ONCE (debounce), with (callback, root_id) ──

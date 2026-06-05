@@ -29,12 +29,17 @@ describe('mod ui_widgets.lua — old broken click path removed (#16)', () => {
     expect(ui).not.toContain('widget.OnControl = function')
     expect(ui).not.toContain('widget:SetClickable(true)')
   })
-  it('MaybeClickable uses the transparent ImageButton overlay with a real hit region', () => {
-    expect(ui).toContain('"images/ui.xml", "blank.tex"')
-    // ForceImageSize sets size_x/size_y — the clickable hit region. Without it the
-    // click passes THROUGH to the world (the in-game bug: clicking text walked the
-    // player). hit.image:ScaleToSize alone scales the texture but sets no hit area.
+  it('MaybeClickable overlay wins the focus-based hit-test (opaque tex + alpha0 + SetClickable + MoveToFront)', () => {
+    // HUD click routing is focus-based: only a widget whose entity wins the engine
+    // hit-test gains focus, and only a focused widget's OnControl fires. A blank/
+    // transparent tex wins no hit-test → click falls through to the world. So the
+    // overlay must use an OPAQUE tex (real region) made invisible via alpha-0 tint,
+    // be SetClickable(true) (forced into the hit-test), and MoveToFront (z-order).
+    expect(ui).toContain('"images/global.xml", "square.tex"')
     expect(ui).toContain('ForceImageSize')
+    expect(ui).toContain('SetTint(1, 1, 1, 0)')
+    expect(ui).toContain('hit:SetClickable(true)')
+    expect(ui).toContain('hit:MoveToFront()')
     expect(ui).toContain('SetOnClick')
   })
 })
