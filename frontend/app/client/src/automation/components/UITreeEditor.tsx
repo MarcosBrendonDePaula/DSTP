@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { UIPreview } from './UIPreview'
 
 // Visual tree editor for a ui_builder node. Builds node.data.tree — the same
 // {type, ...props, children} the backend renders. No canvas spam, no JSON: pick
@@ -14,6 +15,7 @@ const TYPES: { value: string; label: string; container?: boolean }[] = [
   { value: 'row', label: '↔ Linha', container: true },
   { value: 'tabs', label: '🗂 Abas', container: true },
   { value: 'text', label: '🔤 Texto' },
+  { value: 'text_input', label: '⌨ Campo de Texto' },
   { value: 'icon', label: '🖼 Ícone' },
   { value: 'image', label: '🏞 Imagem' },
   { value: 'button', label: '🔘 Botão' },
@@ -30,6 +32,7 @@ function defaults(type: string): UINode {
     case 'row': return { type, gap: 12, children: [] }
     case 'tabs': return { type, active: 0, tabs: [{ label: 'Aba 1', child: { type: 'col', gap: 6, children: [] } }] }
     case 'text': return { type, text: 'Texto', size: 18 }
+    case 'text_input': return { type, callback: 'submit', placeholder: 'digite...', width: 280, height: 36 }
     case 'icon': return { type, prefab: 'log', size: 48 }
     case 'image': return { type, atlas: 'images/global.xml', tex: 'square.tex', width: 64, height: 64 }
     case 'button': return { type, text: 'Botão', callback: 'click' }
@@ -46,6 +49,7 @@ const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
   row: [{ key: 'gap', label: 'Gap', ph: '12' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
   text: [{ key: 'text', label: 'Texto', ph: '{{x}}' }, { key: 'size', label: 'Tamanho', ph: '18' }, { key: 'color', label: 'Cor [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'id', label: 'Node ID (p/ atualizar)' }, { key: 'callback', label: 'Callback (clicável)' }],
+  text_input: [{ key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }, { key: 'id', label: 'Node ID' }],
   icon: [{ key: 'prefab', label: 'Prefab', ph: 'log' }, { key: 'size', label: 'Tamanho', ph: '48' }, { key: 'id', label: 'Node ID' }, { key: 'callback', label: 'Callback' }],
   image: [{ key: 'atlas', label: 'Atlas' }, { key: 'tex', label: 'Textura' }, { key: 'width', label: 'Largura' }, { key: 'height', label: 'Altura' }],
   button: [{ key: 'text', label: 'Texto', ph: 'Comprar' }, { key: 'callback', label: 'Callback', ph: 'buy_log' }, { key: 'width', label: 'Largura', ph: '120' }, { key: 'id', label: 'Node ID' }],
@@ -76,7 +80,11 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
 
 export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
-  const [addType, setAddType] = useState('text')
+  // Drag-and-drop: which palette type is being dragged, and which container row is the
+  // current drop target (for the highlight). pathKey = the dropPath serialized.
+  const [dragType, setDragType] = useState<string | null>(null)
+  const [dropKey, setDropKey] = useState<string | null>(null)
+  const pathKey = (p: Step[]) => p.map(s => s.kind + s.i).join('/') || 'root'
 
   const root: UINode = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
 
@@ -95,10 +103,12 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
     }))
   }
 
-  const addChild = () => {
+  // Add a new node of `type` into the container at `path` (defaults to the selected
+  // node, then the root). Used by both the palette click and the drag-drop.
+  const addChildAt = (path: Step[], type: string) => {
     save(update(root, r => {
-      const t = getNode(r, selPath) || r
-      const fresh = defaults(addType)
+      const t = getNode(r, path) || r
+      const fresh = defaults(type)
       if (t.type === 'tabs') {
         t.tabs = t.tabs || []
         t.tabs.push({ label: `Aba ${t.tabs.length + 1}`, child: fresh.type === 'col' || fresh.type === 'row' ? fresh : { type: 'col', gap: 6, children: [fresh] } })
@@ -108,6 +118,7 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
       }
     }))
   }
+
 
   const removeAt = (path: Step[]) => {
     if (path.length === 0) return // can't remove root
@@ -143,11 +154,21 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
     const kids: React.ReactNode[] = []
     if (n.children) n.children.forEach((c: UINode, i: number) => kids.push(renderRow(c, [...path, { kind: 'child', i }])))
     if (n.tabs) n.tabs.forEach((tb: any, i: number) => kids.push(renderRow(tb.child, [...path, { kind: 'tab', i }], tb.label)))
+    const isContainer = CONTAINER.has(n.type)
+    const isDropTarget = isContainer && dragType != null && dropKey === pathKey(path)
     return (
-      <div key={path.map(s => s.kind + s.i).join('/') || 'root'}>
+      <div key={pathKey(path)}>
         <div
           onClick={() => setSelPath(path)}
-          className={`flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-[11px] ${isSel ? 'bg-indigo-500/30 text-white' : 'hover:bg-white/5 text-gray-300'}`}
+          onDragOver={isContainer ? (e => { e.preventDefault(); e.stopPropagation(); if (dropKey !== pathKey(path)) setDropKey(pathKey(path)) }) : undefined}
+          onDragLeave={isContainer ? (e => { e.stopPropagation(); if (dropKey === pathKey(path)) setDropKey(null) }) : undefined}
+          onDrop={isContainer ? (e => {
+            e.preventDefault(); e.stopPropagation()
+            const t = dragType || e.dataTransfer.getData('text/plain')
+            if (t) addChildAt(path, t)
+            setDragType(null); setDropKey(null); setSelPath(path)
+          }) : undefined}
+          className={`flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-[11px] ${isDropTarget ? 'bg-emerald-500/30 ring-1 ring-emerald-400 text-white' : isSel ? 'bg-indigo-500/30 text-white' : 'hover:bg-white/5 text-gray-300'}`}
           style={{ paddingLeft: 6 + depth * 14 }}
         >
           <span>{ICON[n.type] || '•'}</span>
@@ -170,6 +191,28 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
 
   return (
     <div className="flex gap-3 text-xs" style={{ minHeight: 300 }}>
+      {/* Palette: drag a block onto a container in the tree (or click to add to the
+          selected container). Replaces the old select + button flow. */}
+      <div className="w-32 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20">
+        <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
+        <div className="space-y-1">
+          {TYPES.map(t => (
+            <div
+              key={t.value}
+              draggable
+              onDragStart={e => { setDragType(t.value); e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
+              onDragEnd={() => { setDragType(null); setDropKey(null) }}
+              onClick={() => addChildAt(selected && CONTAINER.has(selected.type) ? selPath : [], t.value)}
+              className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
+              title={t.container ? 'Container — arraste para dentro de outro container' : 'Arraste para um container'}
+            >
+              {t.label}
+            </div>
+          ))}
+        </div>
+        <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste um bloco para um container na árvore, ou clique para adicionar ao selecionado.</div>
+      </div>
+
       {/* Tree */}
       <div className="flex-1 border border-white/10 rounded-lg p-2 bg-black/20 overflow-auto" style={{ maxHeight: 460 }}>
         <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Estrutura</div>
@@ -193,21 +236,21 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
               </div>
             ))}
             {selIsContainer && (
-              <div className="pt-2 border-t border-white/10">
-                <span className="text-[9px] text-gray-500 block mb-1">Adicionar {selected.type === 'tabs' ? 'aba' : 'filho'}</span>
-                <div className="flex gap-1">
-                  <select value={addType} onChange={e => setAddType(e.target.value)}
-                    className="flex-1 bg-white/5 border border-white/10 rounded px-1 py-1 text-[10px] text-white [&>option]:bg-[#1a1a1a]">
-                    {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                  <button onClick={addChild} className="px-2 rounded bg-indigo-500/25 text-indigo-200 border border-indigo-500/30 hover:bg-indigo-500/35 text-[11px]">+</button>
-                </div>
+              <div className="pt-2 border-t border-white/10 text-[8px] text-gray-500">
+                Container selecionado — arraste um bloco da paleta para cá (ou clique nele).
               </div>
             )}
           </>
         ) : (
           <div className="text-[10px] text-gray-500">Selecione um componente na árvore para editar.</div>
         )}
+      </div>
+
+      {/* Live preview: see the UI as it renders, side by side. Click an element to
+          select its node in the tree. Approximates the DST look (not pixel-exact). */}
+      <div className="flex-1 min-w-[200px]">
+        <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Pré-visualização</div>
+        <UIPreview tree={root} sel={selPath} onSelect={setSelPath} />
       </div>
     </div>
   )
