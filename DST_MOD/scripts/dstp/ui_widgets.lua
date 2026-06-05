@@ -101,6 +101,28 @@ end
 -- Widget Builders
 -------------------------------------------------
 
+-- Forward decl: the flat label/panel/button/progress_bar builders below are now thin
+-- adapters that build a one-node tree and call CreateTree (defined later). Declaring it
+-- here lets the adapters reference it (strict mode + local-after-definition).
+local CreateTree
+
+-- Build a flat cmd into a one-node tree, render it via CreateTree, and tag the result
+-- with the legacy `entry_type` + the single leaf's node id so the generic UpdateFlat
+-- can patch it by props. The leaf node is given id "_leaf" so SetProps can address it;
+-- a `panel` uses its own holder (title/body patched via the panel's own Register).
+local function FlatAdapter(cmd, entry_type, node)
+    node.id = node.id or "_leaf"
+    local entry = CreateTree({
+        id = cmd.id, group = cmd.group,
+        tree = node, anchor = cmd.anchor, x = cmd.x, y = cmd.y,
+    })
+    if entry then
+        entry.type = entry_type   -- so UPDATERS[entry.type] dispatches to UpdateFlat
+        entry.leaf = node.id
+    end
+    return entry
+end
+
 --- NOTIFICATION — toast that auto-dismisses
 local function CreateNotification(cmd)
     local root = GetRoot()
@@ -151,281 +173,51 @@ local function UpdateNotification(entry, cmd)
     end
 end
 
---- LABEL — persistent HUD text
+--- LABEL — persistent HUD text. Now a thin adapter over the tree `text` node (the
+--- draw code lives ONLY in RenderNode). The whole one-node tree is anchor-positioned
+--- by CreateTree, reproducing the legacy per-label anchor placement.
 local function CreateLabel(cmd)
-    local root = GetRoot()
-    if not root then return nil end
-
-    local Widget = _G.require("widgets/widget")
-    local Text   = _G.require("widgets/text")
-
-    local w = root:AddChild(Widget("dstp_label_" .. cmd.id))
-    local col  = ResolveColor(cmd.color)
-    local font = ResolveFont(cmd.font)
-    local size = cmd.size or 20
-
-    local txt = w:AddChild(Text(font, size, cmd.text or ""))
-    txt:SetColour(col[1], col[2], col[3], col[4])
-
-    local ax, ay = AnchorOffset(cmd.anchor)
-    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-
-    return { widget = w, text = txt, type = "label" }
+    return FlatAdapter(cmd, "label", {
+        type = "text", text = cmd.text or "",
+        font = cmd.font, size = cmd.size or 20, color = cmd.color,
+    })
 end
 
-local function UpdateLabel(entry, cmd)
-    if cmd.text and entry.text and entry.text.inst:IsValid() then
-        entry.text:SetString(cmd.text)
-    end
-    if cmd.color and entry.text and entry.text.inst:IsValid() then
-        local c = ResolveColor(cmd.color)
-        entry.text:SetColour(c[1], c[2], c[3], c[4])
-    end
-    if cmd.size and entry.text and entry.text.inst:IsValid() then
-        entry.text:SetSize(cmd.size)
-    end
-    if (cmd.x or cmd.y or cmd.anchor) and entry.widget and entry.widget.inst:IsValid() then
-        local ax, ay = AnchorOffset(cmd.anchor or "center")
-        entry.widget:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    end
-end
-
---- PANEL — window with title and body
+--- PANEL — window with title and body. Now a thin adapter over the tree `panel` node
+--- in FIXED-size mode (width/height + title/body string slots), so the draw code lives
+--- only in RenderNode. Title/body are addressable for update-by-name via the panel
+--- node's own Register (props.title/props.body).
 local function CreatePanel(cmd)
-    local root = GetRoot()
-    if not root then return nil end
-
-    local Widget = _G.require("widgets/widget")
-    local Text   = _G.require("widgets/text")
-    local Image  = _G.require("widgets/image")
-    local ImageButton = _G.require("widgets/imagebutton")
-
-    local pw = cmd.width or 400
-    local ph = cmd.height or 300
-
-    local w = root:AddChild(Widget("dstp_panel_" .. cmd.id))
-
-    -- Background using 9-slice panel image
-    local bg = w:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
-    bg:SetSize(pw, ph)
-    bg:SetTint(0.1, 0.1, 0.1, 0.85)
-
-    -- Border overlay
-    local border = w:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
-    border:SetSize(pw + 4, ph + 4)
-    border:SetTint(0.3, 0.3, 0.4, 0.6)
-    border:MoveToBack()
-
-    -- Title
-    local title_text = nil
-    if cmd.title then
-        title_text = w:AddChild(Text(_G.TITLEFONT, 24, cmd.title))
-        title_text:SetColour(1, 1, 0.8, 1)
-        title_text:SetPosition(0, ph / 2 - 25)
-    end
-
-    -- Body
-    local body_text = nil
-    if cmd.body then
-        body_text = w:AddChild(Text(_G.BODYTEXTFONT, 18, cmd.body))
-        body_text:SetColour(1, 1, 1, 1)
-        body_text:SetRegionSize(pw - 40, ph - 80)
-        body_text:SetHAlign(_G.ANCHOR_LEFT)
-        body_text:SetVAlign(_G.ANCHOR_TOP)
-        body_text:EnableWordWrap(true)
-        body_text:SetPosition(0, -10)
-    end
-
-    -- Close button
-    local close_btn = nil
-    if cmd.closeable ~= false then
-        close_btn = w:AddChild(ImageButton(
-            "images/global_redux.xml",
-            "close.tex", "close.tex", "close.tex", "close.tex"
-        ))
-        close_btn:SetPosition(pw / 2 - 15, ph / 2 - 15)
-        close_btn:SetScale(0.4)
-        close_btn:SetOnClick(function()
-            -- A menu's panel + buttons share a `group`; closing the panel must
-            -- tear down the whole group, not just the panel widget itself.
-            if cmd.group then
-                UIWidgets.DestroyGroup(cmd.group)
-            else
-                UIWidgets.DestroyWidget({ id = cmd.id })
-            end
-        end)
-    end
-
-    -- Position
-    local ax, ay = AnchorOffset(cmd.anchor or "center")
-    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-
-    return {
-        widget = w, type = "panel",
-        title = title_text, body = body_text,
-        close_btn = close_btn, bg = bg,
-    }
+    return FlatAdapter(cmd, "panel", {
+        type = "panel",
+        width = cmd.width or 400, height = cmd.height or 300,
+        title = cmd.title, body = cmd.body,
+        closeable = cmd.closeable,
+    })
 end
 
-local function UpdatePanel(entry, cmd)
-    if cmd.title and entry.title and entry.title.inst:IsValid() then
-        entry.title:SetString(cmd.title)
-    end
-    if cmd.body and entry.body and entry.body.inst:IsValid() then
-        entry.body:SetString(cmd.body)
-    end
-    if (cmd.x or cmd.y or cmd.anchor) and entry.widget and entry.widget.inst:IsValid() then
-        local ax, ay = AnchorOffset(cmd.anchor or "center")
-        entry.widget:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    end
-end
-
---- BUTTON — clickable HUD button, sends callback event to backend
+--- BUTTON — clickable HUD button. Now a thin adapter over the tree `button` node. The
+--- tree button fires ctx.callback_fn(cb, root_id); since the adapter passes NO group,
+--- CreateTree sets root_id = cmd.id, so the callback carries the same widget_id the
+--- legacy button reported. Draw code (ImageButton+scale+debounce) lives only in RenderNode.
 local function CreateButton(cmd)
-    local root = GetRoot()
-    if not root then return nil end
-
-    local Widget      = _G.require("widgets/widget")
-    local Text        = _G.require("widgets/text")
-    local ImageButton = _G.require("widgets/imagebutton")
-
-    local w = root:AddChild(Widget("dstp_btn_" .. cmd.id))
-
-    local btn = w:AddChild(ImageButton(
-        "images/global_redux.xml",
-        "button_carny_long_normal.tex",
-        "button_carny_long_hover.tex",
-        "button_carny_long_disabled.tex",
-        "button_carny_long_down.tex"
-    ))
-
-    local bw = cmd.width or 200
-    local bh = cmd.height or 50
-    btn:SetScale(bw / 340, bh / 70)  -- base tex is ~340x70
-
-    -- Label on button
-    local label = w:AddChild(Text(_G.NEWFONT_OUTLINE, cmd.size or 22, cmd.text or "Button"))
-    local col = ResolveColor(cmd.color)
-    label:SetColour(col[1], col[2], col[3], col[4])
-
-    -- Debounce: ignore repeat clicks on the same button within a short window.
-    -- DST's ImageButton can fire OnClick more than once per real press, and an
-    -- impatient player double-clicking a shop button would otherwise queue
-    -- several ui_callback events (each a full flow run).
-    local last_click = -1
-    btn:SetOnClick(function()
-        local now = _G.GetTime and _G.GetTime() or 0
-        if last_click >= 0 and (now - last_click) < 0.5 then return end
-        last_click = now
-        if cmd.callback and UIWidgets._callback_fn then
-            UIWidgets._callback_fn(cmd.callback, cmd.id)
-        end
-    end)
-
-    local ax, ay = AnchorOffset(cmd.anchor)
-    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-
-    return { widget = w, btn = btn, label = label, type = "button", callback = cmd.callback }
+    return FlatAdapter(cmd, "button", {
+        type = "button", text = cmd.text or "Button",
+        width = cmd.width or 200, height = cmd.height or 50,
+        size = cmd.size or 22, color = cmd.color, callback = cmd.callback,
+    })
 end
 
-local function UpdateButton(entry, cmd)
-    if cmd.text and entry.label and entry.label.inst:IsValid() then
-        entry.label:SetString(cmd.text)
-    end
-    if cmd.color and entry.label and entry.label.inst:IsValid() then
-        local c = ResolveColor(cmd.color)
-        entry.label:SetColour(c[1], c[2], c[3], c[4])
-    end
-    if cmd.callback then
-        entry.callback = cmd.callback
-        if entry.btn and entry.btn.inst:IsValid() then
-            entry.btn:SetOnClick(function()
-                if UIWidgets._callback_fn then
-                    UIWidgets._callback_fn(cmd.callback, cmd.id)
-                end
-            end)
-        end
-    end
-    if (cmd.x or cmd.y or cmd.anchor) and entry.widget and entry.widget.inst:IsValid() then
-        local ax, ay = AnchorOffset(cmd.anchor)
-        entry.widget:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    end
-end
-
---- PROGRESS_BAR — horizontal bar with optional label
+--- PROGRESS_BAR — horizontal bar with optional inline label. Now a thin adapter over
+--- the tree `bar` node (which gained an optional `label`). Fill math + label live only
+--- in RenderNode; value/max/color/label are patched in place via the bar's Register.
 local function CreateProgressBar(cmd)
-    local root = GetRoot()
-    if not root then return nil end
-
-    local Widget = _G.require("widgets/widget")
-    local Image  = _G.require("widgets/image")
-    local Text   = _G.require("widgets/text")
-
-    local bw = cmd.width or 200
-    local bh = cmd.height or 20
-    local value = math.max(0, math.min(cmd.value or 0, cmd.max or 1))
-    local max_val = cmd.max or 1
-    local pct = max_val > 0 and (value / max_val) or 0
-
-    local w = root:AddChild(Widget("dstp_bar_" .. cmd.id))
-
-    -- Background bar
-    local bg_col = ResolveColor(cmd.bg_color or {0.2, 0.2, 0.2, 1})
-    local bg = w:AddChild(Image("images/global.xml", "square.tex"))
-    bg:SetSize(bw, bh)
-    bg:SetTint(bg_col[1], bg_col[2], bg_col[3], bg_col[4])
-
-    -- Foreground (fill) bar
-    local fg_col = ResolveColor(cmd.color or {0, 1, 0, 1})
-    local fg = w:AddChild(Image("images/global.xml", "square.tex"))
-    local fill_w = math.max(1, bw * pct)
-    fg:SetSize(fill_w, bh - 2)
-    fg:SetTint(fg_col[1], fg_col[2], fg_col[3], fg_col[4])
-    -- Offset fill to align left edge with bg left edge
-    fg:SetPosition(-(bw - fill_w) / 2, 0)
-
-    -- Label
-    local label = nil
-    if cmd.label then
-        label = w:AddChild(Text(_G.NEWFONT_OUTLINE, math.min(bh - 2, 18), cmd.label))
-        label:SetColour(1, 1, 1, 1)
-    end
-
-    local ax, ay = AnchorOffset(cmd.anchor)
-    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-
-    return {
-        widget = w, type = "progress_bar",
-        bg = bg, fg = fg, label = label,
-        bar_width = bw, bar_height = bh,
-        max_val = max_val,
-    }
-end
-
-local function UpdateProgressBar(entry, cmd)
-    local bw = entry.bar_width
-    local bh = entry.bar_height
-    local max_val = cmd.max or entry.max_val or 1
-
-    if cmd.value and entry.fg and entry.fg.inst:IsValid() then
-        local value = math.max(0, math.min(cmd.value, max_val))
-        local pct = max_val > 0 and (value / max_val) or 0
-        local fill_w = math.max(1, bw * pct)
-        entry.fg:SetSize(fill_w, bh - 2)
-        entry.fg:SetPosition(-(bw - fill_w) / 2, 0)
-        entry.max_val = max_val
-    end
-    if cmd.color and entry.fg and entry.fg.inst:IsValid() then
-        local c = ResolveColor(cmd.color)
-        entry.fg:SetTint(c[1], c[2], c[3], c[4])
-    end
-    if cmd.label and entry.label and entry.label.inst:IsValid() then
-        entry.label:SetString(cmd.label)
-    end
-    if (cmd.x or cmd.y or cmd.anchor) and entry.widget and entry.widget.inst:IsValid() then
-        local ax, ay = AnchorOffset(cmd.anchor)
-        entry.widget:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    end
+    return FlatAdapter(cmd, "progress_bar", {
+        type = "bar",
+        width = cmd.width or 200, height = cmd.height or 20,
+        value = cmd.value or 0, max = cmd.max or 1,
+        color = cmd.color, bg_color = cmd.bg_color, label = cmd.label,
+    })
 end
 
 -------------------------------------------------
@@ -639,6 +431,9 @@ RenderNode = function(node, parent, ctx)
             txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
             txt:EnableWordWrap(true)
         end
+        -- Optional alignment within a sized region (used by the folded panel body).
+        if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
+        if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
         local w, h = txt:GetRegionSize()
         w = w or (#(node.text or "") * (node.size or 18) * 0.5)
         h = h or (node.size or 18)
@@ -725,6 +520,12 @@ RenderNode = function(node, parent, ctx)
         local fillw = math.max(1, bw * pct)
         fg:SetSize(fillw, bh - 2); fg:SetTint(fgc[1], fgc[2], fgc[3], fgc[4])
         fg:SetPosition(-(bw - fillw) / 2, 0)
+        -- Optional inline label centered on the bar (used by the folded progress_bar).
+        local barlabel = nil
+        if node.label then
+            barlabel = holder:AddChild(Text(_G.NEWFONT_OUTLINE, math.min(bh - 2, 18), tostring(node.label)))
+            barlabel:SetColour(1, 1, 1, 1)
+        end
         local curMax = maxv
         Register(ctx, node, holder, function(props)
             if not fg.inst:IsValid() then return end
@@ -736,6 +537,7 @@ RenderNode = function(node, parent, ctx)
                 fg:SetSize(fw, bh - 2); fg:SetPosition(-(bw - fw) / 2, 0)
             end
             if props.color then local c = ResolveColor(props.color); fg:SetTint(c[1], c[2], c[3], c[4]) end
+            if props.label ~= nil and barlabel and barlabel.inst:IsValid() then barlabel:SetString(tostring(props.label)) end
         end)
         return holder, bw, bh
 
@@ -743,16 +545,43 @@ RenderNode = function(node, parent, ctx)
         return parent:AddChild(Widget("spacer")), node.width or 0, node.height or 8
 
     elseif t == "panel" then
-        -- Panel = framed background sized to fit its content (laid out as a col).
+        -- Panel = framed background. Two sizing modes:
+        --  • auto (default): sized to fit its `children` laid out as a col.
+        --  • fixed: node.width/height set (used by the folded legacy panel), with
+        --    optional title/body STRING slots (addressable as "_title"/"_body" so the
+        --    legacy update-by-name path round-trips via SetProps).
         local holder = parent:AddChild(Widget("panel"))
         local bg = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
         local border = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
-        -- content container (column) holding title + children
-        local content = holder:AddChild(Widget("content"))
-        local cw, ch = LayoutChildren(node, content, ctx, "y")
-        local padX, padY = 28, 28
-        local pw = math.max(node.min_width or 160, cw + padX * 2)
-        local ph = math.max(node.min_height or 80, ch + padY * 2)
+        local fixed = node.width ~= nil and node.height ~= nil
+        local pw, ph
+        local title_txt, body_txt
+        if fixed then
+            pw, ph = node.width, node.height
+            if node.title then
+                title_txt = holder:AddChild(Text(_G.TITLEFONT, node.title_size or 24, tostring(node.title)))
+                title_txt:SetColour(1, 1, 0.8, 1)
+                title_txt:SetPosition(0, ph / 2 - 25, 0)
+            end
+            if node.body then
+                body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, node.body_size or 18, tostring(node.body)))
+                body_txt:SetColour(1, 1, 1, 1)
+                body_txt:SetRegionSize(pw - 40, ph - 80)
+                if body_txt.SetHAlign and _G.ANCHOR_LEFT then body_txt:SetHAlign(_G.ANCHOR_LEFT) end
+                if body_txt.SetVAlign and _G.ANCHOR_TOP then body_txt:SetVAlign(_G.ANCHOR_TOP) end
+                body_txt:EnableWordWrap(true)
+                body_txt:SetPosition(0, -10, 0)
+            end
+            -- Render any children too (composed nodes), centered as a col.
+            local content = holder:AddChild(Widget("content"))
+            LayoutChildren(node, content, ctx, "y")
+        else
+            local content = holder:AddChild(Widget("content"))
+            local cw, ch = LayoutChildren(node, content, ctx, "y")
+            local padX, padY = 28, 28
+            pw = math.max(node.min_width or 160, cw + padX * 2)
+            ph = math.max(node.min_height or 80, ch + padY * 2)
+        end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
         -- close button
@@ -763,6 +592,11 @@ RenderNode = function(node, parent, ctx)
             close_btn:SetScale(0.4)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
         end
+        -- Make title/body addressable so update-by-name patches them in place.
+        Register(ctx, node, holder, function(props)
+            if props.title ~= nil and title_txt and title_txt.inst:IsValid() then title_txt:SetString(tostring(props.title)) end
+            if props.body ~= nil and body_txt and body_txt.inst:IsValid() then body_txt:SetString(tostring(props.body)) end
+        end)
         return holder, pw, ph
     end
 
@@ -771,7 +605,8 @@ RenderNode = function(node, parent, ctx)
 end
 
 --- Create a UI from a tree definition. cmd = { id, group, tree, anchor, x, y }
-local function CreateTree(cmd)
+--- (Assigned to the forward-declared `CreateTree` so the flat adapters above can call it.)
+CreateTree = function(cmd)
     local root = GetRoot()
     if not root or not cmd.tree then return nil end
     local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
@@ -949,6 +784,28 @@ end
 -- Dispatch tables
 -------------------------------------------------
 
+-- Generic update for the folded flat widgets (label/panel/button/progress_bar): they
+-- are one-node trees, so an `update` just patches the leaf node's props in place via
+-- SetProps. Translates the flat cmd fields to the leaf's prop names. Reposition by
+-- anchor isn't supported in-place (the legacy reposition was rare); a flow that needs
+-- to move a flat widget re-creates it (same id replaces).
+local function UpdateFlat(entry, cmd)
+    local leaf = entry.leaf or "_leaf"
+    local props = {}
+    if cmd.text ~= nil then props.text = cmd.text end
+    if cmd.color ~= nil then props.color = cmd.color end
+    if cmd.size ~= nil then props.size = cmd.size end
+    if cmd.value ~= nil then props.value = cmd.value end
+    if cmd.max ~= nil then props.max = cmd.max end
+    if cmd.label ~= nil then props.label = cmd.label end
+    if cmd.title ~= nil then props.title = cmd.title end
+    if cmd.body ~= nil then props.body = cmd.body end
+    if cmd.visible ~= nil then props.visible = cmd.visible end
+    if next(props) then
+        UIWidgets.SetProps({ id = cmd.id, node = leaf, props = props })
+    end
+end
+
 local CREATORS = {
     notification = CreateNotification,
     label        = CreateLabel,
@@ -961,11 +818,11 @@ local CREATORS = {
 
 local UPDATERS = {
     notification = UpdateNotification,
-    label        = UpdateLabel,
-    panel        = UpdatePanel,
+    label        = UpdateFlat,
+    panel        = UpdateFlat,
     tree         = UpdateTree,
-    button       = UpdateButton,
-    progress_bar = UpdateProgressBar,
+    button       = UpdateFlat,
+    progress_bar = UpdateFlat,
 }
 
 -------------------------------------------------
