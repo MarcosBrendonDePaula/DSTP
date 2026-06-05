@@ -108,10 +108,15 @@ local function testWatchdog(run)
     check(run, "watchdog: infinite loop ABORTED (did not freeze)", ok2 == false)
     core.config.max_execute_ops = saved_ops
 
-    core._G.DSTP_SELFTEST_SENTINEL = nil
-    core.RunGuarded(function() core._G.DSTP_SELFTEST_SENTINEL = 42 end)
-    check(run, "watchdog: env not sandboxed (_G reachable)", core._G.DSTP_SELFTEST_SENTINEL == 42)
-    core._G.DSTP_SELFTEST_SENTINEL = nil
+    -- DST runs in STRICT MODE: assigning to an undeclared global (DSTP_SELFTEST_SENTINEL
+    -- = 42) raises "assign to undeclared variable". Use rawset/rawget to set a fresh _G
+    -- field without tripping the strict metatable — this proves RunGuarded's env is the
+    -- real _G (not sandboxed) without creating a strict-mode violation.
+    local rawset, rawget = core._G.rawset, core._G.rawget
+    rawset(core._G, "DSTP_SELFTEST_SENTINEL", nil)
+    core.RunGuarded(function() rawset(core._G, "DSTP_SELFTEST_SENTINEL", 42) end)
+    check(run, "watchdog: env not sandboxed (_G reachable)", rawget(core._G, "DSTP_SELFTEST_SENTINEL") == 42)
+    rawset(core._G, "DSTP_SELFTEST_SENTINEL", nil)
 end
 
 -- 4) execute gate: with ALLOW_EXECUTE off the execute command is a no-op; with it on
@@ -122,18 +127,21 @@ local function testExecuteGate(run)
         check(run, "execute-gate: handler registered", false)
         return
     end
+    local rawset, rawget = core._G.rawset, core._G.rawget
     local saved_allow = core.config.allow_execute
-    core._G.DSTP_SELFTEST_EXEC = nil
+    rawset(core._G, "DSTP_SELFTEST_EXEC", nil)
 
+    -- The executed Lua mutates a sentinel via rawset (DST strict mode forbids creating
+    -- a global by bare assignment — `DSTP_SELFTEST_EXEC = 1` would raise inside execute).
     core.config.allow_execute = false
-    handler({ lua = "DSTP_SELFTEST_EXEC = 1" })
-    check(run, "execute-gate: OFF → Lua did NOT run", core._G.DSTP_SELFTEST_EXEC == nil)
+    handler({ lua = "rawset(_G, 'DSTP_SELFTEST_EXEC', 1)" })
+    check(run, "execute-gate: OFF → Lua did NOT run", rawget(core._G, "DSTP_SELFTEST_EXEC") == nil)
 
     core.config.allow_execute = true
-    handler({ lua = "DSTP_SELFTEST_EXEC = 2" })
-    check(run, "execute-gate: ON → Lua ran", core._G.DSTP_SELFTEST_EXEC == 2)
+    handler({ lua = "rawset(_G, 'DSTP_SELFTEST_EXEC', 2)" })
+    check(run, "execute-gate: ON → Lua ran", rawget(core._G, "DSTP_SELFTEST_EXEC") == 2)
 
-    core._G.DSTP_SELFTEST_EXEC = nil
+    rawset(core._G, "DSTP_SELFTEST_EXEC", nil)
     core.config.allow_execute = saved_allow
 end
 
