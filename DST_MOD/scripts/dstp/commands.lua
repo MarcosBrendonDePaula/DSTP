@@ -301,6 +301,208 @@ function Commands.RegisterAll(core)
         return nil, nil
     end
 
+    -- Resolve a NON-PLAYER entity for the entity_* commands. A flow names a target by:
+    --   * GUID (preferred — carried by the entity events: beefalo_tamed{guid},
+    --     container_opened_entity{container_guid}, structure_worked, ...). Looked up in
+    --     the global Ents[guid] table (the canonical c_inst resolver).
+    --   * prefab + x,z + radius (fallback) — nearest matching prefab via FindEntities.
+    -- Returns (inst, nil) on success or (nil, reason) where reason is "gone" (stale/
+    -- removed GUID) / "not_found" (no match near pos) / "bad_args". MANDATORY guard:
+    -- a GUID from an event goes stale (the entity may already be removed), so we never
+    -- index a nil and always validate IsValid — handlers branch on the reason.
+    local function ResolveEntity(data)
+        local guid = tonumber(data.guid or data.container_guid)
+        if guid then
+            local inst = _G.Ents[guid]
+            if inst and inst:IsValid() then return inst, nil end
+            return nil, "gone"
+        end
+        if data.prefab and data.x ~= nil and data.z ~= nil then
+            local x, z = tonumber(data.x), tonumber(data.z)
+            local radius = tonumber(data.radius) or 8
+            local ents = _G.TheSim:FindEntities(x, 0, z, radius, nil, nil, nil)
+            for _, ent in ipairs(ents) do
+                if ent.prefab == data.prefab and ent:IsValid() then return ent, nil end
+            end
+            return nil, "not_found"
+        end
+        return nil, "bad_args"
+    end
+
+    -- Build the flat read-object for get_entity: always-present native identity, then a
+    -- block per component the entity actually has (present-component detection drives the
+    -- shape, mirroring EntityScript:GetDebugString). All reads are side-effect-free and
+    -- master-sim (the mod already is). Helper to guard a possibly-removed ref.
+    local function GuidOf(e) return (e and e.GUID) or nil end
+    local function PrefabOf(e) return (e and e:IsValid() and e.prefab) or nil end
+
+    local function ReadEntity(inst)
+        local x, _, z = 0, 0, 0
+        if inst.Transform then x, _, z = inst.Transform:GetWorldPosition() end
+        local out = {
+            found = true,
+            prefab = inst.prefab,
+            guid = inst.GUID,
+            name = (inst.GetDisplayName and inst:GetDisplayName()) or inst.name or inst.prefab,
+            x = math.floor(x), z = math.floor(z),
+            age = inst.GetTimeAlive and math.floor(inst:GetTimeAlive()) or 0,
+            asleep = inst.IsAsleep and inst:IsAsleep() or false,
+        }
+        local c = inst.components
+        if not c then return out end
+
+        if c.health then
+            out.health_percent = c.health:GetPercent()
+            out.health_current = c.health.currenthealth
+            out.health_max = c.health.maxhealth
+            out.is_dead = c.health:IsDead()
+        end
+        if c.combat then
+            local t = c.combat.target
+            out.has_target = c.combat:HasTarget()
+            out.target_guid = GuidOf(t)
+            out.target_prefab = PrefabOf(t)
+            out.damage = c.combat.defaultdamage
+        end
+        if c.burnable then
+            out.is_burning = c.burnable:IsBurning()
+            out.is_smoldering = c.burnable:IsSmoldering()
+        end
+        if c.freezable then
+            out.is_frozen = c.freezable:IsFrozen()
+        end
+        if c.workable then
+            out.work_left = c.workable:GetWorkLeft()
+            out.can_be_worked = c.workable:CanBeWorked()
+        end
+        if c.fueled then
+            out.fuel_percent = c.fueled:GetPercent()
+            out.fuel_section = c.fueled.GetCurrentSection and c.fueled:GetCurrentSection() or nil
+        end
+        if c.perishable then
+            out.perish_percent = c.perishable:GetPercent()
+            out.is_spoiled = c.perishable.IsSpoiled and c.perishable:IsSpoiled() or false
+        end
+        if c.hunger then
+            out.hunger_percent = c.hunger:GetPercent()
+            out.is_starving = c.hunger.IsStarving and c.hunger:IsStarving() or false
+        end
+        if c.domesticatable then
+            out.domestication = c.domesticatable.GetDomestication and c.domesticatable:GetDomestication() or nil
+            out.obedience = c.domesticatable.GetObedience and c.domesticatable:GetObedience() or nil
+            out.is_domesticated = c.domesticatable.domesticated == true
+        end
+        if c.rideable then
+            out.is_being_ridden = c.rideable.IsBeingRidden and c.rideable:IsBeingRidden() or false
+            local rider = c.rideable.GetRider and c.rideable:GetRider() or nil
+            out.rider_userid = (rider and rider.userid) or nil
+        end
+        if c.container then
+            out.is_open = c.container.IsOpen and c.container:IsOpen() or false
+            out.is_full = c.container.IsFull and c.container:IsFull() or false
+            out.num_items = c.container.NumItems and c.container:NumItems() or 0
+            -- Cap at 40 (the foreach limit); map only prefab/slot/stack, never entity refs.
+            local items = {}
+            local all = c.container.GetAllItems and c.container:GetAllItems() or {}
+            local n = 0
+            for _, it in pairs(all) do
+                n = n + 1
+                if n > 40 then break end
+                items[#items + 1] = {
+                    prefab = it.prefab,
+                    stack = (it.components and it.components.stackable and it.components.stackable:StackSize()) or 1,
+                }
+            end
+            out.items = items
+        end
+        return out
+    end
+
+    -- get_entity: resolve a target (guid or prefab+pos), read it, report via entity_data
+    -- with the token echoed so the flow can correlate. Returns found:false on stale GUID.
+    DSTP.RegisterCommand("get_entity", function(data)
+        local inst, reason = ResolveEntity(data)
+        if not inst then
+            DSTP.PushEvent("entity_data", { token = data.token, found = false, reason = reason })
+            return
+        end
+        local out = ReadEntity(inst)
+        out.token = data.token
+        DSTP.PushEvent("entity_data", out)
+    end)
+
+    -- ── Entity state mutators (keyed by guid or prefab+pos via ResolveEntity) ──────
+    -- Each gates on the component being present (a structure has no health, an item no
+    -- fueled) so a wrong target is a quiet no-op, not an error. All master-sim.
+
+    -- entity_set_health: SetPercent(0..1) or DoDelta(+/-amount). amount<0 can kill.
+    DSTP.RegisterCommand("entity_set_health", function(data)
+        local inst = ResolveEntity(data)
+        if not (inst and inst.components.health) then return end
+        local h = inst.components.health
+        if data.percent ~= nil then
+            h:SetPercent(math.max(0, math.min(1, tonumber(data.percent) or 1)))
+        elseif data.amount ~= nil then
+            h:DoDelta(tonumber(data.amount) or 0)
+        end
+    end)
+
+    -- entity_kill: ForceKill (bypasses invincible). Irreversible — gate in the flow.
+    DSTP.RegisterCommand("entity_kill", function(data)
+        local inst = ResolveEntity(data)
+        if not (inst and inst.components.health) then return end
+        if inst.components.health.ForceKill then
+            inst.components.health:ForceKill()
+        else
+            inst.components.health:Kill()
+        end
+    end)
+
+    -- entity_extinguish: put out a fire an object_ignited/structure_burnt event flagged.
+    DSTP.RegisterCommand("entity_extinguish", function(data)
+        local inst = ResolveEntity(data)
+        if inst and inst.components.burnable and inst.components.burnable:IsBurning() then
+            inst.components.burnable:Extinguish()
+        end
+    end)
+
+    -- entity_ignite: set an object on fire. DANGER: fire SPREADS via propagator — gate
+    -- behind admin/condition in the flow. fireimmune entities ignore it.
+    DSTP.RegisterCommand("entity_ignite", function(data)
+        local inst = ResolveEntity(data)
+        if inst and inst.components.burnable then
+            inst.components.burnable:Ignite()
+        end
+    end)
+
+    -- entity_set_fuel: refuel a campfire/firepit/flingomatic/lantern. percent or delta.
+    DSTP.RegisterCommand("entity_set_fuel", function(data)
+        local inst = ResolveEntity(data)
+        if not (inst and inst.components.fueled) then return end
+        local f = inst.components.fueled
+        if data.percent ~= nil then
+            f:SetPercent(math.max(0, math.min(1, tonumber(data.percent) or 1)))
+        elseif data.delta ~= nil then
+            f:DoDelta(tonumber(data.delta) or 0)
+        end
+    end)
+
+    -- entity_freeze: crowd-control a mob. Use AddColdness (routes through resistance/
+    -- redirect) — vanilla warns against raw Freeze. Fully reversible.
+    DSTP.RegisterCommand("entity_freeze", function(data)
+        local inst = ResolveEntity(data)
+        if not (inst and inst.components.freezable) then return end
+        inst.components.freezable:AddColdness(tonumber(data.coldness) or 1)
+    end)
+
+    -- entity_unfreeze: thaw a frozen mob.
+    DSTP.RegisterCommand("entity_unfreeze", function(data)
+        local inst = ResolveEntity(data)
+        if inst and inst.components.freezable and inst.components.freezable:IsFrozen() then
+            inst.components.freezable:Unfreeze()
+        end
+    end)
+
     DSTP.RegisterCommand("claim_add", function(data)
         if not LandClaims then return end
         local owner = data.owner or data.userid
@@ -755,6 +957,21 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- Report a spawned entity's GUID back so a flow can then control it (the
+    -- spawn -> control -> react loop). Echoes the token for correlation; fired only
+    -- when the spawn provided a token, so existing fire-and-forget spawns are unchanged.
+    local function ReportSpawn(data, ent)
+        if not (data.token and ent) then return end
+        local x, _, z = 0, 0, 0
+        if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
+        DSTP.PushEvent("spawn_result", {
+            token = data.token,
+            guid = ent.GUID,
+            prefab = ent.prefab,
+            x = math.floor(x), z = math.floor(z),
+        })
+    end
+
     DSTP.RegisterCommand("spawn_prefab", function(data)
         if data.prefab and data.x and data.z then
             local ent = _G.SpawnPrefab(data.prefab)
@@ -764,6 +981,7 @@ function Commands.RegisterAll(core)
                 if count > 1 and ent.components.stackable then
                     ent.components.stackable:SetStackSize(count)
                 end
+                ReportSpawn(data, ent)  -- return the GUID if a token was given
             end
         end
     end)
@@ -811,6 +1029,7 @@ function Commands.RegisterAll(core)
                 end
             end
         end
+        ReportSpawn(data, first)  -- return the primary spawn's GUID if a token was given
         if DSTP._DEBUG then Log("Spawned " .. count .. "x " .. data.prefab .. " at " .. player.name) end
     end)
 

@@ -58,6 +58,8 @@ const NUMERIC_PARAM_KEYS = new Set([
   'amount', 'count', 'x', 'y', 'z', 'radius', 'limit', 'duration', 'days', 'speed',
   'length', 'day', 'dusk', 'night', 'slot', 'width', 'height', 'value', 'max',
   'offset_x', 'offset_z',
+  // entity control: GUID + state mutators
+  'guid', 'percent', 'delta', 'coldness',
 ])
 const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop', 'visible'])
 

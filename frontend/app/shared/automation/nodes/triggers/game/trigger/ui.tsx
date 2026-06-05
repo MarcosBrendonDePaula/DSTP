@@ -120,6 +120,8 @@ export const TRIGGER_EVENTS = [
   { value: 'inventory_dump', label: '📋 Inventário Listado', category: 'economy' },
   { value: 'claim_list_result', label: '🛡 Claims Listadas (resultado)', category: 'economy' },
   { value: 'claim_check_result', label: '🛡 Claim Consultada (resultado)', category: 'economy' },
+  { value: 'spawn_result', label: '🏗 Spawn Resultado (GUID)', category: 'economy' },
+  { value: 'entity_data', label: '🔎 Entidade Lida (resultado)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },

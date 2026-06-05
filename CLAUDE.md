@@ -150,6 +150,7 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `filter` | Stop the flow unless a condition passes (single output, halts on fail) |
 | `foreach` | Iterate a list: run the `each` branch per item (`{{loop.item}}`/`{{loop.index}}`) then `done`. Capped at 40 items |
 | `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 50+ subtypes via `action_type`) |
+| `get_entity` / `entity_*` | **Entity control** — read/mutate a NON-player entity keyed by `guid` (from an entity event) OR `prefab`+`x`/`z`+`radius`. `get_entity` reads a flat per-component object (→ `entity_data` event); mutators: `entity_set_health`/`entity_kill`/`entity_extinguish`/`entity_ignite`/`entity_set_fuel`/`entity_freeze`/`entity_unfreeze`. Resolver = `Ents[guid]` + `IsValid` guard (`found:false` on stale GUID) in `commands.lua`. `spawn_prefab`/`spawn_at_player` now return the GUID via `spawn_result` when a `token` is given (the spawn→control→react loop). See `DST_MOD/specs/entity-control-catalog.md`. |
 | `delay` | Wait N ms before continuing (capped at 1h) |
 | `http_request` | External HTTP call (GET/POST with templates) |
 | `set_variable` | Store custom key-value in context |

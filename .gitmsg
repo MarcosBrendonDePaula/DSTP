@@ -1,0 +1,35 @@
+feat(entity): entity-control actions — read/mutate non-player entities by GUID
+
+First implementation slice of the entity-control catalog, on top of the entity
+events base. A flow can now inspect and mutate the specific entity an event named.
+
+Foundational (commands.lua):
+ - ResolveEntity helper — keys a target by guid (Ents[guid]) OR prefab+x/z+radius
+   (TheSim:FindEntities), with the mandatory IsValid guard; returns found:false +
+   reason (gone/not_found/bad_args) on a stale/missing GUID, never indexes nil.
+ - spawn_prefab / spawn_at_player now RETURN the spawned GUID via a spawn_result
+   event when a token is given (the spawn->control->react loop). Fire-and-forget
+   spawns without a token are unchanged.
+
+Read:
+ - get_entity — resolves a target and emits entity_data with a flat per-component
+   object (health/combat/burnable/freezable/workable/fueled/perishable/hunger/
+   domesticatable/rideable/container...), present-component detection drives the
+   shape. container items capped at 40.
+
+State mutators (each gated on the component being present, pcall-contained):
+ - entity_set_health (SetPercent/DoDelta), entity_kill (ForceKill),
+   entity_extinguish / entity_ignite (burnable), entity_set_fuel (fueled),
+   entity_freeze (AddColdness — the safe path per the spec critic) / entity_unfreeze.
+
+Frontend wiring: 8 entity actions in ACTION_TYPES (each exposes both keying paths),
+spawn_result + entity_data as triggerable result events, guid/percent/delta/coldness
+added to NUMERIC_PARAM_KEYS. Backend needs no per-action code — runFlowAction
+dispatches any action_type as a generic command.
+
+Tests: entity-commands.test.ts runs the REAL core+commands under fengari with
+mocked Ents/FindEntities — resolver (guid/pos/stale/unknown), get_entity per-
+component shape, every mutator fires the right method + gates on absent component,
+spawn-returns-GUID. Plus catalog<->command consistency. 312 pass, tsc clean.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
