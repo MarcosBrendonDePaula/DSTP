@@ -747,16 +747,22 @@ export class FlowEngine {
       if (p.gap != null) out.gap = num(p.gap)
     } else if (type === 'col' || type === 'row') {
       if (p.gap != null) out.gap = num(p.gap)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'text') {
       out.text = String(r(p.text) ?? '')
       if (p.size != null) out.size = num(p.size)
       const c = color(p.color); if (c) out.color = c
       if (p.wrap_width != null) out.wrap_width = num(p.wrap_width)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'icon') {
       if (p.prefab) out.prefab = String(r(p.prefab))
       if (p.atlas) out.atlas = r(p.atlas)
       if (p.tex) out.tex = r(p.tex)
       if (p.size != null) out.size = num(p.size)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'image') {
       out.atlas = r(p.atlas); out.tex = r(p.tex)
       if (p.width != null) out.width = num(p.width)

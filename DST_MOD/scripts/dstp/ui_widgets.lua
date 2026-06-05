@@ -441,7 +441,10 @@ RenderNode = function(node, parent, ctx)
     if t == "col" or t == "row" then
         local c = parent:AddChild(Widget("col_row"))
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
-        return c, w, h
+        -- Optional fixed size: when width/height are set, REPORT that size to the parent
+        -- layout (overrides the measured content size). Content still lays out by gap; this
+        -- only changes the slot the container claims. Unset = auto-size (unchanged).
+        return c, tonumber(node.width) or w, tonumber(node.height) or h
 
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
@@ -519,20 +522,24 @@ RenderNode = function(node, parent, ctx)
         local txt = parent:AddChild(Text(ResolveFont(node.font), sz, tostring(node.text or "")))
         local col = ResolveColor(node.color)
         txt:SetColour(col[1], col[2], col[3], col[4])
-        if node.wrap_width then
-            txt:SetRegionSize(tonumber(node.wrap_width) or 0, tonumber(node.wrap_height) or 60)
+        -- A fixed text box: width/height (or the legacy wrap_width/wrap_height) set the
+        -- region + enable word-wrap. width is the intuitive alias for wrap_width.
+        local fixW = tonumber(node.width) or tonumber(node.wrap_width)
+        local fixH = tonumber(node.height) or tonumber(node.wrap_height)
+        if fixW then
+            txt:SetRegionSize(fixW, fixH or 60)
             txt:EnableWordWrap(true)
         end
         -- Optional alignment within a sized region (used by the folded panel body).
         if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
         if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
         local rw, rh = txt:GetRegionSize()
-        -- LAYOUT size: the measured region (with a per-char/size fallback if nil/0).
-        -- node.text may be a NUMBER (a template resolved to a number), so tostring it
-        -- before taking length (#number errors: "attempt to get length of a number").
+        -- LAYOUT size: an explicit width/height wins; else the measured region (with a
+        -- per-char/size fallback if nil/0). node.text may be a NUMBER (template), so
+        -- tostring before length (#number errors).
         local txtlen = #tostring(node.text or "")
-        local w = (rw and rw > 0) and rw or (txtlen * sz * 0.5)
-        local h = (rh and rh > 0) and rh or sz
+        local w = fixW or ((rw and rw > 0) and rw or (txtlen * sz * 0.5))
+        local h = fixH or ((rh and rh > 0) and rh or sz)
         -- HITBOX size: GetRegionSize can under-report the rendered glyphs, leaving the
         -- text edges unclickable. Feed MaybeClickable the LARGER of the measured region
         -- and a per-char estimate so the overlay always covers the whole string — this
@@ -550,21 +557,24 @@ RenderNode = function(node, parent, ctx)
         local atlas, tex
         if node.atlas and node.tex then atlas, tex = node.atlas, node.tex
         else atlas, tex = ResolveItemAtlas(node.prefab or "log") end
-        local size = node.size or 56
+        -- size = square default; width/height override for a rectangular icon.
+        local size = tonumber(node.size) or 56
+        local iw = tonumber(node.width) or size
+        local ih = tonumber(node.height) or size
         local img
         local ok = _G.pcall(function() img = parent:AddChild(Image(atlas, tex)) end)
         if ok and img then
-            img:SetSize(size, size)
-            MaybeClickable(img, node, ctx, size, size)
+            img:SetSize(iw, ih)
+            MaybeClickable(img, node, ctx, iw, ih)
             Register(ctx, node, img, function(props)
                 if not img.inst:IsValid() then return end
                 if props.prefab then local a, x = ResolveItemAtlas(props.prefab); img:SetTexture(a, x) end
                 if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
                 if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
             end)
-            return img, size, size
+            return img, iw, ih
         end
-        return parent:AddChild(Widget("noicon")), size, size
+        return parent:AddChild(Widget("noicon")), iw, ih
 
     elseif t == "image" then
         local size = node.size or 64

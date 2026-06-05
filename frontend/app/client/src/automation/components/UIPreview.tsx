@@ -97,6 +97,7 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
         display: 'flex', flexDirection: t === 'col' ? 'column' : 'row',
         gap, alignItems: 'center', justifyContent: 'center',
         padding: 2, borderRadius: 4, boxShadow: ring,
+        width: Number(node.width) || undefined, height: Number(node.height) || undefined,
         outline: '1px dashed rgba(255,255,255,0.08)',
       }}>
         {childViews(node.children)}
@@ -124,10 +125,15 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
     )
   }
   if (t === 'text') {
+    const fixW = Number(node.width) || Number(node.wrap_width) || undefined
+    const fixH = Number(node.height) || Number(node.wrap_height) || undefined
     return (
       <div onClick={pick} style={{
         color: toCss(node.color), fontSize: Number(node.size) || 18, boxShadow: ring,
-        padding: '0 2px', borderRadius: 2, whiteSpace: 'pre-wrap',
+        padding: '0 2px', borderRadius: 2,
+        width: fixW, height: fixH,
+        whiteSpace: fixW ? 'normal' : 'pre-wrap',  // word-wrap when boxed
+        overflow: fixH ? 'hidden' : undefined,
       }}>{node.text || 'Texto'}</div>
     )
   }
@@ -170,9 +176,11 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
   }
   if (t === 'icon') {
     const size = Number(node.size) || 48
+    const iw = Number(node.width) || size
+    const ih = Number(node.height) || size
     return (
       <div onClick={pick} title={node.prefab} style={{
-        width: size, height: size, background: 'rgba(255,255,255,0.06)',
+        width: iw, height: ih, background: 'rgba(255,255,255,0.06)',
         border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 9, color: '#9af', boxShadow: ring, textAlign: 'center', overflow: 'hidden',
