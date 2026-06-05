@@ -678,20 +678,26 @@ RenderNode = function(node, parent, ctx)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
         -- Draggable window: a title-bar hit target the user grabs to move the whole panel.
         -- Created BEFORE the close button so the close button's later MoveToFront keeps it
-        -- ON TOP and clickable. The bar leaves a gap on the right for the close button.
+        -- ON TOP and clickable. The bar leaves a GENEROUS gap on the right for the close
+        -- button (the X) so the drag overlay never covers the X's hit area.
+        local CLOSE_GAP = 64
         if node.draggable then
             local barH = node.drag_height or 44
-            local barW = (node.closeable ~= false) and (pw - 44) or pw  -- avoid the close hitbox
+            local barW = (node.closeable ~= false) and (pw - CLOSE_GAP) or pw
             local drag = MakeHitTarget(holder, barW, barH, 0, node.hit_debug)
-            drag:SetPosition(-(pw - barW) / 2, ph / 2 - barH / 2, 0)  -- top strip, shifted left of close
+            drag:SetPosition(-(pw - barW) / 2, ph / 2 - barH / 2, 0)  -- top strip, left of the X
             MakeDraggable(drag, holder)
         end
         -- close button (after the drag bar so its MoveToFront wins z-order over the bar)
         if node.closeable ~= false then
             local close_btn = holder:AddChild(ImageButton(
                 "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
-            close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetScale(0.4)
+            -- Give the X an explicit, generous hit region (the scaled tex alone can be a
+            -- tiny target) and force it into the hit-test, mirroring MakeHitTarget.
+            if close_btn.ForceImageSize then close_btn:ForceImageSize(64, 64) end
+            if close_btn.SetClickable then close_btn:SetClickable(true) end
+            close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
             close_btn:MoveToFront()
         end

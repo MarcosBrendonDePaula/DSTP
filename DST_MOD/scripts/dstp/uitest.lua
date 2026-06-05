@@ -75,7 +75,7 @@ function M.Run(userid)
     -- bar and move it; the close X stays clickable.
     send("uitest_panel",
         { type = "panel", width = 360, height = 200, draggable = true,
-          title = "[UITEST] painel (arraste o topo)", body = "Janela arrastavel: segure o topo e mova. O X fecha. Se arrastar e fechar funcionam, o sistema de janela OK." },
+          title = "[UITEST] painel (arraste o topo)", body = "Janela arrastavel: segure o topo e mova; o X fecha. Arrastar + fechar OK = sistema de janela validado." },
         "center", -260, 0)
 
     -- 4) BUTTON — real clickable button, center.
