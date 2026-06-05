@@ -51,13 +51,19 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
    `netstring-clobber.test.ts` — mixed same-player, co-tick same-seq, broadcast+per-player,
    dual broadcast, ordenação, replay dedup, seq monotônico, sem double-process.
 
-4. **`execute`/`call_component`: contenção só por pcall** (`client.lua:1068-1079,681-704`).
-   By-design (mesma classe do node `script`, gate = "admin desenhou o fluxo"), mas o
-   pcall **não** contém loop infinito — que **trava o master sim** sem watchdog (o
-   sim é single-thread, sem preempção; diferente do node `script` em Node que dá pra
-   timeoutar). Mitigar: flag `ALLOW_EXECUTE` no modinfo (opt-in), e/ou
-   `debug.sethook` com limite de instruções para abortar loops; documentar que o
-   `/dst/sync` é a fronteira de confiança (assume LAN).
+4. ✅ **RESOLVIDO — `execute`/`call_component`: contenção só por pcall**
+   (`core.lua` `RunGuarded`, `commands.lua`). O pcall não continha loop infinito, que
+   travava o master sim single-thread. **Fix (defesa em profundidade, NÃO sandbox — é
+   admin RCE by-design):** (a) **watchdog de instruções** `Core.RunGuarded` — roda o Lua
+   num coroutine com `debug.sethook(co, error, "", maxops)` (a própria técnica do DST em
+   `util.lua` `RunInSandboxSafeCatchInfiniteLoops`), abortando loops após
+   `config.max_execute_ops` SEM sandboxar o env (mantém `_G`); fallback p/ pcall puro se
+   `debug.sethook` não existir. Aplicado a `execute` E `call_component`. **Sempre ativo.**
+   (b) **flag `ALLOW_EXECUTE`** no modinfo como kill switch — **default ON** (sem
+   regressão p/ fluxos que já usam `execute`; um servidor paranoico desliga). (c) doc da
+   fronteira de confiança (relay + `/dst/sync` = LAN) nos handlers. Testes
+   comportamentais (fengari, core+commands reais): `execute-guard.test.ts` — watchdog
+   aborta `while true do end` sem travar, env não-sandboxado, gate on/off, fallback.
 
 ## ✅ Listeners mortos / errados — RESOLVIDO (#5/#6/#7)
 

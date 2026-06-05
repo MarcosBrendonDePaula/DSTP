@@ -38,6 +38,14 @@ Core.config = {
     max_batch_size = 50,
     dump_mode = false,  -- when true, events include raw DST data
     debug_logs = false,  -- when true, Log() prints to server log; errors always print
+    allow_execute = true,   -- gate for the `execute` command (arbitrary Lua RCE). ON by
+                            -- default (no functional regression for flows already using it);
+                            -- a paranoid server can turn it OFF via modinfo ALLOW_EXECUTE.
+                            -- The loop-infinite watchdog (RunGuarded) is ALWAYS on regardless.
+    max_execute_ops = 2000000,  -- instruction budget for guarded Lua (execute/call_component);
+                                -- a runaway loop is aborted past this. ~DST's 20000 default is
+                                -- for tiny sandboxed snippets; ours run real admin code so the
+                                -- budget is far higher but still finite (no master-sim freeze).
 }
 
 -- Chat command prefix: a message starting with this is treated as a flow command —
@@ -224,6 +232,31 @@ function Core.ExecuteCommand(cmd)
         return false
     end
     return true
+end
+
+-- Run `fn` with an INSTRUCTION-COUNT watchdog so a runaway loop (`while true do end`)
+-- in admin RCE (`execute`/`call_component`) can't freeze the single-threaded master
+-- sim. This is DST's own technique (util.lua RunInSandboxSafeCatchInfiniteLoops uses
+-- debug.sethook(co, ..., "", maxops)) — but we do NOT sandbox the environment: these
+-- paths are admin RCE BY DESIGN (the gate is "an admin drew the flow"), so `fn` keeps
+-- whatever env the caller gave it (e.g. _G). We only bound run time, not capability.
+-- Returns (ok, err) like pcall. maxops defaults to config.max_execute_ops. If debug.
+-- sethook is unavailable (debugger active / odd build), falls back to a plain pcall —
+-- never worse than today, just without the loop guard.
+function Core.RunGuarded(fn, maxops)
+    local _G = Core._G
+    maxops = maxops or Core.config.max_execute_ops or 2000000
+    -- coroutine + debug.sethook is the only preemption Lua offers. Run fn in a fresh
+    -- coroutine; the hook fires every `maxops` instructions and raises, which surfaces
+    -- as a failed coroutine.resume.
+    if not (_G.debug and _G.debug.sethook and _G.coroutine) then
+        return pcall(fn)  -- no watchdog available; behave like before
+    end
+    local co = _G.coroutine.create(fn)
+    _G.debug.sethook(co, function() _G.error("DSTP: instruction budget exceeded (possible infinite loop) — aborted") end, "", maxops)
+    local results = { _G.coroutine.resume(co) }
+    _G.debug.sethook(co)  -- clear the hook
+    return results[1], results[2]
 end
 
 -- Per-player monotonic seq for the _dstp_ui envelope. A player's _dstp_ui net_string

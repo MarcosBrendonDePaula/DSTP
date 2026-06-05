@@ -274,7 +274,11 @@ function Commands.RegisterAll(core)
                 args[i] = (a == "{{self}}") and player or a
             end
         end
-        fn(comp, _G.unpack(args, 1, n))
+        -- Guard the call with the same instruction-budget watchdog as `execute`: a
+        -- component method that loops/recurses forever would otherwise freeze the master
+        -- sim. (The component/method existence is already validated above.)
+        local ok, err = core.RunGuarded(function() fn(comp, _G.unpack(args, 1, n)) end)
+        if not ok then LogError("call_component: '" .. tostring(data.component) .. ":" .. tostring(data.method) .. "' failed: " .. tostring(err)) end
     end)
 
     -- ---- Land claims (terrain protection) ----------------------------------
@@ -639,12 +643,23 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- execute — arbitrary Lua with FULL _G. This is admin RCE BY DESIGN (the trust gate
+    -- is "an admin drew the flow"; /dst/sync over the relay is the trust boundary, assume
+    -- LAN). Two defenses-in-depth, NOT a sandbox: (1) a per-server kill switch via the
+    -- modinfo ALLOW_EXECUTE flag — ON by default (no regression for flows already using
+    -- execute), so a paranoid server can turn it OFF entirely; (2) an instruction-budget
+    -- watchdog (Core.RunGuarded), ALWAYS on, so a runaway loop can't freeze the
+    -- single-threaded master sim. Capability is unchanged when allowed.
     DSTP.RegisterCommand("execute", function(data)
+        if not core.config.allow_execute then
+            LogError("execute: disabled by ALLOW_EXECUTE=Off in modinfo (arbitrary Lua is turned off on this server)")
+            return
+        end
         if data.lua then
             local fn, err = loadstring(data.lua)
             if fn then
                 setfenv(fn, _G)
-                local ok, result = pcall(fn)
+                local ok, result = core.RunGuarded(fn)
                 if not ok then LogError("Execute failed: " .. tostring(result)) end
             else
                 LogError("Execute parse error: " .. tostring(err))
