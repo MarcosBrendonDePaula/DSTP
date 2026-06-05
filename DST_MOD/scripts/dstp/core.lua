@@ -226,25 +226,75 @@ function Core.ExecuteCommand(cmd)
     return true
 end
 
+-- Per-player monotonic seq for the _dstp_ui envelope. A player's _dstp_ui net_string
+-- holds a SINGLE value and replays its last value on reconnect/dirty re-fire, so the
+-- client dedups by this seq (skip if seq <= last seen). We stamp it MOD-side (a simple
+-- ++ per player) instead of relying on the backend's Date.now() — Date.now() is 1ms
+-- resolution and COLLIDES for commands emitted in the same flow tick, which would make
+-- the client drop legitimate co-tick commands. A mod-side counter is monotonic by
+-- construction and resets together with the client (_seq=-1) on mod reload.
+Core.ui_seq_by_user = Core.ui_seq_by_user or {}
+
+-- Map a queued command to the _dstp_ui sub-command(s) it contributes, per target
+-- player. Returns a list of { userid, sub } entries. Broadcasts (ui_broadcast,
+-- install_rules_all) expand to EVERY player via _G.AllPlayers (the live list is
+-- available here — ProcessCommands runs in the mod). Returns nil for commands that
+-- are NOT _dstp_ui writers (those run normally via ExecuteCommand). The sub shapes
+-- match exactly what the client router expects (commands.lua built these inline
+-- before; we build them here so they can be coalesced). NOTE: the backend's per-command
+-- `seq` is intentionally DROPPED — seq now lives only on the outer envelope.
+local function UICommandTargets(cmd)
+    local t, d = cmd.type, cmd.data
+    if not d then return nil end
+    if t == "ui_command" and d.userid and d.cmd then
+        return { { userid = d.userid, sub = d.cmd } }
+    elseif t == "ui_broadcast" and d.cmd then
+        local out = {}
+        for _, p in ipairs(Core._G.AllPlayers or {}) do
+            if p.userid then out[#out + 1] = { userid = p.userid, sub = d.cmd } end
+        end
+        return out
+    elseif t == "install_rules" and d.userid and d.rules then
+        return { { userid = d.userid, sub = { action = "rules_install", rules = d.rules } } }
+    elseif t == "install_rules_all" and d.rules then
+        local out, sub = {}, { action = "rules_install", rules = d.rules }
+        for _, p in ipairs(Core._G.AllPlayers or {}) do
+            if p.userid then out[#out + 1] = { userid = p.userid, sub = sub } end
+        end
+        return out
+    elseif t == "uninstall_rules" and d.userid and d.ids then
+        return { { userid = d.userid, sub = { action = "rules_uninstall", ids = d.ids } } }
+    elseif t == "set_player_state" and d.userid and d.key then
+        return { { userid = d.userid, sub = { action = "state_set", key = d.key, value = d.value } } }
+    end
+    return nil
+end
+
 function Core.ProcessCommands(commands)
     if not commands then return end
 
-    -- A player's _dstp_ui net_string holds a SINGLE value, so multiple
-    -- ui_command in one sync would clobber each other (only the last :set
-    -- survives). Coalesce all ui_command per userid into one batch so the
-    -- client receives them all in a single net_string update.
+    -- Coalesce ALL six _dstp_ui-writing families (ui_command, ui_broadcast,
+    -- install_rules, uninstall_rules, set_player_state, install_rules_all) per player
+    -- into ONE envelope, set once. Without this, any two writes to the same player's
+    -- _dstp_ui in one sync clobber each other (single-value net_string) — only the last
+    -- :set survived. Non-UI commands run normally, in order.
     local ui_by_user = {}        -- userid -> { sub_cmd, sub_cmd, ... }
     local ui_order = {}          -- preserve first-seen userid order
 
     for _, cmd in ipairs(commands) do
-        if cmd.type == "ui_command" and cmd.data and cmd.data.userid and cmd.data.cmd then
-            local uid = cmd.data.userid
-            if not ui_by_user[uid] then ui_by_user[uid] = {}; table.insert(ui_order, uid) end
-            local c = cmd.data.cmd
-            if c.action == "batch" and c.commands then
-                for _, sub in ipairs(c.commands) do table.insert(ui_by_user[uid], sub) end
-            else
-                table.insert(ui_by_user[uid], c)
+        local targets = UICommandTargets(cmd)
+        if targets then
+            for _, tgt in ipairs(targets) do
+                local uid = tgt.userid
+                if not ui_by_user[uid] then ui_by_user[uid] = {}; table.insert(ui_order, uid) end
+                local c = tgt.sub
+                -- Flatten a nested batch (an already-batched ui_command) so subs live
+                -- at one level in the player's envelope.
+                if c.action == "batch" and c.commands then
+                    for _, s in ipairs(c.commands) do table.insert(ui_by_user[uid], s) end
+                else
+                    table.insert(ui_by_user[uid], c)
+                end
             end
         else
             if Core.DEBUG then Core.Log("Exec: " .. tostring(cmd.type)) end
@@ -252,13 +302,16 @@ function Core.ProcessCommands(commands)
         end
     end
 
-    -- Flush one batched ui_command per player.
+    -- Flush ONE envelope per player, stamped with a fresh monotonic seq so the client
+    -- can dedup a replayed net_string value. Always wrap in a batch (even a single sub)
+    -- so the seq lives in one consistent place the client reads.
     for _, uid in ipairs(ui_order) do
         local subs = ui_by_user[uid]
-        if #subs == 1 then
-            Core.ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = subs[1] } })
-        elseif #subs > 1 then
-            Core.ExecuteCommand({ type = "ui_command", data = { userid = uid, cmd = { action = "batch", commands = subs } } })
+        if #subs > 0 then
+            local seq = (Core.ui_seq_by_user[uid] or 0) + 1
+            Core.ui_seq_by_user[uid] = seq
+            Core.ExecuteCommand({ type = "ui_command", data = { userid = uid,
+                cmd = { action = "batch", commands = subs, seq = seq } } })
         end
     end
 end

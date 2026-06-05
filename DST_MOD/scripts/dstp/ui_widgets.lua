@@ -1086,13 +1086,11 @@ function UIWidgets.ProcessCommand(cmd)
         UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
-    elseif cmd.action == "batch" then
-        -- Process multiple commands in one net_string payload
-        if cmd.commands then
-            for _, sub_cmd in ipairs(cmd.commands) do
-                UIWidgets.ProcessCommand(sub_cmd)
-            end
-        end
+    -- NOTE: the "batch" envelope is no longer fanned out HERE. The client router in
+    -- modmain (dstp_ui_dirty) owns fan-out now: it dedups the envelope by seq once and
+    -- dispatches EACH sub-command by its own prefix (rules_/state_ -> RulesEngine, else
+    -- -> UIWidgets), so a mixed UI+rules batch reaches both sides and a pure-UI batch is
+    -- processed exactly once. UIWidgets only ever sees individual UI sub-commands.
     else
         Log("unknown action '" .. tostring(cmd.action) .. "'")
     end

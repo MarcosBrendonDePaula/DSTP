@@ -34,13 +34,22 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
    em eventos de mundo/globais). Teste comportamental: `debounce.test.ts` (core.lua real
    sob fengari — 2 players não se mascaram, mesmo player ainda throttla).
 
-3. **net_string clobber: rules/state/UI dividem `_dstp_ui`, só `ui_command` é
-   coalescido** (`client.lua:1290+`, `ProcessCommands ~409`). 6 handlers escrevem no
-   mesmo net_string; só múltiplos `ui_command` são batcheados. Se um `/dst/sync`
-   entrega um `ui_command` E um `install_rules` para o mesmo player, os dois `:set()`
-   rodam no mesmo frame e **só o último sobrevive** (net_string guarda 1 valor — ver
-   `specs/dst-client-constraints.md`). Corrigir: coalescer TODOS os comandos do
-   `_dstp_ui` por player num único batch, não só `ui_command`.
+3. ✅ **RESOLVIDO — net_string clobber: rules/state/UI dividem `_dstp_ui`, só
+   `ui_command` era coalescido** (`core.lua` `ProcessCommands`, `modmain.lua` router).
+   6 handlers escreviam no mesmo net_string; só múltiplos `ui_command` eram batcheados,
+   então `ui_command` + `install_rules` no mesmo sync se clobberavam (net_string guarda
+   1 valor). **Fix (decisão validada por workflow adversarial):** canal único, batch
+   atômico. (a) `Core.ProcessCommands` agora coalesce as 6 famílias por player num único
+   envelope `{action="batch", commands, seq}` — broadcasts (`ui_broadcast`/
+   `install_rules_all`) expandidos por-player via `_G.AllPlayers`; (b) `seq` monotônico
+   carimbado **no mod** por player (não o `Date.now()` do backend, que colide no mesmo
+   tick) — o cliente dedupa o envelope 1×; (c) `modmain` virou batch-aware: dedupa o
+   envelope por `seq` e faz fan-out de cada sub pelo SEU prefixo (`rules_`/`state_` →
+   RulesEngine, resto → UIWidgets); (d) removido o fan-out interno de `batch` do
+   `ui_widgets.lua` (evita processar 2×) + guard defensivo de `batch` em
+   `rules_engine.lua`. Testes comportamentais (fengari, core+rules reais):
+   `netstring-clobber.test.ts` — mixed same-player, co-tick same-seq, broadcast+per-player,
+   dual broadcast, ordenação, replay dedup, seq monotônico, sem double-process.
 
 4. **`execute`/`call_component`: contenção só por pcall** (`client.lua:1068-1079,681-704`).
    By-design (mesma classe do node `script`, gate = "admin desenhou o fluxo"), mas o

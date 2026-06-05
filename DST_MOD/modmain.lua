@@ -24,6 +24,12 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 local UIWidgets = nil
 -- Client-side rules engine (loaded on client only)
 local RulesEngine = nil
+-- Last _dstp_ui envelope seq we processed. The net_string replays its last value on
+-- reconnect/dirty re-fire; the backend stamps a monotonic seq on each batch envelope
+-- (mod-side counter), so we skip an envelope whose seq we've already applied. Dedup
+-- lives HERE (the envelope passes only through this router) — sub-commands carry no
+-- seq, so UIWidgets/RulesEngine never re-dedup them.
+local _dstp_ui_seq = -1
 -- Client-side key capture (loaded on client only, for the key_pressed trigger)
 local Keys = nil
 
@@ -162,17 +168,38 @@ AddPrefabPostInit("player_classified", function(inst)
             local ok, cmd = GLOBAL.pcall(GLOBAL.json.decode, cmd_str)
             if not (ok and cmd and cmd.action) then return end
 
-            -- Route rules_* / state_* to RulesEngine, others to UIWidgets
-            local act = tostring(cmd.action)
-            if act:sub(1, 6) == "rules_" or act:sub(1, 6) == "state_" then
-                if not RulesEngine then
-                    RulesEngine = GLOBAL.require("dstp/rules_engine")
-                    RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
-                    RulesEngine.SetUIWidgets(UIWidgets)
+            -- Route ONE command by its OWN action prefix: rules_*/state_* -> RulesEngine,
+            -- everything else -> UIWidgets. Lazy-inits RulesEngine on first rules/state.
+            local function dispatch(c)
+                if not (c and c.action) then return end
+                local a = tostring(c.action)
+                if a:sub(1, 6) == "rules_" or a:sub(1, 6) == "state_" then
+                    if not RulesEngine then
+                        RulesEngine = GLOBAL.require("dstp/rules_engine")
+                        RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
+                        RulesEngine.SetUIWidgets(UIWidgets)
+                    end
+                    RulesEngine.ProcessCommand(c)
+                else
+                    UIWidgets.ProcessCommand(c)
                 end
-                RulesEngine.ProcessCommand(cmd)
+            end
+
+            if cmd.action == "batch" then
+                -- Coalesced envelope (the normal path). Dedup the whole envelope ONCE by
+                -- its seq (net_string replays its last value), then fan out each
+                -- sub-command by its OWN prefix so a mixed UI+rules batch reaches both
+                -- sides. Sub-commands carry no seq, so neither side re-dedups them.
+                if cmd.seq then
+                    if cmd.seq <= _dstp_ui_seq then return end
+                    _dstp_ui_seq = cmd.seq
+                end
+                if cmd.commands then
+                    for _, sub in ipairs(cmd.commands) do dispatch(sub) end
+                end
             else
-                UIWidgets.ProcessCommand(cmd)
+                -- A lone (non-batch) command — route directly.
+                dispatch(cmd)
             end
         end)
 

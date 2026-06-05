@@ -458,6 +458,13 @@ function RulesEngine.ProcessCommand(cmd)
         if cmd.key then player_state[cmd.key] = nil end
     elseif action == "state_clear" then
         player_state = {}
+    elseif action == "batch" then
+        -- Defensive: the client router (modmain) normally fans out a batch envelope and
+        -- only hands us individual rules_/state_ subs, so we shouldn't see "batch" here.
+        -- But if a pure-rules batch ever reaches us, iterate its subs rather than drop it.
+        if cmd.commands then
+            for _, sub in ipairs(cmd.commands) do RulesEngine.ProcessCommand(sub) end
+        end
     else
         Log("unknown action '" .. tostring(action) .. "'")
     end
