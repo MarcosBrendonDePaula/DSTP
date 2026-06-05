@@ -139,6 +139,25 @@ local ok_num = pcall(function()
 end)
 check("numeric text does not crash (tostring guard)", ok_num == true)
 
+-- ── A tree with NON-NUMERIC / NON-TABLE props (templates that resolved badly) must
+-- not crash the renderer (the ui_builder literal-tree path doesn't coerce). Covers the
+-- type-hardening sweep: bar value/max/size strings, panel width/height strings, tabs/
+-- children as non-arrays, color as non-table. ──
+created = {}; fired = {}
+local ok_hard = pcall(function()
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "hard", group = "gh",
+        tree = { type = "panel", width = "oops", height = "nope", children = "not-a-table",
+            -- a column whose children resolved to a string, holding mixed bad nodes
+        } })
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "hard2", group = "gh2",
+        tree = { type = "col", gap = "x", children = {
+            { type = "bar", value = "50%", max = "N/A", width = "200px", height = "" },
+            { type = "text", text = "ok", size = "big", color = 5 },
+            { type = "tabs", active = "two", tabs = "not-array" },
+        } } })
+end)
+check("non-numeric/non-table props do not crash the renderer", ok_hard == true)
+
 -- ── The OLD broken path is GONE: no OnControl/SetClickable wiring remains ──
 -- (structural assertion lives in the TS test; here we just confirm behavior.)
 

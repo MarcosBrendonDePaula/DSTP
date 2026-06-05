@@ -137,7 +137,10 @@ local function EvalCondition(cond, event_data)
     local op = cond.op or "equals"
     -- Field can be a dotted path (e.g. "callback_name", "callback_data.item", "state.x")
     -- Resolved relative to event_data by default if no prefix; otherwise path is used as-is
-    local field = cond.field or ""
+    -- cond.field is author free-form rule JSON (un-validated by the backend), so a
+    -- non-string (number/table) would crash field:find/:sub. Coerce to "" if not a string.
+    local field = cond.field
+    if type(field) ~= "string" then field = "" end
     local left
     if field:find("%.") or field == "event" or field == "state" or field == "player" then
         -- If it's a bare root without prefix, treat as event.<field>
@@ -181,7 +184,9 @@ local function EvalCondition(cond, event_data)
 end
 
 local function EvalConditions(conditions, event_data)
-    if not conditions or #conditions == 0 then return true end
+    -- conditions is author rule JSON; a non-table (number/string) would crash #/ipairs.
+    if type(conditions) ~= "table" then return true end
+    if #conditions == 0 then return true end
     for _, c in ipairs(conditions) do
         if not EvalCondition(c, event_data) then return false end
     end
@@ -260,7 +265,8 @@ local ACTIONS = {
 }
 
 local function ExecuteActions(actions, event_data)
-    if not actions then return end
+    -- actions is author rule JSON (rule['do']); a non-table would crash ipairs.
+    if type(actions) ~= "table" then return end
     for _, a in ipairs(actions) do
         local fn = ACTIONS[a.action]
         if fn then

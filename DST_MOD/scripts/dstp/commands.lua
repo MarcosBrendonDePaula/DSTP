@@ -725,7 +725,7 @@ function Commands.RegisterAll(core)
     end)
 
     DSTP.RegisterCommand("skip_day", function(data)
-        local days = data.days or 1
+        local days = tonumber(data.days) or 1
         for i = 1, days do
             _G.TheWorld:PushEvent("ms_nextcycle")
         end
@@ -760,7 +760,7 @@ function Commands.RegisterAll(core)
             local ent = _G.SpawnPrefab(data.prefab)
             if ent then
                 ent.Transform:SetPosition(data.x, 0, data.z)
-                local count = data.count or 1
+                local count = tonumber(data.count) or 1
                 if count > 1 and ent.components.stackable then
                     ent.components.stackable:SetStackSize(count)
                 end

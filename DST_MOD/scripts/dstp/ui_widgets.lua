@@ -44,7 +44,7 @@ local function ResolveFont(name)
 end
 
 local function ResolveColor(c)
-    if not c then return {1, 1, 1, 1} end
+    if type(c) ~= "table" then return {1, 1, 1, 1} end
     return {c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1}
 end
 
@@ -246,9 +246,11 @@ local RenderNode  -- forward decl (recursive)
 -- Render every child, then stack them along one axis with `gap`. `axis` is
 -- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
 local function LayoutChildren(node, container, ctx, axis)
-    local gap = node.gap or 8
+    local gap = tonumber(node.gap) or 8
     local kids = {}
-    for _, childdef in ipairs(node.children or {}) do
+    -- children may be a non-table on the ui_builder literal-tree path (an author bound it
+    -- to a template that resolved to a non-array); guard so ipairs doesn't crash.
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
         local cw, ch
         local cwidget
         cwidget, cw, ch = RenderNode(childdef, container, ctx)
@@ -444,7 +446,7 @@ RenderNode = function(node, parent, ctx)
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
         -- active tab's content is shown. Switching is fully client-side.
-        local tabs = node.tabs or {}
+        local tabs = type(node.tabs) == "table" and node.tabs or {}  -- guard non-array
         local holder = parent:AddChild(Widget("tabs"))
         local barH = 40
         local gap = 8
@@ -504,17 +506,21 @@ RenderNode = function(node, parent, ctx)
 
         -- Content stack sits below the bar.
         for _, pg in ipairs(pages) do pg:SetPosition(0, contentY, 0) end
-        activate((node.active or 0) + 1)
+        activate((tonumber(node.active) or 0) + 1)
 
         local totalW = math.max(contentW, totalBar)
         return holder, totalW, totalH
 
     elseif t == "text" then
-        local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, tostring(node.text or "")))
+        -- size/wrap_* are NOT numeric-coerced on the ui_builder literal-tree path, so a
+        -- template that resolved to a non-number would crash the arithmetic / native
+        -- setters below. Coerce once up front.
+        local sz = tonumber(node.size) or 18
+        local txt = parent:AddChild(Text(ResolveFont(node.font), sz, tostring(node.text or "")))
         local col = ResolveColor(node.color)
         txt:SetColour(col[1], col[2], col[3], col[4])
         if node.wrap_width then
-            txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
+            txt:SetRegionSize(tonumber(node.wrap_width) or 0, tonumber(node.wrap_height) or 60)
             txt:EnableWordWrap(true)
         end
         -- Optional alignment within a sized region (used by the folded panel body).
@@ -525,13 +531,13 @@ RenderNode = function(node, parent, ctx)
         -- node.text may be a NUMBER (a template resolved to a number), so tostring it
         -- before taking length (#number errors: "attempt to get length of a number").
         local txtlen = #tostring(node.text or "")
-        local w = (rw and rw > 0) and rw or (txtlen * (node.size or 18) * 0.5)
-        local h = (rh and rh > 0) and rh or (node.size or 18)
+        local w = (rw and rw > 0) and rw or (txtlen * sz * 0.5)
+        local h = (rh and rh > 0) and rh or sz
         -- HITBOX size: GetRegionSize can under-report the rendered glyphs, leaving the
         -- text edges unclickable. Feed MaybeClickable the LARGER of the measured region
         -- and a per-char estimate so the overlay always covers the whole string — this
         -- does NOT affect layout (the return below uses the measured w,h).
-        local hit_w = math.max(w, txtlen * (node.size or 18) * 0.5)
+        local hit_w = math.max(w, txtlen * sz * 0.5)
         MaybeClickable(txt, node, ctx, hit_w, h)
         Register(ctx, node, txt, function(props)
             if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
@@ -662,10 +668,12 @@ RenderNode = function(node, parent, ctx)
         return holder, iw, ih
 
     elseif t == "bar" then
-        local bw = node.width or 200
-        local bh = node.height or 16
-        local value = math.max(0, math.min(node.value or 0, node.max or 1))
-        local maxv = node.max or 1
+        -- Coerce all numerics once (ui_builder literal-tree path doesn't num()-coerce, so
+        -- a template resolving to a non-number would crash the arithmetic below).
+        local bw = tonumber(node.width) or 200
+        local bh = tonumber(node.height) or 16
+        local maxv = tonumber(node.max) or 1
+        local value = math.max(0, math.min(tonumber(node.value) or 0, maxv))
         local pct = maxv > 0 and (value / maxv) or 0
         local holder = parent:AddChild(Widget("bar"))
         local bgc = ResolveColor(node.bg_color or {0.2, 0.2, 0.2, 1})
@@ -709,18 +717,22 @@ RenderNode = function(node, parent, ctx)
         local holder = parent:AddChild(Widget("panel"))
         local bg = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
         local border = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
-        local fixed = node.width ~= nil and node.height ~= nil
+        -- Coerce width/height: a non-numeric value (ui_builder template) must NOT enter
+        -- fixed mode and crash the arithmetic (ph/2-25, pw-40). Only fixed when BOTH
+        -- coerce to a number.
+        local fw, fh = tonumber(node.width), tonumber(node.height)
+        local fixed = fw ~= nil and fh ~= nil
         local pw, ph
         local title_txt, body_txt
         if fixed then
-            pw, ph = node.width, node.height
+            pw, ph = fw, fh
             if node.title then
-                title_txt = holder:AddChild(Text(_G.TITLEFONT, node.title_size or 24, tostring(node.title)))
+                title_txt = holder:AddChild(Text(_G.TITLEFONT, tonumber(node.title_size) or 24, tostring(node.title)))
                 title_txt:SetColour(1, 1, 0.8, 1)
                 title_txt:SetPosition(0, ph / 2 - 25, 0)
             end
             if node.body then
-                body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, node.body_size or 18, tostring(node.body)))
+                body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, tonumber(node.body_size) or 18, tostring(node.body)))
                 body_txt:SetColour(1, 1, 1, 1)
                 body_txt:SetRegionSize(pw - 40, ph - 80)
                 if body_txt.SetHAlign and _G.ANCHOR_LEFT then body_txt:SetHAlign(_G.ANCHOR_LEFT) end
@@ -735,8 +747,8 @@ RenderNode = function(node, parent, ctx)
             local content = holder:AddChild(Widget("content"))
             local cw, ch = LayoutChildren(node, content, ctx, "y")
             local padX, padY = 28, 28
-            pw = math.max(node.min_width or 160, cw + padX * 2)
-            ph = math.max(node.min_height or 80, ch + padY * 2)
+            pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
+            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2)
         end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()

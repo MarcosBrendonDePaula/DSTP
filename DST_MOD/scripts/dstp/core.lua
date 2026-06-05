@@ -323,7 +323,7 @@ function Core.ProcessCommands(commands)
                 local c = tgt.sub
                 -- Flatten a nested batch (an already-batched ui_command) so subs live
                 -- at one level in the player's envelope.
-                if c.action == "batch" and c.commands then
+                if c.action == "batch" and type(c.commands) == "table" then
                     for _, s in ipairs(c.commands) do table.insert(ui_by_user[uid], s) end
                 else
                     table.insert(ui_by_user[uid], c)
