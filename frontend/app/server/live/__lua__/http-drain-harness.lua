@@ -1,34 +1,29 @@
 -- Test harness for DST_MOD/scripts/dstp/http.lua — exercises the #17 fix (drain the
 -- event queue only AFTER a confirmed POST; hold events for retry on failure).
 --
--- Runs the REAL http.lua under fengari (Lua-in-JS) with mocked _G/core/collectors.
--- The JS side passes the http.lua source as the global `HTTP_SRC`; this script loads
--- it, drives Http.Start with a fake `inst` whose DoTaskInTime we capture, then fires
--- the captured poll fn and a mocked QueryServer callback for success/failure cases.
+-- Runs the REAL http.lua under fengari via the shared mod test kit (see mod-test-kit
+-- .ts / kit.lua). The kit provides KIT + the http.lua source as MOD_HTTP. We drive
+-- Http.Start with a fake `inst` whose DoTaskInTime we capture, then fire the captured
+-- poll fn and a mocked QueryServer callback for success/failure cases.
 --
 -- Returns a single string: "OK" if every assertion holds, else "FAIL: <reason>".
 
-local results = {}
-local function check(name, cond) if not cond then results[#results+1] = name end end
+local C = KIT.new_checker()
+local check = C.check
 
--- ── Mock _G (the DST globals http.lua reaches through core._G) ──────────────
-local now = 1000
 local captured_cb           -- the QueryServer callback (we fire it manually)
-local last_query_payload    -- body sent on the last QueryServer call
 local query_calls = 0
 
-local mock_G = {
-  GetTime = function() return now end,
-  TheWorld = { ismastersim = true },
+-- _G with a QueryServer that captures the callback so we fire success/failure.
+local mock_G = KIT.make_G({
   TheNet = { GetClientTable = function() return { { userid = "u1" } } end },
   TheSim = {
     QueryServer = function(self, url, cb, method, body)
       query_calls = query_calls + 1
       captured_cb = cb
-      last_query_payload = body
     end,
   },
-}
+})
 
 -- ── Mock core + collectors ──────────────────────────────────────────────────
 local core = {
@@ -39,9 +34,8 @@ local core = {
             event_queue = {}, poll_in_flight = false },
   evt_config = {},
   event_debounce = {},
-  -- pass-through codecs: encode returns a marker string, decode returns a fixed table
-  SafeEncode = function(t) return "ENCODED" end,
-  SafeDecode = function(s) return { commands = {} } end,
+  SafeEncode = KIT.fake_json.encode,
+  SafeDecode = KIT.fake_json.decode,
   ProcessCommands = function() end,
   LogError = function() end,
 }
@@ -52,9 +46,7 @@ local collectors = {
 }
 
 -- ── Load the real module ────────────────────────────────────────────────────
-local chunk, err = load(HTTP_SRC, "http.lua")
-if not chunk then return "FAIL: load error: " .. tostring(err) end
-local Http = chunk()
+local Http = KIT.load(MOD_HTTP, "http.lua")
 Http.Init(core, collectors)
 
 -- Drive Http.Start with a fake inst; capture the scheduled poll fn instead of timing.
@@ -120,4 +112,4 @@ check("c4: concurrent poll blocked by in-flight guard", query_calls == 1)
 saved_cb("{}", true, 200) -- release
 check("c4: queue drained after release", #core.state.event_queue == 0)
 
-if #results == 0 then return "OK" else return "FAIL: " .. table.concat(results, "; ") end
+return C.report()

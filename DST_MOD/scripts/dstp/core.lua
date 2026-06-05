@@ -152,15 +152,20 @@ function Core.SafeDump(obj, depth, seen)
 end
 
 function Core.PushEvent(event_type, data, raw_data)
-    -- Debounce check
+    -- Debounce check. The key includes the player's userid when present, so the
+    -- debounce is PER-PLAYER (#2): without it, the global per-type timer meant
+    -- player B's health_delta was dropped because player A's was within the window.
+    -- World/global events (no userid) keep the plain per-type key.
     local debounce = Core.event_debounce[event_type]
     if debounce then
+        local uid = type(data) == "table" and data.userid
+        local key = (uid and uid ~= "") and (event_type .. ":" .. uid) or event_type
         local now = Core._G.GetTime()
-        local last = last_event_time[event_type] or 0
+        local last = last_event_time[key] or 0
         if now - last < debounce then
             return -- skip, too soon
         end
-        last_event_time[event_type] = now
+        last_event_time[key] = now
     end
 
     -- Merge raw DST data into event data so flows have access to everything.
