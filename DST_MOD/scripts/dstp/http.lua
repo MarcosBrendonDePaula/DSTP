@@ -37,12 +37,34 @@ end
 local function DoPoll()
     if not _G.TheWorld or not _G.TheWorld.ismastersim then return end
 
+    -- Don't start a second POST while one is still in flight. We drain the queue
+    -- only AFTER the POST is confirmed (below), so without this guard a fast re-poll
+    -- (0.1s when the queue is non-empty) could fire before the first callback
+    -- returned and send the SAME events twice. One request at a time.
+    -- Watchdog: if a callback never fires (network stack wedged), release the guard
+    -- after 30s so polling can't deadlock permanently.
+    if state.poll_in_flight then
+        if state.poll_started_at and (_G.GetTime() - state.poll_started_at) > 30 then
+            LogError("Poll callback never returned (>30s) — releasing in-flight guard")
+            state.poll_in_flight = false
+        else
+            return
+        end
+    end
+
     RefreshClientTable()
 
+    -- COPY (not remove) the front of the queue. The events stay in the queue until
+    -- the POST is confirmed successful — see the callback. This is the #17 fix: the
+    -- old code removed them here, so a failed POST (backend down) silently lost them.
+    local batch_size = math.min(#state.event_queue, config.max_batch_size)
     local events = {}
-    for i = 1, math.min(#state.event_queue, config.max_batch_size) do
-        table.insert(events, table.remove(state.event_queue, 1))
+    for i = 1, batch_size do
+        events[i] = state.event_queue[i]
     end
+
+    state.poll_in_flight = true
+    state.poll_started_at = _G.GetTime()
 
     local payload = {
         server_id = config.server_id,
@@ -56,14 +78,35 @@ local function DoPoll()
     }
 
     local json_data = SafeEncode(payload)
-    if not json_data then return end
+    if not json_data then
+        state.poll_in_flight = false  -- never sent; release the guard
+        return
+    end
 
     _G.TheSim:QueryServer(
         config.backend_url .. "/api/dst/sync",
         function(result, isSuccessful, resultCode)
+            state.poll_in_flight = false
             if isSuccessful and result then
                 local data = SafeDecode(result)
                 if data then
+                    -- POST confirmed: NOW drain the events we sent. We remove them BY
+                    -- IDENTITY (each event is a unique table), not by position: during
+                    -- the round-trip new events are appended AND the core queue cap
+                    -- (max_batch_size*2) may have dropped some from the front, so
+                    -- "remove the first batch_size" could delete the wrong ones. A
+                    -- lookup set of the sent events keeps this exact even under churn.
+                    local sent = {}
+                    for i = 1, batch_size do sent[events[i]] = true end
+                    local kept = {}
+                    for _, ev in ipairs(state.event_queue) do
+                        if not sent[ev] then kept[#kept + 1] = ev end
+                    end
+                    state.event_queue = kept
+                    -- Log the offline -> online transition (not just every 10th attempt).
+                    if not state.connected and state.connection_errors > 0 then
+                        LogError("Connection RESTORED after " .. state.connection_errors .. " failed attempt(s)")
+                    end
                     state.connected = true
                     state.connection_errors = 0
                     state.last_successful_poll = _G.GetTime()
@@ -91,6 +134,14 @@ local function DoPoll()
                     end
                 end
             else
+                -- POST failed: events were NOT removed from the queue, so they are
+                -- retried on the next poll (no silent loss — the #17 fix). Log the
+                -- online -> offline transition explicitly (first failure after being
+                -- connected), then throttle the repeats to every 10th.
+                if state.connected then
+                    LogError("Connection LOST (" .. tostring(resultCode) .. ") — " ..
+                        #state.event_queue .. " event(s) held for retry")
+                end
                 state.connection_errors = state.connection_errors + 1
                 state.connected = false
                 if state.connection_errors % 10 == 1 then

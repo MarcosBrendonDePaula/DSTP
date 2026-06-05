@@ -25,6 +25,7 @@ Core.state = {
     connection_errors = 0,
     last_successful_poll = 0,
     event_queue = {},
+    poll_in_flight = false,  -- true while a /dst/sync POST is awaiting its callback
 }
 
 Core.config = {
