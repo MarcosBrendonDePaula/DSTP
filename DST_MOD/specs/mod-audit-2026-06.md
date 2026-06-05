@@ -49,17 +49,41 @@ específicos do DST (loop infinito trava o master sim, sem watchdog).
    `debug.sethook` com limite de instruções para abortar loops; documentar que o
    `/dst/sync` é a fronteira de confiança (assume LAN).
 
-## 🟡 Listeners mortos / errados (triggers que nunca disparam)
+## ✅ Listeners mortos / errados — RESOLVIDO (#5/#6/#7)
 
-- **Mundo:** `ms_earthquake` (2027), `houndwarningsound` (2050), `ms_houndattack`
-  (2058), `ms_registerfire` (2115) — **não existem no DST vanilla**. Corrigir para
-  `warnquake`/`startquake`, `houndwarning` (por-player), etc.
-- **Por-player:** `startlongaction` (1725), `onleftplayer` (1752), `onboat` (1780),
-  `onboatoff` (1785), `readbook` (1830) — não disparam no player. Remapear ou remover.
-- **`loot_prefab_spawned` vazado** (1693-1709): registrado no alvo a cada
-  `finishedwork` e nunca removido — vazamento de listener ao longo da sessão.
-- **3 listeners `entity_death` no mesmo world inst** (player_death/boss_killed/
-  structure_burnt) — cada morte dispara 3 callbacks re-escaneando. Unificar.
+Validados 1-a-1 contra os scripts vanilla extraídos (workflow de validação) antes de
+mexer. Veredictos aplicados em `events/<categoria>.lua`:
+
+**#5 Mundo (`events/world.lua`, `events/boss.lua`):**
+- `ms_earthquake` → **remapeado** para `startquake` (quaker.lua:510, data `{duration,
+  debrisperiod}`); o listener antigo nunca disparava.
+- `houndwarningsound` / `ms_houndattack` → **removidos do mundo**; `houndwarning` é
+  pushado em CADA player (hounded.lua), então `hound_warning` agora é **per-player** em
+  `events/combat.lua`. Não há sinal world-level de "hounds spawnaram" que valha listener.
+- `ms_registerfire` → **removido** (não existe; fire-start real é `onignite` por-burnable,
+  exigiria mechanic module via AddComponentPostInit — fora de escopo). `structure_burnt`
+  já cobre estrutura queimada na morte.
+
+**#6 Por-player (`events/gathering.lua`, `exploration.lua`, `character.lua`):**
+- `startlongaction` (`player_action_start`) → **removido**: dispara no alvo da ação, não
+  no player. O "começou ação" já é coberto por `player_mine_chop_start` + `player_pick`.
+- `onleftplayer` (`player_teleported` wormhole_exit) → **remapeado** para `wormholetravel`
+  (pushado no viajante; o antigo disparava na wormhole, não no player).
+- `onboat` / `onboatoff` (`boat_entered`/`boat_exited`) → **removidos**: não pushados no
+  player server-side (embarque via walkableplatform/embarker, sem evento de player).
+- `readbook` (`book_read`) → **removido**: não pushado no player (leitura via ACTIONS path).
+
+Eventos sem fonte real foram tirados do catálogo (`TRIGGER_EVENTS`) e do `categoryMap`
+do FlowEngine: `player_action_start`, `boat_entered`, `boat_exited`, `book_read`,
+`hound_attack`, `fire_started`.
+
+**#7 Vazamento + listeners duplicados (`events/gathering.lua`, facade `events.lua`):**
+- `loot_prefab_spawned` (resource_gathered): registrado no alvo a cada `finishedwork` e
+  nunca removido → **vazava**. Agora hooka no máximo 1× por alvo (guard `_dstp_loot_hooked`)
+  e auto-remove o callback após a janela de loot (`DoTaskInTime(0.5)`).
+- **3 listeners `entity_death`** (player_death/boss_killed/structure_burnt) → **unificados**:
+  os 3 módulos expõem `M.OnEntityDeath(world, data)`; a fachada registra UM único listener
+  `entity_death` que fan-out para os três. Menos callbacks de engine, um ponto de dispatch.
 
 ## 🟢 Qualidade / refactor
 

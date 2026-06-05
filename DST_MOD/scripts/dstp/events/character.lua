@@ -28,14 +28,9 @@ function M.RegisterForPlayer(player, uid, pname)
         }, data)
     end)
 
-    -- Wickerbottom (or any character) read a book
-    player:ListenForEvent("readbook", function(inst, data)
-        if not evt_config.character then return end
-        DSTP.PushEvent("book_read", {
-            userid = uid, name = pname,
-            book = data and data.book and data.book.prefab or "unknown",
-        }, data)
-    end)
+    -- NOTE: book_read was REMOVED. "readbook" is not pushed on the player by the engine
+    -- (book reading goes through the book/ACTIONS path, no player event), so the listener
+    -- was dead. Dropped rather than keep a never-firing hook.
 
     -- Woodie / Wurt / etc. transformed into were-form
     player:ListenForEvent("transformwere", function(inst)

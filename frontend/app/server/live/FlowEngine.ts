@@ -1213,8 +1213,8 @@ export class FlowEngine {
       recipe_unlocked: 'crafting', tech_tree_changed: 'crafting',
       player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory', player_unequip: 'inventory',
       storm_changed: 'weather', precipitation: 'weather', lightning_strike: 'weather',
-      boss_event: 'bosses', boss_killed: 'bosses', fire_started: 'bosses',
-      hound_warning: 'bosses', hound_attack: 'bosses',
+      boss_event: 'bosses', boss_killed: 'bosses',
+      hound_warning: 'bosses',
       player_eat: 'survival', player_insane: 'survival', player_sane: 'survival',
       player_starving: 'survival', player_fed: 'survival',
       player_freezing: 'survival', player_cooled: 'survival',
@@ -1224,10 +1224,9 @@ export class FlowEngine {
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       player_pick: 'gathering', player_mine_chop_start: 'gathering',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
-      recipe_learned: 'character', book_read: 'character', character_transform: 'character',
+      recipe_learned: 'character', character_transform: 'character',
       player_sleep_start: 'character', player_sleep_end: 'character',
       player_sunk: 'exploration', fish_caught: 'exploration',
-      boat_entered: 'exploration', boat_exited: 'exploration',
     }
 
     const needed = new Set<string>()

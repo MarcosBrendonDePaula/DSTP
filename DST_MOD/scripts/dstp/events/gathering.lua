@@ -34,9 +34,17 @@ function M.RegisterForPlayer(player, uid, pname)
             action = action,
         }, data)
 
-        -- Hook loot drops from the destroyed entity
-        if target:IsValid() and target.components and target.components.lootdropper then
-            target:ListenForEvent("loot_prefab_spawned", function(ent, lootdata)
+        -- Hook loot drops from the destroyed entity. WITHOUT a guard this leaked:
+        -- every finishedwork on the same target (re-harvestable plants, repeatedly
+        -- hammered structures) added ANOTHER loot_prefab_spawned listener that was
+        -- never removed, accumulating callbacks for the whole session. Register at
+        -- most ONCE per target (_dstp_loot_hooked) and self-remove after the loot
+        -- window so it doesn't pile up on long-lived entities.
+        if target:IsValid() and target.components and target.components.lootdropper
+            and not target._dstp_loot_hooked then
+            target._dstp_loot_hooked = true
+            local onLoot
+            onLoot = function(ent, lootdata)
                 if lootdata and lootdata.loot then
                     local count = 1
                     if lootdata.loot.components and lootdata.loot.components.stackable then
@@ -49,6 +57,15 @@ function M.RegisterForPlayer(player, uid, pname)
                         loot = lootdata.loot.prefab or "unknown",
                         count = count,
                     }, lootdata)
+                end
+            end
+            target:ListenForEvent("loot_prefab_spawned", onLoot)
+            -- Remove the listener after the loot has spawned (next frame); the guard
+            -- stays true only until then so a later harvest can re-hook cleanly.
+            target:DoTaskInTime(0.5, function()
+                if target:IsValid() then
+                    target:RemoveEventCallback("loot_prefab_spawned", onLoot)
+                    target._dstp_loot_hooked = nil
                 end
             end)
         end
@@ -64,15 +81,10 @@ function M.RegisterForPlayer(player, uid, pname)
         }, data)
     end)
 
-    -- Player STARTED a long action (e.g. harvesting/picking). Fires at the start,
-    -- before the action completes — the "began" event that gathering otherwise
-    -- lacks (player_harvest fires only on completion).
-    player:ListenForEvent("startlongaction", function(inst, data)
-        if not evt_config.gathering then return end
-        DSTP.PushEvent("player_action_start", {
-            userid = uid, name = pname,
-        }, data)
-    end)
+    -- NOTE: "startlongaction" was REMOVED. It fires on the action TARGET entity, never
+    -- on the player (wrong entity — the listener on the player never fired). The
+    -- "began action" intent is already covered by player_mine_chop_start (working) and
+    -- player_pick (picksomething) below; player_action_start has no real source.
 
     -- Player started a fire
     player:ListenForEvent("onstartedfire", function(inst, data)

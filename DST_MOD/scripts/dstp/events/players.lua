@@ -93,16 +93,9 @@ function M.RegisterWorld(inst)
         }, data)
     end)
 
-    inst:ListenForEvent("entity_death", function(world, data)
-        if not evt_config.players then return end
-        if data and data.inst and data.inst:HasTag("player") then
-            DSTP.PushEvent("player_death", {
-                userid = data.inst.userid,
-                name = data.inst.name,
-                cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
-            }, data)
-        end
-    end)
+    -- entity_death is dispatched centrally by the facade (ONE listener, fanned out to
+    -- each world module's OnEntityDeath) — see events.lua. Three modules used to each
+    -- register their own entity_death listener on the world; that's now M.OnEntityDeath.
 
     -- A brand-new character first-spawned (NOT a reconnect). DST
     -- "ms_newplayercharacterspawned" fires on TheWorld with { player, mode } (keyed).
@@ -136,6 +129,18 @@ function M.RegisterWorld(inst)
             portal = data and data.portalid or nil,
         }, data)
     end)
+end
+
+-- Central entity_death dispatch (called by the facade's single listener). Player death.
+function M.OnEntityDeath(world, data)
+    if not evt_config.players then return end
+    if data and data.inst and data.inst:HasTag("player") then
+        DSTP.PushEvent("player_death", {
+            userid = data.inst.userid,
+            name = data.inst.name,
+            cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
+        }, data)
+    end
 end
 
 return M

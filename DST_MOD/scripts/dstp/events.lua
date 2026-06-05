@@ -86,6 +86,15 @@ RegisterGameEvents = function(inst)
     Boss.RegisterWorld(inst)
     GriefWorld.RegisterWorld(inst)
 
+    -- entity_death used to be hooked THREE times (players/boss/grief_world each added
+    -- their own listener on the same world event). Unify into ONE listener that fans
+    -- out to each module's OnEntityDeath — fewer engine callbacks, single dispatch point.
+    inst:ListenForEvent("entity_death", function(world, data)
+        Players.OnEntityDeath(world, data)
+        Boss.OnEntityDeath(world, data)
+        GriefWorld.OnEntityDeath(world, data)
+    end)
+
     -- Hook per-player events for existing players
     for _, player in ipairs(_G.AllPlayers) do
         RegisterPerPlayerEvents(player)
