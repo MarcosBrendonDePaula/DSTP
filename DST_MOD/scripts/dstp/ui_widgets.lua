@@ -515,24 +515,39 @@ local function Register(ctx, node, widget, patch)
     }
 end
 
--- Make any widget clickable if the node carries a callback (debounced 0.5s).
--- DST widgets receive clicks via OnControl; we attach a lightweight handler.
-local function MaybeClickable(widget, node, ctx)
+-- Make a text/icon/image node clickable if it carries a callback (debounced 0.5s).
+--
+-- WHY A WRAP AND NOT OnControl: a bare Text/Image is NOT focusable on the HUD, so it
+-- never receives OnControl — the engine only delivers a click (CONTROL_ACCEPT) to a
+-- widget that consumes it the way an ImageButton does. SetClickable only grants
+-- focus/hover routing, which a non-focusable HUD widget never gets. This is DST's OWN
+-- fix: widgets/widget.lua:757-760 makes a Text clickable by adding a transparent
+-- ImageButton("images/ui.xml","blank.tex") child and ScaleToSize'ing it over the text
+-- ("Text widgets don't receive OnGainFocus calls" — Klei's own comment).
+--
+-- We overlay an invisible ImageButton sized to the primitive (w×h) and SetOnClick it,
+-- riding the SAME ctx.callback_fn(cb, root_id) path the tree `button` uses → no new
+-- RPC/event/trigger. The overlay is a child of the primitive, co-located at (0,0); it
+-- does NOT change the (w,h) RenderNode returns, so layout is unaffected.
+local function MaybeClickable(widget, node, ctx, w, h)
     if not node.callback then return end
-    local last = -1
     local cb = node.callback
+    local last = -1
     local function fire()
         local now = _G.GetTime and _G.GetTime() or 0
-        if last >= 0 and (now - last) < 0.5 then return end
+        if last >= 0 and (now - last) < 0.5 then return end  -- 0.5s debounce, as buttons
         last = now
         if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
     end
-    -- Text/Image widgets aren't buttons; wire OnControl + make focusable.
-    widget.OnControl = function(self, control, down)
-        if not down and (control == _G.CONTROL_ACCEPT) then fire(); return true end
-        return false
+    local ImageButton = _G.require("widgets/imagebutton")
+    -- Transparent hit target overlaid on the primitive. "images/ui.xml"/"blank.tex" is
+    -- the same fully-transparent atlas/tex DST uses for its own text hit-areas.
+    local hit = widget:AddChild(ImageButton("images/ui.xml", "blank.tex", "blank.tex", "blank.tex", nil, nil, {1, 1}, {0, 0}))
+    if hit.image and hit.image.ScaleToSize and w and h and w > 0 and h > 0 then
+        hit.image:ScaleToSize(w, h)
     end
-    if widget.SetClickable then widget:SetClickable(true) end
+    hit:SetPosition(0, 0, 0)
+    hit:SetOnClick(fire)
 end
 
 RenderNode = function(node, parent, ctx)
@@ -624,14 +639,16 @@ RenderNode = function(node, parent, ctx)
             txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
             txt:EnableWordWrap(true)
         end
-        MaybeClickable(txt, node, ctx)
+        local w, h = txt:GetRegionSize()
+        w = w or (#(node.text or "") * (node.size or 18) * 0.5)
+        h = h or (node.size or 18)
+        MaybeClickable(txt, node, ctx, w, h)
         Register(ctx, node, txt, function(props)
             if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
             if props.color and txt.inst:IsValid() then local c = ResolveColor(props.color); txt:SetColour(c[1], c[2], c[3], c[4]) end
             if props.size and txt.inst:IsValid() then txt:SetSize(props.size) end
         end)
-        local w, h = txt:GetRegionSize()
-        return txt, w or (#(node.text or "") * (node.size or 18) * 0.5), h or (node.size or 18)
+        return txt, w, h
 
     elseif t == "icon" then
         local atlas, tex
@@ -642,7 +659,7 @@ RenderNode = function(node, parent, ctx)
         local ok = _G.pcall(function() img = parent:AddChild(Image(atlas, tex)) end)
         if ok and img then
             img:SetSize(size, size)
-            MaybeClickable(img, node, ctx)
+            MaybeClickable(img, node, ctx, size, size)
             Register(ctx, node, img, function(props)
                 if not img.inst:IsValid() then return end
                 if props.prefab then local a, x = ResolveItemAtlas(props.prefab); img:SetTexture(a, x) end
@@ -655,10 +672,11 @@ RenderNode = function(node, parent, ctx)
 
     elseif t == "image" then
         local size = node.size or 64
+        local iw, ih = node.width or size, node.height or size
         local img = parent:AddChild(Image(node.atlas or "images/global.xml", node.tex or "square.tex"))
-        img:SetSize(node.width or size, node.height or size)
+        img:SetSize(iw, ih)
         if node.tint then local c = ResolveColor(node.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
-        MaybeClickable(img, node, ctx)
+        MaybeClickable(img, node, ctx, iw, ih)
         Register(ctx, node, img, function(props)
             if not img.inst:IsValid() then return end
             if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
