@@ -66,15 +66,20 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
     ))
 
   if (t === 'panel') {
+    // Fixed size when width/height are set (mirrors the renderer's fixed mode); else
+    // auto-size to content. So adjusting width/height reflects in the preview.
+    const pw = Number(node.width) || undefined
+    const ph = Number(node.height) || undefined
     return (
       <div onClick={pick} style={{
         position: 'relative', background: 'rgba(20,20,26,0.95)',
         border: '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
         padding: '10px 12px', minWidth: 120, boxShadow: ring,
+        width: pw, height: ph,
         display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
       }}>
         {node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{node.title}</div>}
-        {node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: 220, textAlign: 'left' }}>{node.body}</div>}
+        {node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{node.body}</div>}
         {childViews(node.children)}
         {node.closeable !== false && (
           <div style={{ position: 'absolute', top: 4, right: 6, color: '#d88', fontSize: 12 }}>✕</div>
@@ -140,11 +145,11 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
   if (t === 'button') {
     return (
       <div onClick={pick} style={{
-        minWidth: Number(node.width) || 120, height: 36, padding: '0 14px',
+        width: Number(node.width) || 120, height: Number(node.height) || 36, padding: '0 14px',
         background: 'linear-gradient(#caa45a,#a8853f)', border: '1px solid #7a5e2a',
         borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: toCss(node.color, '#3a2c12'), fontSize: Number(node.size) || 14, fontWeight: 600,
-        boxShadow: ring,
+        boxShadow: ring, overflow: 'hidden', whiteSpace: 'nowrap',
       }}>{node.text || 'Botão'}</div>
     )
   }
@@ -152,9 +157,10 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
     const v = Number(node.value) || 0, max = Number(node.max) || 1
     const pct = max > 0 ? Math.max(0, Math.min(1, v / max)) : 0
     const w = Number(node.width) || 200
+    const h = Number(node.height) || 16
     return (
       <div onClick={pick} style={{
-        position: 'relative', width: w, height: 16, background: 'rgba(50,50,50,1)',
+        position: 'relative', width: w, height: h, background: 'rgba(50,50,50,1)',
         borderRadius: 2, boxShadow: ring, overflow: 'hidden',
       }}>
         <div style={{ width: `${pct * 100}%`, height: '100%', background: toCss(node.color, 'rgba(50,230,50,1)') }} />

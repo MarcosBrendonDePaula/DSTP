@@ -53,8 +53,8 @@ const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
   icon: [{ key: 'prefab', label: 'Prefab', ph: 'log' }, { key: 'size', label: 'Tamanho', ph: '48' }, { key: 'id', label: 'Node ID' }, { key: 'callback', label: 'Callback' }],
   image: [{ key: 'atlas', label: 'Atlas' }, { key: 'tex', label: 'Textura' }, { key: 'width', label: 'Largura' }, { key: 'height', label: 'Altura' }],
   button: [{ key: 'text', label: 'Texto', ph: 'Comprar' }, { key: 'callback', label: 'Callback', ph: 'buy_log' }, { key: 'width', label: 'Largura', ph: '120' }, { key: 'height', label: 'Altura', ph: '44' }, { key: 'size', label: 'Tamanho fonte', ph: '20' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
-  bar: [{ key: 'value', label: 'Valor', ph: '{{p.health_current}}' }, { key: 'max', label: 'Max', ph: '{{p.health_max}}' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
-  spacer: [{ key: 'height', label: 'Altura', ph: '8' }],
+  bar: [{ key: 'value', label: 'Valor', ph: '{{p.health_current}}' }, { key: 'max', label: 'Max', ph: '{{p.health_max}}' }, { key: 'width', label: 'Largura', ph: '200' }, { key: 'height', label: 'Altura', ph: '16' }, { key: 'label', label: 'Rótulo (dentro)' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
+  spacer: [{ key: 'width', label: 'Largura', ph: '0' }, { key: 'height', label: 'Altura', ph: '8' }],
 }
 
 // ─── path helpers: a path is a list of steps into the tree ──────────────────
