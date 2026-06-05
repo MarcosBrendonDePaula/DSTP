@@ -29,8 +29,12 @@ function toCss(color: any, fallback = 'rgba(255,255,255,1)'): string {
 const samePath = (a: Step[], b: Step[]) =>
   a.length === b.length && a.every((s, i) => s.kind === b[i].kind && s.i === b[i].i)
 
-function NodeView({ node, path, sel, onSelect }: {
-  node: UINode; path: Step[]; sel: Step[]; onSelect: (p: Step[]) => void
+// Reorder a child within its container by drag. Each rendered child is draggable;
+// dropping it onto a sibling swaps their order. onReorder(parentPath, from, to).
+type Reorder = (parentPath: Step[], from: number, to: number) => void
+
+function NodeView({ node, path, sel, onSelect, onReorder }: {
+  node: UINode; path: Step[]; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder
 }): React.ReactNode {
   if (!node || !node.type) return null
   const isSel = samePath(path, sel)
@@ -38,9 +42,27 @@ function NodeView({ node, path, sel, onSelect }: {
   const pick = (e: React.MouseEvent) => { e.stopPropagation(); onSelect(path) }
   const t = node.type
 
+  // A child wrapped so it can be dragged to reorder within THIS container. The drag
+  // payload is the source index; dropping on another child reorders. Only children
+  // (not tabs) reorder.
   const childViews = (arr: UINode[] | undefined) =>
     (arr || []).map((c, i) => (
-      <NodeView key={i} node={c} path={[...path, { kind: 'child', i }]} sel={sel} onSelect={onSelect} />
+      <div
+        key={i}
+        draggable={!!onReorder}
+        onDragStart={onReorder ? (e => { e.stopPropagation(); e.dataTransfer.setData('text/dstp-reorder', String(i)); e.dataTransfer.effectAllowed = 'move' }) : undefined}
+        onDragOver={onReorder ? (e => { if (e.dataTransfer.types.includes('text/dstp-reorder')) { e.preventDefault(); e.stopPropagation() } }) : undefined}
+        onDrop={onReorder ? (e => {
+          const raw = e.dataTransfer.getData('text/dstp-reorder')
+          if (raw === '') return
+          e.preventDefault(); e.stopPropagation()
+          const from = Number(raw)
+          if (Number.isFinite(from) && from !== i) onReorder(path, from, i)
+        }) : undefined}
+        style={{ cursor: onReorder ? 'grab' : undefined }}
+      >
+        <NodeView node={c} path={[...path, { kind: 'child', i }]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
+      </div>
     ))
 
   if (t === 'panel') {
@@ -91,7 +113,7 @@ function NodeView({ node, path, sel, onSelect }: {
           ))}
         </div>
         {tabs[active]?.child && (
-          <NodeView node={tabs[active].child} path={[...path, { kind: 'tab', i: active }]} sel={sel} onSelect={onSelect} />
+          <NodeView node={tabs[active].child} path={[...path, { kind: 'tab', i: active }]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
         )}
       </div>
     )
@@ -166,15 +188,15 @@ function NodeView({ node, path, sel, onSelect }: {
   return <div onClick={pick} style={{ color: '#a55', fontSize: 10, boxShadow: ring }}>?{t}</div>
 }
 
-export function UIPreview({ tree, sel, onSelect }: {
-  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void
+export function UIPreview({ tree, sel, onSelect, onReorder }: {
+  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder
 }) {
   const root = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
   return (
     <div className="border border-white/10 rounded-lg bg-black/40 overflow-auto flex items-center justify-center"
       style={{ minHeight: 300, maxHeight: 460, padding: 16,
         backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '12px 12px' }}>
-      <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} />
+      <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
     </div>
   )
 }

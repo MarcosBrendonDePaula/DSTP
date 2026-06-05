@@ -765,11 +765,15 @@ export class FlowEngine {
       out.text = String(r(p.text) ?? 'OK')
       out.callback = String(r(p.callback) ?? p.text ?? 'click')
       if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
       if (p.size != null) out.size = num(p.size)
+      const c = color(p.color); if (c) out.color = c
     } else if (type === 'bar') {
       out.value = num(p.value) ?? 0
       out.max = num(p.max) ?? 1
       if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+      if (p.label != null) out.label = String(r(p.label))
       const c = color(p.color); if (c) out.color = c
     } else if (type === 'spacer') {
       if (p.width != null) out.width = num(p.width)

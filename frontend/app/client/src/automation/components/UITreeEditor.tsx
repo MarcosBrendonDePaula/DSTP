@@ -44,7 +44,7 @@ function defaults(type: string): UINode {
 
 // Editable prop fields per type (key, label, placeholder).
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'gap', label: 'Gap', ph: '8' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }],
   col: [{ key: 'gap', label: 'Gap', ph: '8' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
   row: [{ key: 'gap', label: 'Gap', ph: '12' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
@@ -52,7 +52,7 @@ const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
   text_input: [{ key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }, { key: 'id', label: 'Node ID' }],
   icon: [{ key: 'prefab', label: 'Prefab', ph: 'log' }, { key: 'size', label: 'Tamanho', ph: '48' }, { key: 'id', label: 'Node ID' }, { key: 'callback', label: 'Callback' }],
   image: [{ key: 'atlas', label: 'Atlas' }, { key: 'tex', label: 'Textura' }, { key: 'width', label: 'Largura' }, { key: 'height', label: 'Altura' }],
-  button: [{ key: 'text', label: 'Texto', ph: 'Comprar' }, { key: 'callback', label: 'Callback', ph: 'buy_log' }, { key: 'width', label: 'Largura', ph: '120' }, { key: 'id', label: 'Node ID' }],
+  button: [{ key: 'text', label: 'Texto', ph: 'Comprar' }, { key: 'callback', label: 'Callback', ph: 'buy_log' }, { key: 'width', label: 'Largura', ph: '120' }, { key: 'height', label: 'Altura', ph: '44' }, { key: 'size', label: 'Tamanho fonte', ph: '20' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
   bar: [{ key: 'value', label: 'Valor', ph: '{{p.health_current}}' }, { key: 'max', label: 'Max', ph: '{{p.health_max}}' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
   spacer: [{ key: 'height', label: 'Altura', ph: '8' }],
 }
@@ -80,6 +80,7 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
 
 export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
+  const [tab, setTab] = useState<'tree' | 'render'>('tree')
   // Drag-and-drop: which palette type is being dragged, and which container row is the
   // current drop target (for the highlight). pathKey = the dropPath serialized.
   const [dragType, setDragType] = useState<string | null>(null)
@@ -189,69 +190,106 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
 
   const selIsContainer = selected && CONTAINER.has(selected.type)
 
-  return (
-    <div className="flex gap-3 text-xs" style={{ minHeight: 300 }}>
-      {/* Palette: drag a block onto a container in the tree (or click to add to the
-          selected container). Replaces the old select + button flow. */}
-      <div className="w-32 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20">
-        <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
-        <div className="space-y-1">
-          {TYPES.map(t => (
-            <div
-              key={t.value}
-              draggable
-              onDragStart={e => { setDragType(t.value); e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
-              onDragEnd={() => { setDragType(null); setDropKey(null) }}
-              onClick={() => addChildAt(selected && CONTAINER.has(selected.type) ? selPath : [], t.value)}
-              className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
-              title={t.container ? 'Container — arraste para dentro de outro container' : 'Arraste para um container'}
-            >
-              {t.label}
+  // Reorder a child within its container (used by drag-in-render). Moves the node at
+  // `from` to index `to` in the SAME parent (only meaningful for children, not tabs).
+  const reorderInParent = (parentPath: Step[], from: number, to: number) => {
+    if (from === to) return
+    save(update(root, r => {
+      const parent = getNode(r, parentPath) || r
+      const arr = parent.children
+      if (!arr || from < 0 || from >= arr.length || to < 0 || to >= arr.length) return
+      const [moved] = arr.splice(from, 1)
+      arr.splice(to, 0, moved)
+    }))
+  }
+
+  // Shared inspector (used by both tabs).
+  const inspector = (
+    <div className="w-56 shrink-0 space-y-2">
+      {selected ? (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] text-indigo-300 font-semibold">{ICON[selected.type]} {selected.type}</div>
+            {selPath.length > 0 && (
+              <button onClick={() => removeAt(selPath)} className="text-red-400 hover:text-red-300 text-[10px]" title="Remover">✕ remover</button>
+            )}
+          </div>
+          {(FIELDS[selected.type] || []).map(f => (
+            <div key={f.key}>
+              <span className="text-[9px] text-gray-500 block mb-0.5">{f.label}</span>
+              <input
+                value={selected[f.key] ?? ''}
+                onChange={e => setProp(f.key, e.target.value)}
+                placeholder={f.ph}
+                className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none placeholder:text-gray-600"
+              />
             </div>
           ))}
+          {selIsContainer && (
+            <div className="pt-2 border-t border-white/10 text-[8px] text-gray-500">
+              Container selecionado — arraste um bloco da paleta para cá (na aba Árvore).
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-[10px] text-gray-500">Selecione um componente (na árvore ou no render) para editar.</div>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="text-xs" style={{ minHeight: 300 }}>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-2">
+        {([['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1 rounded-t text-[11px] border-b-2 ${tab === k ? 'border-indigo-400 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tree' ? (
+        <div className="flex gap-3">
+          {/* Palette */}
+          <div className="w-32 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20">
+            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
+            <div className="space-y-1">
+              {TYPES.map(t => (
+                <div
+                  key={t.value}
+                  draggable
+                  onDragStart={e => { setDragType(t.value); e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
+                  onDragEnd={() => { setDragType(null); setDropKey(null) }}
+                  onClick={() => addChildAt(selected && CONTAINER.has(selected.type) ? selPath : [], t.value)}
+                  className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
+                  title={t.container ? 'Container — arraste para dentro de outro container' : 'Arraste para um container'}
+                >
+                  {t.label}
+                </div>
+              ))}
+            </div>
+            <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste um bloco para um container na árvore, ou clique para adicionar ao selecionado.</div>
+          </div>
+
+          {/* Tree */}
+          <div className="flex-1 border border-white/10 rounded-lg p-2 bg-black/20 overflow-auto" style={{ maxHeight: 460 }}>
+            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Estrutura</div>
+            {renderRow(root, [])}
+          </div>
+
+          {inspector}
         </div>
-        <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste um bloco para um container na árvore, ou clique para adicionar ao selecionado.</div>
-      </div>
-
-      {/* Tree */}
-      <div className="flex-1 border border-white/10 rounded-lg p-2 bg-black/20 overflow-auto" style={{ maxHeight: 460 }}>
-        <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Estrutura</div>
-        {renderRow(root, [])}
-      </div>
-
-      {/* Inspector */}
-      <div className="w-56 shrink-0 space-y-2">
-        {selected ? (
-          <>
-            <div className="text-[10px] text-indigo-300 font-semibold">{ICON[selected.type]} {selected.type}</div>
-            {(FIELDS[selected.type] || []).map(f => (
-              <div key={f.key}>
-                <span className="text-[9px] text-gray-500 block mb-0.5">{f.label}</span>
-                <input
-                  value={selected[f.key] ?? ''}
-                  onChange={e => setProp(f.key, e.target.value)}
-                  placeholder={f.ph}
-                  className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none placeholder:text-gray-600"
-                />
-              </div>
-            ))}
-            {selIsContainer && (
-              <div className="pt-2 border-t border-white/10 text-[8px] text-gray-500">
-                Container selecionado — arraste um bloco da paleta para cá (ou clique nele).
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-[10px] text-gray-500">Selecione um componente na árvore para editar.</div>
-        )}
-      </div>
-
-      {/* Live preview: see the UI as it renders, side by side. Click an element to
-          select its node in the tree. Approximates the DST look (not pixel-exact). */}
-      <div className="flex-1 min-w-[200px]">
-        <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Pré-visualização</div>
-        <UIPreview tree={root} sel={selPath} onSelect={setSelPath} />
-      </div>
+      ) : (
+        <div className="flex gap-3">
+          {/* Interactive render: click to select, drag a widget to reorder within its container. */}
+          <div className="flex-1 min-w-[240px]">
+            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Pré-visualização — clique para editar, arraste para reordenar</div>
+            <UIPreview tree={root} sel={selPath} onSelect={setSelPath} onReorder={reorderInParent} />
+          </div>
+          {inspector}
+        </div>
+      )}
     </div>
   )
 }
