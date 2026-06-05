@@ -29,9 +29,12 @@ describe('mod ui_widgets.lua — old broken click path removed (#16)', () => {
     expect(ui).not.toContain('widget.OnControl = function')
     expect(ui).not.toContain('widget:SetClickable(true)')
   })
-  it('MaybeClickable uses the transparent ImageButton overlay pattern', () => {
+  it('MaybeClickable uses the transparent ImageButton overlay with a real hit region', () => {
     expect(ui).toContain('"images/ui.xml", "blank.tex"')
-    expect(ui).toContain('ScaleToSize')
+    // ForceImageSize sets size_x/size_y — the clickable hit region. Without it the
+    // click passes THROUGH to the world (the in-game bug: clicking text walked the
+    // player). hit.image:ScaleToSize alone scales the texture but sets no hit area.
+    expect(ui).toContain('ForceImageSize')
     expect(ui).toContain('SetOnClick')
   })
 })

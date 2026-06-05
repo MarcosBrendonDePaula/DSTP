@@ -335,8 +335,12 @@ local function MaybeClickable(widget, node, ctx, w, h)
     -- Transparent hit target overlaid on the primitive. "images/ui.xml"/"blank.tex" is
     -- the same fully-transparent atlas/tex DST uses for its own text hit-areas.
     local hit = widget:AddChild(ImageButton("images/ui.xml", "blank.tex", "blank.tex", "blank.tex", nil, nil, {1, 1}, {0, 0}))
-    if hit.image and hit.image.ScaleToSize and w and h and w > 0 and h > 0 then
-        hit.image:ScaleToSize(w, h)
+    -- CRUCIAL: ForceImageSize sets size_x/size_y — the BUTTON'S HIT REGION. Using
+    -- hit.image:ScaleToSize alone scales the texture but leaves the hit region unset, so
+    -- the click passes THROUGH to the world (the player walks). ForceImageSize is how
+    -- vanilla ImageButtons get a clickable area (imagebutton.lua:37).
+    if hit.ForceImageSize and w and h and w > 0 and h > 0 then
+        hit:ForceImageSize(w, h)
     end
     hit:SetPosition(0, 0, 0)
     hit:SetOnClick(fire)

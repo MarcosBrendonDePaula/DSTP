@@ -19,7 +19,8 @@ local function mkWidget(kind, ctorArgs)
         scaled = nil, inst = { IsValid = function() return true end },
         image = nil,
     }
-    -- ImageButton has a `.image` sub-widget with ScaleToSize.
+    -- ImageButton has a `.image` sub-widget (ScaleToSize) and ForceImageSize (which is
+    -- what sets the clickable hit region — recorded as w.sized).
     if kind == "ImageButton" then
         w.image = { ScaleToSize = function(_, ww, hh) w.scaled = { ww, hh } end }
     end
@@ -27,6 +28,8 @@ local function mkWidget(kind, ctorArgs)
         -- Recorded methods:
         if key == "AddChild" then
             return function(self, child) self.children[#self.children + 1] = child; child.parent = self; return child end
+        elseif key == "ForceImageSize" then
+            return function(self, ww, hh) self.sized = { ww, hh }; return self end
         elseif key == "SetOnClick" then
             return function(self, fn) self.onclick = fn; return self end
         elseif key == "GetRegionSize" then
@@ -90,7 +93,7 @@ local btn = nil
 for _, w in ipairs(created) do if w.kind == "ImageButton" then btn = w end end
 check("overlay: SetOnClick was wired", btn ~= nil and type(btn.onclick) == "function")
 check("overlay: blank.tex transparent atlas used", btn ~= nil and btn.ctorArgs[1] == "images/ui.xml" and btn.ctorArgs[2] == "blank.tex")
-check("overlay: ScaleToSize sized to the text region", btn ~= nil and btn.scaled ~= nil)
+check("overlay: ForceImageSize set the clickable hit region", btn ~= nil and btn.sized ~= nil)
 
 -- ── Clicking fires ctx.callback_fn ONCE (debounce), with (callback, root_id) ──
 KIT.now = 1000
