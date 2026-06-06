@@ -86,6 +86,11 @@ self.onmessage = (e: MessageEvent) => {
       self.postMessage({ type: 'pong', id: msg.id })
       break
     }
+    case 'unloadFlow': {
+      // Flow deleted/disabled on the main thread → abort its in-flight runs here.
+      try { ensureEngine().abortFlow(msg.flowId) } catch { /* ignore */ }
+      break
+    }
     case 'startCapture': {
       ensureEngine().startCapture(serverId)
       break

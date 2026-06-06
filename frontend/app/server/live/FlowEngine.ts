@@ -35,6 +35,11 @@ export interface EngineHost {
 
 // Shared storage between flows — Script nodes can read/write via context.store
 const MAX_STORE_KEYS = 500
+// Max overlapping executions of a SINGLE flow. A flow whose actions loop back into its
+// own trigger (e.g. an ai_agent that announces → chat_message → re-triggers) or that
+// fires in a burst would otherwise stack runaway concurrent runs. Excess triggers are
+// dropped + logged. Keep small: most flows finish fast; a handful in flight is plenty.
+const MAX_CONCURRENT_PER_FLOW = 3
 // Capture mode — when active, execution traces are collected and emitted at the end
 const MAX_CAPTURE_TRACE = 200
 // Upper bound for a delay node (1h). Prevents a flow holding an execution +
@@ -102,6 +107,14 @@ export class FlowEngine {
 
   // Shared storage between flows — Script nodes can read/write via context.store
   private _flowStorage: Record<string, Record<string, any>> = {}
+
+  // In-flight executions per flow id: the set of AbortControllers for runs currently
+  // executing. Two jobs: (1) cap concurrent runs of ONE flow (the "4 IAs at once" bug —
+  // a flow whose announce loops back into chat_message, or a burst of the same trigger);
+  // (2) let the main thread CANCEL a flow's in-flight runs when it's deleted/disabled
+  // (abortFlow) — the worker gets a 'flowDisabled' message and aborts, so a long
+  // ai_agent loop stops instead of finishing after you turned it off.
+  private _inFlight: Map<string, Set<AbortController>> = new Map()
 
   getStore(serverId: string): Record<string, any> {
     if (!this._flowStorage[serverId]) this._flowStorage[serverId] = {}
@@ -322,6 +335,11 @@ export class FlowEngine {
     setContext: (nodeId: string, value: any) => void,
     stopAtWait: boolean = false,
   ): Promise<FlowNode | null> {
+    // ── Abort check ── the flow was deleted/disabled (abortFlow signalled this run).
+    // Checked before EVERY node so a run parked in a delay/ai_agent stops the moment
+    // it resumes, instead of finishing downstream actions after the flow was unloaded.
+    if ((context as any)._signal?.aborted) return null
+
     // ── Loop protection ── (see loop-guard.ts)
     // DSTP has no loop node, so a node repeating within one execution means the
     // graph has an accidental cycle. The guard rides on the context so every
@@ -415,6 +433,41 @@ export class FlowEngine {
   // ─── Simple Flow Execution (no Wait nodes) ─────────
 
   private async executeFlow(flow: Flow, trigger: FlowNode, event: any, serverId: string) {
+    // Concurrency guard: cap how many runs of THIS flow can overlap. A flow whose
+    // actions feed back into its own trigger (announce → chat_message) or that fires in
+    // a burst would otherwise accumulate runaway concurrent executions ("4 IAs at once").
+    let set = this._inFlight.get(flow.id)
+    if (set && set.size >= MAX_CONCURRENT_PER_FLOW) {
+      this.safeLog(serverId, {
+        flowId: flow.id, flowName: flow.name, eventType: event.type,
+        actions: [`dropped: flow already running ${set.size}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
+      })
+      return
+    }
+    if (!set) { set = new Set(); this._inFlight.set(flow.id, set) }
+    const ac = new AbortController()
+    set.add(ac)
+    try {
+      await this._executeFlowInner(flow, trigger, event, serverId, ac.signal)
+    } finally {
+      set.delete(ac)
+      if (set.size === 0) this._inFlight.delete(flow.id)
+    }
+  }
+
+  // Abort every in-flight run of a flow (called when it's deleted/disabled). A long
+  // ai_agent loop checks the signal and stops instead of finishing post-disable.
+  // Returns how many runs were signalled.
+  abortFlow(flowId: string): number {
+    const set = this._inFlight.get(flowId)
+    if (!set || set.size === 0) return 0
+    const n = set.size
+    for (const ac of set) { try { ac.abort() } catch { /* ignore */ } }
+    this._inFlight.delete(flowId)
+    return n
+  }
+
+  private async _executeFlowInner(flow: Flow, trigger: FlowNode, event: any, serverId: string, signal?: AbortSignal) {
     const nodes = flow.nodes as FlowNode[]
     const edges = flow.edges as FlowEdge[]
     const executedActions: string[] = []
@@ -436,6 +489,7 @@ export class FlowEngine {
       _flowId: flow.id,
       _flowName: flow.name,
       _serverId: serverId,
+      _signal: signal,  // aborted when the flow is deleted/disabled (read by ai_agent)
     }
     // Lazy {{environment.x.y}} / {{env.y}} accessors (decrypt on read, masked later).
     installVaultAccessors(context, serverId)
@@ -456,6 +510,7 @@ export class FlowEngine {
     try {
       const outEdges = edges.filter(e => e.source === trigger.id)
       for (const edge of outEdges) {
+        if (signal?.aborted) break  // flow deleted/disabled mid-run → stop following edges
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
         await this.processNode(target, nodes, edges, context, serverId, executedActions, setContext, false)

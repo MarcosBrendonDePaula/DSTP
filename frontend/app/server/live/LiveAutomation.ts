@@ -206,6 +206,9 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   async deleteFlow(payload: { flow_id: string; server_id: string }) {
     invalidateAnalysis(payload.flow_id)
     WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
+    // Unload it from the worker core: abort any in-flight runs (a long ai_agent loop)
+    // so a deleted flow stops executing instead of finishing its current run.
+    serverCoreManager.unloadFlow(payload.server_id, payload.flow_id)
     this.flowRepo(payload.server_id).delete(payload.flow_id)
     this._ensureEngine().collectWatchKeys(payload.server_id)  // shrink watch set if a key flow went away
     this.syncState(payload.server_id)
@@ -215,6 +218,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
   async toggleFlow(payload: { flow_id: string; server_id: string; enabled: boolean }) {
     if (!payload.enabled) {
       WorkflowInstanceStore.getInstance().clearFlow(payload.flow_id)
+      serverCoreManager.unloadFlow(payload.server_id, payload.flow_id)  // abort in-flight runs
     }
     this.flowRepo(payload.server_id).toggle(payload.flow_id, payload.enabled)
     this._ensureEngine().collectWatchKeys(payload.server_id)  // (re)compute after enable/disable
@@ -310,10 +314,14 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       .filter(f => f.folderPath === payload.path || (f.folderPath ?? '').startsWith(payload.path + '/'))
       .map(f => f.id)
     const n = this.folderRepo(payload.server_id).setEnabledUnder(payload.path, payload.enabled)
-    // Mirror toggleFlow's side-effects: clear pending waits for flows being disabled.
+    // Mirror toggleFlow's side-effects: clear pending waits + abort in-flight runs for
+    // every flow being disabled under this folder.
     if (!payload.enabled) {
       const store = WorkflowInstanceStore.getInstance()
-      for (const id of ids) store.clearFlow(id)
+      for (const id of ids) {
+        store.clearFlow(id)
+        serverCoreManager.unloadFlow(payload.server_id, id)
+      }
     }
     this.syncState(payload.server_id)
     return { success: true, count: n }

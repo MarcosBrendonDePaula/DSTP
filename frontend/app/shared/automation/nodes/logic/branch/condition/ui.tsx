@@ -8,7 +8,9 @@ const OPERATORS = [
   { value: 'greater_than', label: '> Maior que' },
   { value: 'less_than', label: '< Menor que' },
   { value: 'contains', label: 'Contém' },
+  { value: 'not_contains', label: 'Não contém' },
   { value: 'starts_with', label: 'Começa com' },
+  { value: 'not_starts_with', label: 'Não começa com' },
   { value: 'ends_with', label: 'Termina com' },
   { value: 'exists', label: 'Existe' },
 ]

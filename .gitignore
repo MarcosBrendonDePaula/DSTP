@@ -19,3 +19,4 @@ dist/
 relay-dev/
 .audit/
 .gitmsg
+examples/flows/AI.json

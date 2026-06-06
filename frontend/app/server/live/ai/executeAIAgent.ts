@@ -45,8 +45,8 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   teleport: 'Teleport a player to coordinates x,z (needs userid, x, z).',
   teleport_to_player: 'Teleport one player to another.',
   give_item: 'Give an item (prefab) to a player (needs userid, prefab, count).',
-  spawn_prefab: 'Spawn an entity at coordinates (prefab, x, z).',
-  spawn_at_player: 'Spawn an entity at a player\'s position (needs userid, prefab).',
+  spawn_prefab: 'Spawn an entity at coordinates (prefab, x, z). prefab is the exact DST prefab id. Bosses: deerclops, bearger, moose (Moose/Goose), dragonfly, antlion, beequeen, klaus, toadstool, minotaur (Ancient Guardian), crabking, malbatross. Common mobs: hound, spider, pigman, merm, rabbit, beefalo.',
+  spawn_at_player: 'Spawn an entity at a player\'s position (needs userid, prefab). Same prefab ids as spawn_prefab — use this when you have a userid and want it next to that player.',
   set_season: 'Change the world season (autumn/winter/spring/summer).',
   set_phase: 'Change the time of day (day/dusk/night).',
   skip_day: 'Advance the world by N days.',
@@ -147,21 +147,35 @@ export function toolNameFor(node: FlowNode, used: Set<string>): string {
 }
 
 // Generate a JSON Schema (object) from a node's params. Only EMPTY params become
-// inputs the model fills — params already set on the node (e.g. chat_send name=
-// "[IA]") are FIXED by the flow author and must not be overridable by the model.
-// A param value that looks like an unresolved template ("{{...}}") counts as a
-// placeholder hint, so it's exposed as a fillable input too.
+// inputs the model fills. A param the author already set is FIXED and must NOT be
+// overridable by the model — this includes a `{{...}}` TEMPLATE: writing
+// `x = {{trigger.x}}` means "the engine resolves this from context", not "model,
+// invent a value". (Previously templates were exposed as fillable inputs, which made
+// the model guess coordinates/ids it can't know — e.g. spawn at 0,0 in the ocean.)
+// If the author wants the model to choose a value, they leave the param blank.
+// Default hints for common param keys, so the model fills them with valid values
+// instead of guessing (it would otherwise see only "Parameter \"prefab\"" and default
+// to one it happened to learn). A node can override any of these via
+// meta.aiParamDescriptions. Kept here because the backend has no rich client catalog.
+const PARAM_HINTS: Record<string, string> = {
+  prefab: 'The exact DST prefab id to spawn. Bosses: deerclops, bearger, moose, dragonfly, antlion, beequeen, klaus, toadstool, minotaur, crabking, malbatross, eyeofterror. Mobs: hound, spider, pigman, merm, killerbee, tentacle, rabbit, beefalo, koalefant_summer. Pick one that fits the situation — vary it, don\'t always pick the same one.',
+  userid: 'The player\'s userid (e.g. from {{trigger.userid}}). Required to target a specific player.',
+  message: 'The text to say. Plain text, no emojis (DST renders them as "?").',
+  amount: 'A number, or "max" for full where supported.',
+}
+
 export function schemaForNode(node: FlowNode): Record<string, any> {
   const params = (node.data?.params || {}) as Record<string, any>
+  const overrides = (node.data?.aiParamDescriptions || {}) as Record<string, string>
   const properties: Record<string, any> = {}
   const required: string[] = []
   for (const key of Object.keys(params)) {
     const raw = params[key]
     const isEmpty = raw == null || raw === ''
-    const isTemplate = typeof raw === 'string' && raw.includes('{{')
-    if (!isEmpty && !isTemplate) continue // fixed by the author → not a model input
+    if (!isEmpty) continue // set by the author (literal or {{template}}) → not a model input
     const t = NUMERIC_KEYS.has(key) ? 'number' : BOOLEAN_KEYS.has(key) ? 'boolean' : 'string'
-    properties[key] = { type: t, description: `Parameter "${key}"` }
+    const description = overrides[key] || PARAM_HINTS[key] || `Parameter "${key}"`
+    properties[key] = { type: t, description }
     required.push(key)
   }
   return { type: 'object', properties, additionalProperties: false, required }
@@ -243,6 +257,11 @@ export async function executeAIAgent(
   // memory off, fall back to a single-shot prompt.
   const history: ChatTurn[] = memoryEnabled ? (deps.loadHistory!(scopeKey) || []) : []
   const llm = buildModel(provider, model, apiKey)
+  // Abort the agentic loop (mid-LLM-call / between steps) when the flow is deleted or
+  // disabled — context._signal is the flow run's AbortSignal. Without this, a long
+  // multi-step ai_agent keeps calling the API after you turned the flow off.
+  const signal: AbortSignal | undefined = context?._signal
+  if (signal?.aborted) return { aborted: true, text: '' }
   const result = await generateText({
     model: llm,
     system,
@@ -252,6 +271,7 @@ export async function executeAIAgent(
     tools,
     stopWhen: stepCountIs(maxSteps),
     ...(temperature != null && Number.isFinite(temperature) ? { temperature } : {}),
+    ...(signal ? { abortSignal: signal } : {}),
   })
 
   const text = String(result.text ?? '')
