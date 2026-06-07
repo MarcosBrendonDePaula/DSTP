@@ -64,6 +64,18 @@ import { meta as splitMeta } from '@shared/automation/nodes/data/transform/split
 import { ui as splitUi } from '@shared/automation/nodes/data/transform/split/ui'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { ui as actionUi } from '@shared/automation/nodes/actions/game/action/ui'
+import { meta as teleportMeta } from '@shared/automation/nodes/actions/game/teleport/meta'
+import { ui as teleportUi } from '@shared/automation/nodes/actions/game/teleport/ui'
+import { meta as healMeta } from '@shared/automation/nodes/actions/game/heal/meta'
+import { ui as healUi } from '@shared/automation/nodes/actions/game/heal/ui'
+import { meta as kickMeta } from '@shared/automation/nodes/actions/game/kick/meta'
+import { ui as kickUi } from '@shared/automation/nodes/actions/game/kick/ui'
+import { meta as killMeta } from '@shared/automation/nodes/actions/game/kill/meta'
+import { ui as killUi } from '@shared/automation/nodes/actions/game/kill/ui'
+import { meta as respawnMeta } from '@shared/automation/nodes/actions/game/respawn/meta'
+import { ui as respawnUi } from '@shared/automation/nodes/actions/game/respawn/ui'
+import { meta as giveItemMeta } from '@shared/automation/nodes/actions/game/give_item/meta'
+import { ui as giveItemUi } from '@shared/automation/nodes/actions/game/give_item/ui'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
 import { ui as uiPanelUi } from '@shared/automation/nodes/ui/builder/ui_panel/ui'
 import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
@@ -133,6 +145,12 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: transformMeta, ui: transformUi },
   { meta: splitMeta, ui: splitUi },
   { meta: actionMeta, ui: actionUi },
+  { meta: teleportMeta, ui: teleportUi },
+  { meta: healMeta, ui: healUi },
+  { meta: kickMeta, ui: kickUi },
+  { meta: killMeta, ui: killUi },
+  { meta: respawnMeta, ui: respawnUi },
+  { meta: giveItemMeta, ui: giveItemUi },
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },
   { meta: uiColMeta, ui: uiColUi },

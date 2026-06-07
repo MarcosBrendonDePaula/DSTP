@@ -5,17 +5,17 @@
 local C = KIT.new_checker()
 
 -- Fake DST _G: KEY_* constants keys.lua probes via rawget, plus TheInput.
-local heldMods = {}              -- [code]=true → IsKeyDown returns true
+local held = {}                  -- [code]=true → IsKeyDown returns true (any key)
 local capturedHandler = nil      -- the fn keys.lua passes to AddKeyHandler
 
 local G = KIT.make_G({
-  KEY_A = 65, KEY_H = 72, KEY_J = 74, KEY_K = 75,
+  KEY_A = 65, KEY_S = 83, KEY_D = 68, KEY_H = 72, KEY_J = 74, KEY_K = 75,
   KEY_F1 = 101, KEY_F2 = 102, KEY_F3 = 103,
   KEY_CTRL = 401, KEY_SHIFT = 402, KEY_ALT = 400,
   GetTime = function() return KIT.now end,
   TheInput = {
     AddKeyHandler = function(self, fn) capturedHandler = fn end,
-    IsKeyDown = function(self, code) return heldMods[code] == true end,
+    IsKeyDown = function(self, code) return held[code] == true end,
     GetWorldPosition = function(self) return { x = 10, z = 20 } end,
   },
 })
@@ -42,11 +42,12 @@ local function tap(code)
   capturedHandler(code, true)   -- up (clears _held so it can fire again)
 end
 
--- ── Setup watch: a bare H, plus all 3 combo modes ──
+-- ── Setup watch: a bare H, plus all 3 combo modes (simultaneous now = key list) ──
 Keys.SetWatch({
   keys = { "H" },  -- key_pressed on H
   combos = {
-    { id = "simul1", mode = "simultaneous", key = "A", modifiers = { "CTRL" } },
+    { id = "simul1", mode = "simultaneous", keys = { "CTRL", "A" } },  -- Ctrl+A
+    { id = "asd",    mode = "simultaneous", keys = { "A", "S", "D" } }, -- A+S+D (arbitrary keys!)
     { id = "seq1",   mode = "sequence",     keys = { "H", "J", "K" }, timeoutMs = 1000 },
     { id = "any1",   mode = "any",          keys = { "F1", "F2", "F3" } },
   },
@@ -60,14 +61,32 @@ C.check("key_pressed carries mouse world pos", pressed[1] and pressed[1].wx == 1
 -- H is also seq1 step 1, so seq advanced but didn't complete → no combo yet
 C.check("no combo from a single H", #combos == 0)
 
--- ── 2) simultaneous: A alone does nothing; Ctrl+A fires simul1 ──
+-- ── 2a) simultaneous Ctrl+A: A alone → nothing; A with Ctrl held → fires simul1 ──
 pressed, combos = {}, {}
 tap(65) -- A, no Ctrl
-C.check("A without Ctrl → no combo", #combos == 0)
-heldMods[401] = true  -- hold CTRL
+local s1 = false
+for _, c in ipairs(combos) do if c.id == "simul1" then s1 = true end end
+C.check("A without Ctrl → no simul1", not s1)
+held[401] = true  -- hold CTRL
 tap(65) -- A with Ctrl
-heldMods[401] = nil
-C.check("Ctrl+A fired simul1", #combos == 1 and combos[1].id == "simul1")
+held[401] = nil
+s1 = false
+for _, c in ipairs(combos) do if c.id == "simul1" then s1 = true end end
+C.check("Ctrl+A fired simul1", s1)
+
+-- ── 2b) simultaneous A+S+D (arbitrary keys, the user's case): only when all held ──
+pressed, combos = {}, {}
+tap(68) -- D alone (A,S not held)
+local asd = false
+for _, c in ipairs(combos) do if c.id == "asd" then asd = true end end
+C.check("D alone → no asd combo", not asd)
+held[65] = true; held[83] = true  -- hold A and S
+capturedHandler(68, false)        -- press D (down) while A+S held
+held[65] = nil; held[83] = nil
+capturedHandler(68, true)         -- release D
+asd = false
+for _, c in ipairs(combos) do if c.id == "asd" then asd = true end end
+C.check("A+S+D fired asd combo", asd)
 
 -- ── 3) sequence: H,J,K within the window completes seq1 ──
 pressed, combos = {}, {}

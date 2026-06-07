@@ -21,15 +21,13 @@ import type { NodeRunContext } from './nodes/types'
 
 // A key_combo the client should watch for. Mirrors the trigger's config; the client
 // (keys.lua) detects it and fires a `key_combo` event tagged with `id`.
-//   - simultaneous: `key` pressed while all `modifiers` (CTRL/SHIFT/ALT) are held
+//   - simultaneous: ALL of `keys` held at once (e.g. [CTRL,H] or [A,S,D] — any mix)
 //   - sequence:     `keys` pressed in order within `timeoutMs`
 //   - any:          any of `keys` pressed (event reports which)
 export interface KeyCombo {
   id: string
   mode: 'simultaneous' | 'sequence' | 'any'
-  key?: string            // simultaneous: the main key
-  keys?: string[]         // sequence/any: the key set
-  modifiers?: string[]    // simultaneous: subset of CTRL/SHIFT/ALT
+  keys: string[]          // the key set (all 3 modes use this)
   timeoutMs?: number      // sequence
 }
 
@@ -1439,11 +1437,13 @@ export class FlowEngine {
           const combo = this.comboFromNode(node)
           if (combo) {
             combos.push(combo)
-            // Every INDIVIDUAL key of a combo must enter the watch set, or the
-            // client's OnRawKey fast-path ignores it. Modifiers (CTRL/SHIFT/ALT)
-            // are queried via IsKeyDown, NOT watched — so they never go in `keys`.
-            if (combo.key) keys.add(combo.key)
-            for (const k of combo.keys ?? []) keys.add(k)
+            // The combo's NON-modifier keys must enter the watch set so the client's
+            // OnRawKey fires the check. Modifiers (CTRL/SHIFT/ALT) are only queried
+            // via IsKeyDown (they never reliably drive a down-edge), so they don't
+            // go in `keys`. (A simultaneous combo still needs at least one non-mod
+            // key to be triggerable — the UI should enforce that.)
+            const MODS = new Set(['CTRL', 'SHIFT', 'ALT'])
+            for (const k of combo.keys) if (!MODS.has(k)) keys.add(k)
           }
         }
       }
@@ -1461,15 +1461,13 @@ export class FlowEngine {
       if (Array.isArray(v)) return v.map(norm).filter(Boolean)
       return String(v ?? '').split(',').map(norm).filter(Boolean)
     }
-    if (mode === 'simultaneous') {
-      const key = norm(this.param(node, 'key'))
-      if (!key) return null
-      const modifiers = splitKeys(this.param(node, 'modifiers'))
-        .filter(m => m === 'CTRL' || m === 'SHIFT' || m === 'ALT')
-      return { id: node.id, mode, key, modifiers }
-    }
     const keys = splitKeys(this.param(node, 'keys'))
     if (keys.length === 0) return null
+    if (mode === 'simultaneous') {
+      // ALL of `keys` held at once. CTRL/SHIFT/ALT are just keys in the list (so
+      // "Ctrl+H" = [CTRL,H] and "A+S+D" = [A,S,D] — any mix works).
+      return { id: node.id, mode, keys }
+    }
     if (mode === 'sequence') {
       const timeoutMs = Math.max(100, Math.min(5000, Number(this.param(node, 'timeoutMs')) || 1000))
       return { id: node.id, mode, keys, timeoutMs }

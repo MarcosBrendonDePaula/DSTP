@@ -108,13 +108,13 @@ describe('collectWatchKeys — key_combo', () => {
   })
   const lastCombos = () => watchCalls.length ? (watchCalls[watchCalls.length - 1].combos ?? []) : []
 
-  it('simultaneous: main key in watch set, modifiers NOT, combo descriptor emitted', () => {
-    new FlowRepository(SERVER).save(comboFlow({ mode: 'simultaneous', key: 'h', modifiers: ['CTRL', 'SHIFT'] }))
+  it('simultaneous: non-mod keys in watch set, modifiers NOT, combo carries full key list', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'simultaneous', keys: 'ctrl, shift, h' }))
     engine.collectWatchKeys(SERVER)
-    expect(lastKeys()).toEqual(['H'])                 // main key in, CTRL/SHIFT out
+    expect(lastKeys()).toEqual(['H'])                 // only the non-modifier key is watched
     const c = lastCombos()
     expect(c).toHaveLength(1)
-    expect(c[0]).toMatchObject({ mode: 'simultaneous', key: 'H', modifiers: ['CTRL', 'SHIFT'] })
+    expect(c[0]).toMatchObject({ mode: 'simultaneous', keys: ['CTRL', 'SHIFT', 'H'] })
     expect(c[0].id).toBeString()
   })
 
@@ -135,10 +135,17 @@ describe('collectWatchKeys — key_combo', () => {
   it('key_pressed and a combo sharing a key dedupe in the flat set', () => {
     const repo = new FlowRepository(SERVER)
     repo.save(keyFlow('H'))
-    repo.save(comboFlow({ mode: 'simultaneous', key: 'H', modifiers: ['CTRL'] }))
+    repo.save(comboFlow({ mode: 'simultaneous', keys: 'ctrl, h' }))
     engine.collectWatchKeys(SERVER)
     expect(lastKeys()).toEqual(['H'])                 // H once
     expect(lastCombos()).toHaveLength(1)
+  })
+
+  it('simultaneous with arbitrary keys (A+S+D) watches all three, no modifiers needed', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'simultaneous', keys: 'a, s, d' }))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual(['A', 'D', 'S'])       // all non-mod keys watched
+    expect(lastCombos()[0]).toMatchObject({ mode: 'simultaneous', keys: ['A', 'S', 'D'] })
   })
 
   it('disabled combo flow is excluded', () => {

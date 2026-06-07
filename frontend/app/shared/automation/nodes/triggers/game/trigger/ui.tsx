@@ -159,6 +159,17 @@ export const WATCHABLE_KEYS = [
   { value: 'RIGHT', label: '→ Direita' },
 ]
 
+// Full key picker for the key_combo node — modifiers first, then the watchable keys
+// plus a few extra special keys. Each value must map to a DST KEY_* in keys.lua.
+export const COMBO_KEYS = [
+  { value: 'CTRL', label: 'Ctrl' },
+  { value: 'SHIFT', label: 'Shift' },
+  { value: 'ALT', label: 'Alt' },
+  ...WATCHABLE_KEYS,
+  { value: 'ENTER', label: 'Enter' },
+  { value: 'ESCAPE', label: 'Esc' },
+]
+
 export const ui = function TriggerNode({ id, data, selected }: any) {
   const updateNodeData = useNodeDataUpdater()
 
@@ -192,45 +203,53 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
         const p = data.params || {}
         const mode = p.mode || 'simultaneous'
         const setP = (patch: any) => updateNodeData(id, { ...data, params: { ...p, ...patch } })
-        const mods: string[] = Array.isArray(p.modifiers) ? p.modifiers : []
-        const toggleMod = (m: string) => setP({ modifiers: mods.includes(m) ? mods.filter(x => x !== m) : [...mods, m] })
+        // keys are stored as a comma string (backend splits on comma). Parse/serialize.
+        const chips: string[] = String(p.keys || '').split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+        const setChips = (next: string[]) => setP({ keys: next.join(', ') })
+        const addKey = (k: string) => { if (k && !chips.includes(k)) setChips([...chips, k]) }
+        const removeKey = (k: string) => setChips(chips.filter(c => c !== k))
+        const label = mode === 'sequence' ? 'Sequência (em ordem)' : 'Teclas (todas juntas)'
+        const hint = mode === 'simultaneous'
+          ? 'Dispara quando TODAS estão pressionadas (ex.: CTRL+H, ou A+S+D).'
+          : mode === 'sequence' ? 'Dispara ao apertar na ORDEM, dentro do tempo limite.'
+          : 'Dispara quando QUALQUER uma é apertada.'
         return (
           <>
             <NodeField label="Modo">
               <NodeSelect value={mode} onChange={(v: string) => setP({ mode: v })} options={COMBO_MODES} />
             </NodeField>
-            {mode === 'simultaneous' && (
-              <>
-                <NodeField label="Tecla principal">
-                  <NodeSelect value={p.key || ''} onChange={(v: string) => setP({ key: v })} options={WATCHABLE_KEYS} />
-                </NodeField>
-                <NodeField label="Modificadores">
-                  <div className="flex gap-2">
-                    {COMBO_MODIFIERS.map(m => (
-                      <label key={m} className="flex items-center gap-1 text-[9px] text-gray-400 cursor-pointer">
-                        <input type="checkbox" checked={mods.includes(m)} onChange={() => toggleMod(m)} />
-                        {m}
-                      </label>
-                    ))}
-                  </div>
-                </NodeField>
-              </>
-            )}
+            <NodeField label={label}>
+              <div>
+                {/* chosen keys as removable chips */}
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {chips.length === 0 && <span className="text-[9px] text-gray-500">nenhuma tecla</span>}
+                  {chips.map((k, i) => (
+                    <button key={k} onClick={() => removeKey(k)}
+                      className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 text-[9px] hover:bg-red-500/30 hover:text-red-300"
+                      title="clique para remover">
+                      {mode === 'sequence' ? `${i + 1}. ${k}` : k} ✕
+                    </button>
+                  ))}
+                </div>
+                {/* picker: click a key to add it */}
+                <div className="flex flex-wrap gap-0.5 max-h-24 overflow-y-auto p-1 rounded bg-black/20">
+                  {COMBO_KEYS.map(k => (
+                    <button key={k.value} onClick={() => addKey(k.value)}
+                      disabled={chips.includes(k.value)}
+                      className="px-1 py-0.5 rounded bg-white/5 text-gray-300 text-[8px] hover:bg-yellow-500/20 disabled:opacity-30"
+                      title={k.label}>
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </NodeField>
             {mode === 'sequence' && (
-              <>
-                <NodeField label="Sequência (vírgula)">
-                  <NodeInput value={p.keys || ''} onChange={(v: string) => setP({ keys: v })} placeholder="H, J, K" />
-                </NodeField>
-                <NodeField label="Tempo limite (ms)">
-                  <NodeInput value={p.timeoutMs || ''} onChange={(v: string) => setP({ timeoutMs: v })} placeholder="1000" />
-                </NodeField>
-              </>
-            )}
-            {mode === 'any' && (
-              <NodeField label="Teclas (vírgula)">
-                <NodeInput value={p.keys || ''} onChange={(v: string) => setP({ keys: v })} placeholder="F1, F2, F3" />
+              <NodeField label="Tempo limite (ms)">
+                <NodeInput value={p.timeoutMs || ''} onChange={(v: string) => setP({ timeoutMs: v })} placeholder="1000" />
               </NodeField>
             )}
+            <div className="text-[8px] text-gray-500 mt-1">{hint}</div>
           </>
         )
       })()}

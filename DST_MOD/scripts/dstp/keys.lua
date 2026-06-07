@@ -85,18 +85,20 @@ local function IsTyping()
 end
 
 -- All listed modifiers currently held? (generic CTRL/SHIFT/ALT via IsKeyDown).
-local function AllModsDown(mods)
+-- All `codes` currently held? `justPressed` is the code whose down edge we're on
+-- (IsKeyDown may not report it as down yet, so we treat it as held). Used by the
+-- simultaneous mode: e.g. A+S+D or Ctrl+H — any mix of normal + modifier keys.
+local function AllKeysDown(codes, justPressed)
     local TheInput = rawget(_G, "TheInput")
     if not (TheInput and TheInput.IsKeyDown) then return false end
-    for _, m in ipairs(mods or {}) do
-        local mc = _mod_code[m]
-        if not (mc and TheInput:IsKeyDown(mc)) then return false end
+    for _, c in ipairs(codes) do
+        if c ~= justPressed and not TheInput:IsKeyDown(c) then return false end
     end
     return true
 end
 
--- Any relevant modifier held? Used to suppress a bare key_pressed when a combo on the
--- same key is configured (so Ctrl+H fires the combo, not the plain H flow too).
+-- Any modifier (CTRL/SHIFT/ALT) currently held? Used to suppress a bare key_pressed
+-- when a simultaneous combo shares its key (so Ctrl+H fires the combo, not plain H).
 local function AnyModDown()
     local TheInput = rawget(_G, "TheInput")
     if not (TheInput and TheInput.IsKeyDown) then return false end
@@ -161,10 +163,11 @@ local function OnRawKey(code, is_up)
             end
         end
 
-        -- 2) simultaneous combos on this key
+        -- 2) simultaneous combos triggered by this key: fire if ALL the combo's keys
+        -- are held (this one counts as held since we're on its down edge).
         if _simul_by_code[code] then
             for _, combo in ipairs(_simul_by_code[code]) do
-                if AllModsDown(combo.modifiers) and SendComboRPC then
+                if AllKeysDown(combo.codes, code) and SendComboRPC then
                     SendComboRPC(combo.id, name, wx, wz)
                 end
             end
@@ -197,7 +200,14 @@ function M.Init(opts)
 end
 
 local function codeOf(name)
-    return _name_to_code[string.upper(tostring(name))]
+    local up = string.upper(tostring(name))
+    -- CTRL/SHIFT/ALT live in _mod_code (generic L+R codes), the rest in _name_to_code.
+    return _name_to_code[up] or _mod_code[up]
+end
+
+local function isModifier(name)
+    local up = string.upper(tostring(name))
+    return up == "CTRL" or up == "SHIFT" or up == "ALT"
 end
 
 -- Rebuild keys + combos from the backend payload. Accepts either a legacy ARRAY of
@@ -228,11 +238,33 @@ function M.SetWatch(payload)
         for _, c in ipairs(combos) do
             local mode = c.mode
             if mode == "simultaneous" then
-                local code = codeOf(c.key)
-                if code ~= nil then
-                    _watch[code] = true
-                    _simul_by_code[code] = _simul_by_code[code] or {}
-                    table.insert(_simul_by_code[code], { id = c.id, modifiers = c.modifiers or {} })
+                -- Resolve ALL keys; the combo fires when every one is held. The
+                -- TRIGGER keys (non-modifiers) go in _watch + _simul_by_code so their
+                -- down edge runs the check; modifiers are only probed via IsKeyDown.
+                local codes, hasTrigger = {}, false
+                for _, name in ipairs(c.keys or {}) do
+                    local code = codeOf(name)
+                    if code ~= nil then codes[#codes + 1] = code end
+                end
+                if #codes > 0 then
+                    local entry = { id = c.id, codes = codes }
+                    for _, name in ipairs(c.keys or {}) do
+                        local code = codeOf(name)
+                        if code ~= nil and not isModifier(name) then
+                            hasTrigger = true
+                            _watch[code] = true
+                            _simul_by_code[code] = _simul_by_code[code] or {}
+                            table.insert(_simul_by_code[code], entry)
+                        end
+                    end
+                    -- All-modifier combo (e.g. Ctrl+Shift): fall back to watching the
+                    -- first modifier's code as the trigger so it can still fire.
+                    if not hasTrigger then
+                        local code = codes[1]
+                        _watch[code] = true
+                        _simul_by_code[code] = _simul_by_code[code] or {}
+                        table.insert(_simul_by_code[code], entry)
+                    end
                 end
             elseif mode == "sequence" then
                 local codes = {}

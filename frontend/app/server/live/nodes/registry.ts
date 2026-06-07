@@ -65,6 +65,18 @@ import { meta as splitMeta } from '@shared/automation/nodes/data/transform/split
 import { handler as splitHandler } from '@shared/automation/nodes/data/transform/split/exec'
 import { meta as actionMeta } from '@shared/automation/nodes/actions/game/action/meta'
 import { handler as actionHandler } from '@shared/automation/nodes/actions/game/action/exec'
+import { meta as teleportMeta } from '@shared/automation/nodes/actions/game/teleport/meta'
+import { handler as teleportHandler } from '@shared/automation/nodes/actions/game/teleport/exec'
+import { meta as healMeta } from '@shared/automation/nodes/actions/game/heal/meta'
+import { handler as healHandler } from '@shared/automation/nodes/actions/game/heal/exec'
+import { meta as kickMeta } from '@shared/automation/nodes/actions/game/kick/meta'
+import { handler as kickHandler } from '@shared/automation/nodes/actions/game/kick/exec'
+import { meta as killMeta } from '@shared/automation/nodes/actions/game/kill/meta'
+import { handler as killHandler } from '@shared/automation/nodes/actions/game/kill/exec'
+import { meta as respawnMeta } from '@shared/automation/nodes/actions/game/respawn/meta'
+import { handler as respawnHandler } from '@shared/automation/nodes/actions/game/respawn/exec'
+import { meta as giveItemMeta } from '@shared/automation/nodes/actions/game/give_item/meta'
+import { handler as giveItemHandler } from '@shared/automation/nodes/actions/game/give_item/exec'
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
 import { handler as uiPanelHandler } from '@shared/automation/nodes/ui/builder/ui_panel/exec'
 import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
@@ -115,6 +127,12 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: transformMeta, handler: transformHandler },
   { meta: splitMeta, handler: splitHandler },
   { meta: actionMeta, handler: actionHandler },
+  { meta: teleportMeta, handler: teleportHandler },
+  { meta: healMeta, handler: healHandler },
+  { meta: kickMeta, handler: kickHandler },
+  { meta: killMeta, handler: killHandler },
+  { meta: respawnMeta, handler: respawnHandler },
+  { meta: giveItemMeta, handler: giveItemHandler },
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },
   { meta: uiMenuMeta, handler: uiMenuHandler },
