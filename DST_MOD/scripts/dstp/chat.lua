@@ -179,6 +179,28 @@ local function HandleBuiltinCommand(userid, name, message, player)
         return true -- suppress
     end
 
+    -- #uitest [clear] — VISUAL UI smoke test (admin ONLY): creates one of each widget
+    -- on the admin's own HUD (label/panel/bar/button + clickable text/icon/image).
+    -- Each click logs "UITEST CLICK" to server_log. `#uitest clear` removes them.
+    if cmd == "#uitest" or cmd == "/uitest" or cmd == "#uitest clear" or cmd == "/uitest clear" then
+        if not IsAdmin() then
+            if player and player:IsValid() then SendPrivateMessage(player, "uitest: apenas admin.") end
+            return true
+        end
+        local uid = userid
+        local is_clear = cmd:find("clear", 1, true) ~= nil
+        if is_clear then
+            if core.ClearUITest then core.ClearUITest(uid) end
+            if player and player:IsValid() then SendPrivateMessage(player, "uitest: widgets removidos.") end
+        else
+            if core.RunUITest then core.RunUITest(uid) end
+            if player and player:IsValid() then
+                SendPrivateMessage(player, "uitest: widgets criados — clique em button/text/icone/imagem; veja 'UITEST CLICK' no server_log. #uitest clear remove.")
+            end
+        end
+        return true -- suppress
+    end
+
     return false
 end
 

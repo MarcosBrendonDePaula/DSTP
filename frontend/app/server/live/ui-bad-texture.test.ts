@@ -25,8 +25,9 @@ describe('mod ui_widgets.lua — a bad texture does not crash the render tree', 
 describe('mod ui_widgets.lua — icon/image build+size is pcall-guarded (structural)', () => {
   const ui = modSource('ui_widgets.lua')
   it('the icon branch guards SetSize inside the pcall (not just the constructor)', () => {
-    // The guarded block builds the Image AND calls SetSize inside one pcall.
-    expect(ui).toContain('img:SetSize(size, size)')
+    // The guarded block builds the Image AND calls SetSize inside one pcall. The icon
+    // supports rectangular sizing (iw/ih derived from width/height or square size).
+    expect(ui).toContain('img:SetSize(iw, ih)')
     expect(ui).toContain('Widget("noicon")')
   })
   it('the image branch falls back to a noimage placeholder', () => {

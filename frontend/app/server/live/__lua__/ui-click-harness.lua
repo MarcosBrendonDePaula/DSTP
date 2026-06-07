@@ -19,7 +19,8 @@ local function mkWidget(kind, ctorArgs)
         scaled = nil, inst = { IsValid = function() return true end },
         image = nil,
     }
-    -- ImageButton has a `.image` sub-widget with ScaleToSize.
+    -- ImageButton has a `.image` sub-widget (ScaleToSize) and ForceImageSize (which is
+    -- what sets the clickable hit region — recorded as w.sized).
     if kind == "ImageButton" then
         w.image = { ScaleToSize = function(_, ww, hh) w.scaled = { ww, hh } end }
     end
@@ -27,6 +28,8 @@ local function mkWidget(kind, ctorArgs)
         -- Recorded methods:
         if key == "AddChild" then
             return function(self, child) self.children[#self.children + 1] = child; child.parent = self; return child end
+        elseif key == "ForceImageSize" then
+            return function(self, ww, hh) self.sized = { ww, hh }; return self end
         elseif key == "SetOnClick" then
             return function(self, fn) self.onclick = fn; return self end
         elseif key == "GetRegionSize" then
@@ -89,8 +92,8 @@ check("clickable text: an ImageButton overlay was created", countKind("ImageButt
 local btn = nil
 for _, w in ipairs(created) do if w.kind == "ImageButton" then btn = w end end
 check("overlay: SetOnClick was wired", btn ~= nil and type(btn.onclick) == "function")
-check("overlay: blank.tex transparent atlas used", btn ~= nil and btn.ctorArgs[1] == "images/ui.xml" and btn.ctorArgs[2] == "blank.tex")
-check("overlay: ScaleToSize sized to the text region", btn ~= nil and btn.scaled ~= nil)
+check("overlay: opaque square.tex used (real hit region, made invisible via alpha-0)", btn ~= nil and btn.ctorArgs[1] == "images/global.xml" and btn.ctorArgs[2] == "square.tex")
+check("overlay: ForceImageSize set the clickable hit region", btn ~= nil and btn.sized ~= nil)
 
 -- ── Clicking fires ctx.callback_fn ONCE (debounce), with (callback, root_id) ──
 KIT.now = 1000
@@ -126,6 +129,34 @@ local ibtn = nil
 for _, w in ipairs(created) do if w.kind == "ImageButton" then ibtn = w end end
 if ibtn and ibtn.onclick then KIT.now = 2000; ibtn.onclick() end
 check("clickable image: click fires callback 'pick'", #fired == 1 and fired[1].cb == "pick")
+
+-- ── A text node with a NUMERIC `text` must not crash (#tostring guard) ─────
+-- (a template can resolve to a number; #number errors "attempt to get length").
+created = {}; fired = {}
+local ok_num = pcall(function()
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "tn", group = "gn",
+        tree = { type = "text", text = 42 } })
+end)
+check("numeric text does not crash (tostring guard)", ok_num == true)
+
+-- ── A tree with NON-NUMERIC / NON-TABLE props (templates that resolved badly) must
+-- not crash the renderer (the ui_builder literal-tree path doesn't coerce). Covers the
+-- type-hardening sweep: bar value/max/size strings, panel width/height strings, tabs/
+-- children as non-arrays, color as non-table. ──
+created = {}; fired = {}
+local ok_hard = pcall(function()
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "hard", group = "gh",
+        tree = { type = "panel", width = "oops", height = "nope", children = "not-a-table",
+            -- a column whose children resolved to a string, holding mixed bad nodes
+        } })
+    UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "hard2", group = "gh2",
+        tree = { type = "col", gap = "x", children = {
+            { type = "bar", value = "50%", max = "N/A", width = "200px", height = "" },
+            { type = "text", text = "ok", size = "big", color = 5 },
+            { type = "tabs", active = "two", tabs = "not-array" },
+        } } })
+end)
+check("non-numeric/non-table props do not crash the renderer", ok_hard == true)
 
 -- ── The OLD broken path is GONE: no OnControl/SetClickable wiring remains ──
 -- (structural assertion lives in the TS test; here we just confirm behavior.)

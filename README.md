@@ -79,9 +79,10 @@ n8n-style drag-and-drop editor. **11 node types**, **88 triggers**, **60+ action
 
 ### 🖥 In-game UI — *built by flows*
 - **🎨 UI Builder** — assemble the whole interface **in a single node**, with a visual tree editor (clean canvas)
-- **Generic client-side renderer** with **auto-layout**: panel, column, row, **tabs**, text, **real item icon**, image, button, progress bar, spacer
+- **Generic client-side renderer** with **auto-layout**: panel, column, row, **tabs**, text, **real item icon**, image, button, progress bar, spacer, **text input**
 - **`ui_set`** — update **any property** of any node in real time, without redrawing (balance, health bar, show/hide)
-- **Click any widget** → becomes a `ui_callback` trigger in the flow
+- **Click any widget** (text/icon/image/button) → becomes a `ui_callback` trigger in the flow
+- **Draggable windows** (`panel draggable=true`) and an **editable text field** (Enter returns the typed value to the flow) — all validated on the real engine
 - Client-side **tabs** (switch with no round-trip) and **follow-entity** (a HUD that tracks a mob/boss in the world)
 - Declarative **rules engine**: reactive local HUD (live HP bar) with no backend round-trip
 
@@ -133,6 +134,35 @@ Open `http://localhost:3000/?server=<SERVER_ID>` — the panel connects on its o
 
 ---
 
+## 🧪 Testing
+
+Two layers, because the DST mod is Lua and some behavior only exists on the real engine:
+
+**Automated (CI) — `cd frontend && bun run test:unit`.** The backend has a full suite,
+plus a **fengari test kit** (`app/server/live/mod-test-kit.ts`) that runs the mod's REAL
+Lua modules (core/commands/rules_engine/ui_widgets/…) under a Lua-in-JS interpreter with
+a mocked `_G`. This tests mod *behavior* (event coalescing, debounce, the loop watchdog,
+the UI tree) without a running game.
+
+**In-game (admin-only chat commands)** — for what the fengari kit can't see (the engine's
+input/focus hit-test, `debug.sethook` preemption, strict mode, net_string):
+
+| Command | What it does |
+|---------|--------------|
+| `#selftest` | Runs assertions in the **live master sim** (coalescing, per-player debounce, loop watchdog, execute gate) and PMs a PASS/FAIL summary; full results in `server_log.txt` (`DSTP SELF-TEST`). |
+| `#uitest` / `#uitest clear` | Spawns one of each HUD widget — label, bar, button, **clickable text/icon/image**, a **draggable panel** (drag the title bar, X closes), and an **editable text field** (type, Enter sends) — on the admin's screen; clicks/inputs log `UITEST CLICK`. Add `hit_debug=true` on a node to tint its clickable region. |
+
+Both are gated to admins and never reach public chat. Each has a fengari **meta-test**
+(`selftest-module.test.ts` / `uitest-module.test.ts`) that runs the real module so a
+false in-game result or state leak is caught in CI first.
+
+> Why both: the click fix for in-game text/icon/image (#16) passed every automated test
+> yet failed on a real click — DST routes clicks by *focus* and only a focused widget
+> whose entity wins the engine hit-test receives them. `#uitest` is what surfaced and
+> then confirmed the fix.
+
+---
+
 ## 📦 Structure
 
 ```
@@ -142,9 +172,11 @@ DST_MOD/                          # DST mod (Lua)
     client.lua                    #   HTTP bridge, ~40 commands, listeners (server-side)
     ui_widgets.lua                #   client-side UI renderer (tree + auto-layout + follow)
     rules_engine.lua              #   declarative when/do rules (reactive on the client)
+    selftest.lua · uitest.lua     #   in-game test runners (#selftest / #uitest, admin-only)
   specs/                          #   non-obvious technical knowledge — READ before changing
 frontend/                         # FluxStack app (Bun + Elysia + React 19)
   app/server/live/                #   LiveDSTP, LiveAutomation, FlowEngine, ServerCoreManager
+  app/server/live/mod-test-kit.ts #   run the mod's REAL Lua under fengari (behavioral tests)
   app/server/db/                  #   Drizzle schema, repositories, migrations (1 db per server)
   app/client/src/automation/      #   React Flow editor, nodes, UI Builder
 # (the relay lives in a separate repo: github.com/MarcosBrendonDePaula/dstp-relay)

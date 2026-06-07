@@ -44,7 +44,7 @@ local function ResolveFont(name)
 end
 
 local function ResolveColor(c)
-    if not c then return {1, 1, 1, 1} end
+    if type(c) ~= "table" then return {1, 1, 1, 1} end
     return {c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1}
 end
 
@@ -246,9 +246,11 @@ local RenderNode  -- forward decl (recursive)
 -- Render every child, then stack them along one axis with `gap`. `axis` is
 -- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
 local function LayoutChildren(node, container, ctx, axis)
-    local gap = node.gap or 8
+    local gap = tonumber(node.gap) or 8
     local kids = {}
-    for _, childdef in ipairs(node.children or {}) do
+    -- children may be a non-table on the ui_builder literal-tree path (an author bound it
+    -- to a template that resolved to a non-array); guard so ipairs doesn't crash.
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
         local cw, ch
         local cwidget
         cwidget, cw, ch = RenderNode(childdef, container, ctx)
@@ -321,6 +323,40 @@ end
 -- riding the SAME ctx.callback_fn(cb, root_id) path the tree `button` uses → no new
 -- RPC/event/trigger. The overlay is a child of the primitive, co-located at (0,0); it
 -- does NOT change the (w,h) RenderNode returns, so layout is unaffected.
+-- Build an INVISIBLE, CLICKABLE hit target (an ImageButton) over a primitive. This is
+-- the load-bearing pattern for the whole "make a HUD thing clickable" problem:
+--
+-- HUD click routing is FOCUS-based: the engine hit-test (GetEntitiesAtScreenPoint) only
+-- returns entities with a REAL clickable region; that entity gains focus on hover, and
+-- only a FOCUSED widget's OnControl fires (button.lua:59). A blank/transparent texture
+-- wins NO hit-test, so a transparent overlay never focuses and the click falls through
+-- to the world (the player walks). So: an OPAQUE tex (square.tex) for a real hit region,
+-- made invisible via per-state alpha-0 colours (NOT a one-time tint — OnGainFocus would
+-- re-show it), scale_on_focus=false (else hover grows it 1.2x and resets the texture to a
+-- square), ForceImageSize for the region, SetClickable(true), MoveToFront. Returns the
+-- ImageButton; caller wires SetOnClick / OnMouseButton.
+local function MakeHitTarget(parent, w, h, pad, debug)
+    local ImageButton = _G.require("widgets/imagebutton")
+    local hit = parent:AddChild(ImageButton("images/global.xml", "square.tex", "square.tex", "square.tex"))
+    hit.scale_on_focus = false
+    pad = pad or 0
+    if hit.ForceImageSize and w and h and w > 0 and h > 0 then
+        hit:ForceImageSize(w + pad * 2, h + pad * 2)
+    end
+    local a = debug and { 1, 0, 0, 0.35 } or { 1, 1, 1, 0 }
+    if hit.SetImageNormalColour then
+        hit:SetImageNormalColour(a[1], a[2], a[3], a[4])
+        hit:SetImageFocusColour(a[1], a[2], a[3], a[4])
+        if hit.SetImageDisabledColour then hit:SetImageDisabledColour(a[1], a[2], a[3], a[4]) end
+    elseif hit.image and hit.image.SetTint then
+        hit.image:SetTint(a[1], a[2], a[3], a[4])
+    end
+    hit:SetPosition(0, 0, 0)
+    if hit.SetClickable then hit:SetClickable(true) end
+    hit:MoveToFront()
+    return hit
+end
+
 local function MaybeClickable(widget, node, ctx, w, h)
     if not node.callback then return end
     local cb = node.callback
@@ -331,15 +367,67 @@ local function MaybeClickable(widget, node, ctx, w, h)
         last = now
         if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
     end
-    local ImageButton = _G.require("widgets/imagebutton")
-    -- Transparent hit target overlaid on the primitive. "images/ui.xml"/"blank.tex" is
-    -- the same fully-transparent atlas/tex DST uses for its own text hit-areas.
-    local hit = widget:AddChild(ImageButton("images/ui.xml", "blank.tex", "blank.tex", "blank.tex", nil, nil, {1, 1}, {0, 0}))
-    if hit.image and hit.image.ScaleToSize and w and h and w > 0 and h > 0 then
-        hit.image:ScaleToSize(w, h)
-    end
-    hit:SetPosition(0, 0, 0)
+    -- pad: Text's GetRegionSize can under-report the glyphs, so inflate a touch so the
+    -- whole string is clickable. node.hit_pad tunes it; default 8.
+    local pad = (node.hit_pad ~= nil) and node.hit_pad or 8
+    local hit = MakeHitTarget(widget, w, h, pad, node.hit_debug)
     hit:SetOnClick(fire)
+end
+
+-- Make a window draggable by a title-bar hit target. `dragArea` is the invisible
+-- ImageButton the user grabs; `target` is the widget that MOVES (the panel holder /
+-- tree root). On mouse-down we record the cursor→target offset and start a per-frame
+-- OnUpdate that pins the target under the cursor; on mouse-up we stop. Uses
+-- TheInput:GetScreenPosition (vanilla's own drag input, e.g. widget.lua:537) — the
+-- engine fully supports this; nothing DST-specific blocks it.
+local function MakeDraggable(dragArea, target)
+    -- The title bar's OnMouseButton only STARTS the drag. The tracking + end are done by
+    -- GLOBAL input handlers (TheInput:AddMoveHandler / AddMouseButtonHandler), which fire
+    -- regardless of focus/hover — so a fast move that leaves the bar doesn't stop the drag
+    -- (the earlier OnUpdate+IsControlPressed approach was focus-gated and stalled), and
+    -- there's no 1-frame startup delay (the move handler fires immediately).
+    local lastx, lasty = 0, 0
+    local move_handle, btn_handle = nil, nil
+
+    local function scaleXY()
+        local parent = target.parent
+        if parent and parent.GetScale then
+            local s = parent:GetScale()
+            if s then return (s.x ~= 0 and s.x) or 1, (s.y ~= 0 and s.y) or 1 end
+        end
+        return 1, 1   -- target is in PROPORTIONAL HUD space; divide screen px by its scale
+    end
+
+    local function stop()
+        if move_handle then move_handle:Remove(); move_handle = nil end
+        if btn_handle then btn_handle:Remove(); btn_handle = nil end
+    end
+
+    dragArea.OnMouseButton = function(self, button, down, x, y)
+        if button ~= _G.MOUSEBUTTON_LEFT then return false end
+        if down then
+            if move_handle then return true end  -- already dragging
+            local p = _G.TheInput:GetScreenPosition(); lastx, lasty = p.x, p.y
+            target:MoveToFront()
+            -- Global move: fires on EVERY cursor move during the drag, no focus needed.
+            move_handle = _G.TheInput:AddMoveHandler(function(mx, my)
+                local dx, dy = mx - lastx, my - lasty
+                lastx, lasty = mx, my
+                if dx ~= 0 or dy ~= 0 then
+                    local sx, sy = scaleXY()
+                    local tp = target:GetPosition()
+                    target:SetPosition(tp.x + dx / sx, tp.y + dy / sy)
+                end
+            end)
+            -- Global mouse-up: ends the drag even if released off the bar.
+            btn_handle = _G.TheInput:AddMouseButtonHandler(function(btn, bdown)
+                if btn == _G.MOUSEBUTTON_LEFT and not bdown then stop() end
+            end)
+        else
+            stop()
+        end
+        return true
+    end
 end
 
 RenderNode = function(node, parent, ctx)
@@ -353,12 +441,15 @@ RenderNode = function(node, parent, ctx)
     if t == "col" or t == "row" then
         local c = parent:AddChild(Widget("col_row"))
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
-        return c, w, h
+        -- Optional fixed size: when width/height are set, REPORT that size to the parent
+        -- layout (overrides the measured content size). Content still lays out by gap; this
+        -- only changes the slot the container claims. Unset = auto-size (unchanged).
+        return c, tonumber(node.width) or w, tonumber(node.height) or h
 
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
         -- active tab's content is shown. Switching is fully client-side.
-        local tabs = node.tabs or {}
+        local tabs = type(node.tabs) == "table" and node.tabs or {}  -- guard non-array
         local holder = parent:AddChild(Widget("tabs"))
         local barH = 40
         local gap = 8
@@ -418,26 +509,43 @@ RenderNode = function(node, parent, ctx)
 
         -- Content stack sits below the bar.
         for _, pg in ipairs(pages) do pg:SetPosition(0, contentY, 0) end
-        activate((node.active or 0) + 1)
+        activate((tonumber(node.active) or 0) + 1)
 
         local totalW = math.max(contentW, totalBar)
         return holder, totalW, totalH
 
     elseif t == "text" then
-        local txt = parent:AddChild(Text(ResolveFont(node.font), node.size or 18, node.text or ""))
+        -- size/wrap_* are NOT numeric-coerced on the ui_builder literal-tree path, so a
+        -- template that resolved to a non-number would crash the arithmetic / native
+        -- setters below. Coerce once up front.
+        local sz = tonumber(node.size) or 18
+        local txt = parent:AddChild(Text(ResolveFont(node.font), sz, tostring(node.text or "")))
         local col = ResolveColor(node.color)
         txt:SetColour(col[1], col[2], col[3], col[4])
-        if node.wrap_width then
-            txt:SetRegionSize(node.wrap_width, node.wrap_height or 60)
+        -- A fixed text box: width/height (or the legacy wrap_width/wrap_height) set the
+        -- region + enable word-wrap. width is the intuitive alias for wrap_width.
+        local fixW = tonumber(node.width) or tonumber(node.wrap_width)
+        local fixH = tonumber(node.height) or tonumber(node.wrap_height)
+        if fixW then
+            txt:SetRegionSize(fixW, fixH or 60)
             txt:EnableWordWrap(true)
         end
         -- Optional alignment within a sized region (used by the folded panel body).
         if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
         if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
-        local w, h = txt:GetRegionSize()
-        w = w or (#(node.text or "") * (node.size or 18) * 0.5)
-        h = h or (node.size or 18)
-        MaybeClickable(txt, node, ctx, w, h)
+        local rw, rh = txt:GetRegionSize()
+        -- LAYOUT size: an explicit width/height wins; else the measured region (with a
+        -- per-char/size fallback if nil/0). node.text may be a NUMBER (template), so
+        -- tostring before length (#number errors).
+        local txtlen = #tostring(node.text or "")
+        local w = fixW or ((rw and rw > 0) and rw or (txtlen * sz * 0.5))
+        local h = fixH or ((rh and rh > 0) and rh or sz)
+        -- HITBOX size: GetRegionSize can under-report the rendered glyphs, leaving the
+        -- text edges unclickable. Feed MaybeClickable the LARGER of the measured region
+        -- and a per-char estimate so the overlay always covers the whole string — this
+        -- does NOT affect layout (the return below uses the measured w,h).
+        local hit_w = math.max(w, txtlen * sz * 0.5)
+        MaybeClickable(txt, node, ctx, hit_w, h)
         Register(ctx, node, txt, function(props)
             if props.text ~= nil and txt.inst:IsValid() then txt:SetString(tostring(props.text)) end
             if props.color and txt.inst:IsValid() then local c = ResolveColor(props.color); txt:SetColour(c[1], c[2], c[3], c[4]) end
@@ -449,7 +557,10 @@ RenderNode = function(node, parent, ctx)
         local atlas, tex
         if node.atlas and node.tex then atlas, tex = node.atlas, node.tex
         else atlas, tex = ResolveItemAtlas(node.prefab or "log") end
+        -- size = square default; width/height override for a rectangular icon.
         local size = tonumber(node.size) or 56
+        local iw = tonumber(node.width) or size
+        local ih = tonumber(node.height) or size
         local img
         -- Build AND size inside the pcall: a missing/invalid .tex makes the engine's
         -- Image construct a widget whose SetSize then errors ("SetSize on bad self") —
@@ -457,21 +568,21 @@ RenderNode = function(node, parent, ctx)
         -- falls through to the empty placeholder below instead of crashing the render.
         local ok = _G.pcall(function()
             img = parent:AddChild(Image(atlas, tex))
-            img:SetSize(size, size)
+            img:SetSize(iw, ih)
         end)
         if ok and img then
-            MaybeClickable(img, node, ctx, size, size)
+            MaybeClickable(img, node, ctx, iw, ih)
             Register(ctx, node, img, function(props)
                 if not img.inst:IsValid() then return end
                 if props.prefab then local a, x = ResolveItemAtlas(props.prefab); img:SetTexture(a, x) end
                 if props.atlas and props.tex then img:SetTexture(props.atlas, props.tex) end
                 if props.tint then local c = ResolveColor(props.tint); img:SetTint(c[1], c[2], c[3], c[4]) end
             end)
-            return img, size, size
+            return img, iw, ih
         end
         -- Build failed (bad texture) — drop the half-built image and use a placeholder.
         if img and img.Kill then _G.pcall(function() img:Kill() end) end
-        return parent:AddChild(Widget("noicon")), size, size
+        return parent:AddChild(Widget("noicon")), iw, ih
 
     elseif t == "image" then
         local size = tonumber(node.size) or 64
@@ -505,7 +616,7 @@ RenderNode = function(node, parent, ctx)
             "button_carny_long_normal.tex", "button_carny_long_hover.tex",
             "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
         btn:SetScale(bw / 340, bh / 70)
-        local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, node.text or "OK"))
+        local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, tostring(node.text or "OK")))
         local col = ResolveColor(node.color)
         label:SetColour(col[1], col[2], col[3], col[4])
         local last = -1
@@ -522,11 +633,74 @@ RenderNode = function(node, parent, ctx)
         end)
         return holder, bw, bh
 
+    elseif t == "text_input" then
+        -- Editable text field. The engine supports this on the HUD via TextEdit +
+        -- SetForceEdit(true): SetEditing(true) then routes ALL keystrokes to this widget
+        -- (TheFrontEnd:SetForceProcessTextInput) AND suppresses WASD/hotkeys (the player
+        -- controller's IsEnabled goes false while a field has input focus). No modal
+        -- screen needed. On Enter the typed string rides the EXISTING ui_callback path as
+        -- callback_data (read in a flow as {{trigger.callback_data.value}}).
+        local TextEdit = _G.require("widgets/textedit")
+        local iw = node.width or 220
+        local ih = node.height or 36
+        local holder = parent:AddChild(Widget("text_input"))
+        local bg = holder:AddChild(Image("images/global.xml", "square.tex"))
+        bg:SetSize(iw, ih); bg:SetTint(0.05, 0.05, 0.07, 0.85)
+        -- DST's TextEdit hardcodes idle_text_color/edit_text_color to BLACK ({0,0,0,1},
+        -- textedit.lua:28-29) and RE-APPLIES them on SetEditing in/out — overwriting the
+        -- constructor colour. So the field always looked black. Set BOTH to our colour
+        -- (default white) so the typed text is visible in idle AND editing states.
+        local col = ResolveColor(node.color)
+        local te = holder:AddChild(TextEdit(ResolveFont(node.font), node.size or 22, tostring(node.value or ""), col))
+        te.idle_text_color = { col[1], col[2], col[3], col[4] }
+        te.edit_text_color = { col[1], col[2], col[3], col[4] }
+        te:SetColour(col[1], col[2], col[3], col[4])
+        if te.SetRegionSize then te:SetRegionSize(iw - 12, ih) end
+        te:SetForceEdit(true)  -- REQUIRED on the HUD: enables the force-process keyboard grab
+        if node.max and te.SetTextLengthLimit then te:SetTextLengthLimit(node.max) end
+        if node.password and te.SetPassword then te:SetPassword(true) end
+        if node.placeholder and te.SetTextPrompt then te:SetTextPrompt(tostring(node.placeholder), { 0.6, 0.6, 0.6, 1 }) end
+        if node.valid_chars and te.SetCharacterFilter then te:SetCharacterFilter(node.valid_chars) end
+        if node.invalid_chars and te.SetInvalidCharacterFilter then te:SetInvalidCharacterFilter(node.invalid_chars) end
+
+        local cb = node.callback
+        local last = -1
+        local function submit()
+            if not cb or not ctx.callback_fn then return end
+            local now = _G.GetTime and _G.GetTime() or 0
+            if last >= 0 and (now - last) < 0.3 then return end  -- debounce vs double-fire
+            last = now
+            local s = (node.password and te.GetLineEditString) and te:GetLineEditString() or te:GetString()
+            ctx.callback_fn(cb, ctx.root_id, { value = s or "", id = node.id })
+            if node.clear_on_submit and te.SetString then te:SetString("") end
+        end
+        te.OnTextEntered = function() submit() end                          -- Enter commit
+        if node.submit_on_blur then te.OnStopForceEdit = function() submit() end end  -- blur commit
+
+        -- A bare TextEdit on the HUD isn't focusable; reuse the opaque hit target so a
+        -- click starts editing (which grabs the keyboard).
+        local hit = MakeHitTarget(holder, iw, ih, 0, node.hit_debug)
+        hit:SetOnClick(function() te:SetEditing(true) end)
+        -- Remember the field so the tree-destroy path can release the keyboard grab.
+        ctx.text_fields = ctx.text_fields or {}
+        ctx.text_fields[#ctx.text_fields + 1] = te
+
+        Register(ctx, node, holder, function(props)
+            if not te.inst:IsValid() then return end
+            if props.value ~= nil and te.SetString then te:SetString(tostring(props.value)) end
+            if props.text ~= nil and te.SetString then te:SetString(tostring(props.text)) end
+            if props.placeholder ~= nil and te.SetTextPrompt then te:SetTextPrompt(tostring(props.placeholder), { 0.6, 0.6, 0.6, 1 }) end
+            if props.color and te.SetColour then local c = ResolveColor(props.color); te:SetColour(c[1], c[2], c[3], c[4]) end
+        end)
+        return holder, iw, ih
+
     elseif t == "bar" then
-        local bw = node.width or 200
-        local bh = node.height or 16
-        local value = math.max(0, math.min(node.value or 0, node.max or 1))
-        local maxv = node.max or 1
+        -- Coerce all numerics once (ui_builder literal-tree path doesn't num()-coerce, so
+        -- a template resolving to a non-number would crash the arithmetic below).
+        local bw = tonumber(node.width) or 200
+        local bh = tonumber(node.height) or 16
+        local maxv = tonumber(node.max) or 1
+        local value = math.max(0, math.min(tonumber(node.value) or 0, maxv))
         local pct = maxv > 0 and (value / maxv) or 0
         local holder = parent:AddChild(Widget("bar"))
         local bgc = ResolveColor(node.bg_color or {0.2, 0.2, 0.2, 1})
@@ -570,18 +744,22 @@ RenderNode = function(node, parent, ctx)
         local holder = parent:AddChild(Widget("panel"))
         local bg = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
         local border = holder:AddChild(Image("images/fepanel_fills.xml", "panel_fill_tiny.tex"))
-        local fixed = node.width ~= nil and node.height ~= nil
+        -- Coerce width/height: a non-numeric value (ui_builder template) must NOT enter
+        -- fixed mode and crash the arithmetic (ph/2-25, pw-40). Only fixed when BOTH
+        -- coerce to a number.
+        local fw, fh = tonumber(node.width), tonumber(node.height)
+        local fixed = fw ~= nil and fh ~= nil
         local pw, ph
         local title_txt, body_txt
         if fixed then
-            pw, ph = node.width, node.height
+            pw, ph = fw, fh
             if node.title then
-                title_txt = holder:AddChild(Text(_G.TITLEFONT, node.title_size or 24, tostring(node.title)))
+                title_txt = holder:AddChild(Text(_G.TITLEFONT, tonumber(node.title_size) or 24, tostring(node.title)))
                 title_txt:SetColour(1, 1, 0.8, 1)
                 title_txt:SetPosition(0, ph / 2 - 25, 0)
             end
             if node.body then
-                body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, node.body_size or 18, tostring(node.body)))
+                body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, tonumber(node.body_size) or 18, tostring(node.body)))
                 body_txt:SetColour(1, 1, 1, 1)
                 body_txt:SetRegionSize(pw - 40, ph - 80)
                 if body_txt.SetHAlign and _G.ANCHOR_LEFT then body_txt:SetHAlign(_G.ANCHOR_LEFT) end
@@ -596,18 +774,35 @@ RenderNode = function(node, parent, ctx)
             local content = holder:AddChild(Widget("content"))
             local cw, ch = LayoutChildren(node, content, ctx, "y")
             local padX, padY = 28, 28
-            pw = math.max(node.min_width or 160, cw + padX * 2)
-            ph = math.max(node.min_height or 80, ch + padY * 2)
+            pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
+            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2)
         end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
-        -- close button
+        -- Draggable window: a title-bar hit target the user grabs to move the whole panel.
+        -- Created BEFORE the close button so the close button's later MoveToFront keeps it
+        -- ON TOP and clickable. The bar leaves a GENEROUS gap on the right for the close
+        -- button (the X) so the drag overlay never covers the X's hit area.
+        local CLOSE_GAP = 64
+        if node.draggable then
+            local barH = node.drag_height or 44
+            local barW = (node.closeable ~= false) and (pw - CLOSE_GAP) or pw
+            local drag = MakeHitTarget(holder, barW, barH, 0, node.hit_debug)
+            drag:SetPosition(-(pw - barW) / 2, ph / 2 - barH / 2, 0)  -- top strip, left of the X
+            MakeDraggable(drag, holder)
+        end
+        -- close button (after the drag bar so its MoveToFront wins z-order over the bar)
         if node.closeable ~= false then
             local close_btn = holder:AddChild(ImageButton(
                 "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
-            close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetScale(0.4)
+            -- Give the X an explicit, generous hit region (the scaled tex alone can be a
+            -- tiny target) and force it into the hit-test, mirroring MakeHitTarget.
+            if close_btn.ForceImageSize then close_btn:ForceImageSize(64, 64) end
+            if close_btn.SetClickable then close_btn:SetClickable(true) end
+            close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
+            close_btn:MoveToFront()
         end
         -- Make title/body addressable so update-by-name patches them in place.
         Register(ctx, node, holder, function(props)
@@ -631,7 +826,19 @@ CreateTree = function(cmd)
     RenderNode(cmd.tree, w, ctx)
     local ax, ay = AnchorOffset(cmd.anchor or "center")
     w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
-    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId }
+    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
+end
+
+-- Release the keyboard grab of any editing text_input in an entry, so destroying a tree
+-- while a field is being edited doesn't leave the player unable to move (force-process
+-- stays on until SetEditing(false)).
+local function ReleaseTextFields(entry)
+    if not (entry and entry.text_fields) then return end
+    for _, te in ipairs(entry.text_fields) do
+        if te.inst and te.inst:IsValid() and te.SetEditing then
+            local ok = _G.pcall(function() te:SetEditing(false) end)
+        end
+    end
 end
 
 --- Generic in-place update: patch any addressable node's props (text, color,
@@ -929,6 +1136,10 @@ function UIWidgets.DestroyWidget(cmd)
     if entry.task then
         entry.task:Cancel()
     end
+
+    -- Release any editing text_input keyboard grab BEFORE killing, so the player isn't
+    -- left unable to move if the tree is destroyed mid-edit.
+    ReleaseTextFields(entry)
 
     -- Kill the widget tree
     if entry.widget and entry.widget.inst:IsValid() then

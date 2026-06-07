@@ -825,6 +825,7 @@ export class FlowEngine {
       ui_panel: 'panel', ui_col: 'col', ui_row: 'row', ui_tabs: 'tabs',
       ui_text: 'text', ui_icon: 'icon', ui_image: 'image',
       ui_button: 'button', ui_bar: 'bar', ui_spacer: 'spacer',
+      ui_text_input: 'text_input',
     }
     const type = TYPE_MAP[node.type] || node.type.replace(/^ui_/, '')
     const p = node.data.params || {}
@@ -833,6 +834,16 @@ export class FlowEngine {
     // Common props per type. Numeric fields are coerced.
     const out: any = { type }
     const num = (v: any) => { const n = Number(r(v)); return Number.isFinite(n) ? n : undefined }
+    // Resolve a possibly-templated boolean. Unset/'' -> fallback. Falsey strings
+    // (false/no/0/off/não) -> false; anything else truthy -> true.
+    const bool = (v: any, fallback: boolean): boolean => {
+      if (v === undefined || v === null || v === '') return fallback
+      if (typeof v === 'boolean') return v
+      const s = String(v).trim().toLowerCase()
+      if (['false', 'no', '0', 'off', 'nao', 'não'].includes(s)) return false
+      if (['true', 'yes', '1', 'on', 'sim'].includes(s)) return true
+      return !!v
+    }
     const color = (v: any) => {
       const rv = r(v)
       if (Array.isArray(rv)) return rv
@@ -847,20 +858,32 @@ export class FlowEngine {
 
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
-      out.closeable = p.closeable !== false && p.closeable !== 'false'
+      if (p.body) out.body = r(p.body)
+      // closeable/draggable accept a template ({{...}}): resolve, THEN read truthiness so
+      // a flow can drive them. closeable defaults ON; draggable defaults OFF.
+      out.closeable = bool(r(p.closeable), true)
+      if (bool(r(p.draggable), false)) out.draggable = true
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
       if (p.gap != null) out.gap = num(p.gap)
     } else if (type === 'col' || type === 'row') {
       if (p.gap != null) out.gap = num(p.gap)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'text') {
       out.text = String(r(p.text) ?? '')
       if (p.size != null) out.size = num(p.size)
       const c = color(p.color); if (c) out.color = c
       if (p.wrap_width != null) out.wrap_width = num(p.wrap_width)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'icon') {
       if (p.prefab) out.prefab = String(r(p.prefab))
       if (p.atlas) out.atlas = r(p.atlas)
       if (p.tex) out.tex = r(p.tex)
       if (p.size != null) out.size = num(p.size)
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
     } else if (type === 'image') {
       out.atlas = r(p.atlas); out.tex = r(p.tex)
       if (p.width != null) out.width = num(p.width)
@@ -869,15 +892,31 @@ export class FlowEngine {
       out.text = String(r(p.text) ?? 'OK')
       out.callback = String(r(p.callback) ?? p.text ?? 'click')
       if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
       if (p.size != null) out.size = num(p.size)
+      const c = color(p.color); if (c) out.color = c
     } else if (type === 'bar') {
       out.value = num(p.value) ?? 0
       out.max = num(p.max) ?? 1
       if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+      if (p.label != null) out.label = String(r(p.label))
       const c = color(p.color); if (c) out.color = c
     } else if (type === 'spacer') {
       if (p.width != null) out.width = num(p.width)
       if (p.height != null) out.height = num(p.height)
+    } else if (type === 'text_input') {
+      // Editable field. callback fires on Enter with the typed string in callback_data.
+      out.callback = String(r(p.callback) ?? 'submit')
+      if (p.value != null) out.value = String(r(p.value))
+      if (p.placeholder != null) out.placeholder = String(r(p.placeholder))
+      if (p.size != null) out.size = num(p.size)
+      const c = color(p.color); if (c) out.color = c
+      if (p.width != null) out.width = num(p.width)
+      if (p.height != null) out.height = num(p.height)
+      if (p.max != null) out.max = num(p.max)
+      if (p.password === true || p.password === 'true') out.password = true
+      if (p.clear_on_submit === true || p.clear_on_submit === 'true') out.clear_on_submit = true
     }
 
     // Children: edge targets, ordered by canvas position. col/panel stack

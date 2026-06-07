@@ -35,8 +35,11 @@ local SafeDump = Core.SafeDump
 local FindPlayer = Core.FindPlayer
 local ExecuteCommand = Core.ExecuteCommand
 local ProcessCommands = Core.ProcessCommands
--- Public API delegates to core (kept on DSTP so modmain/the rest call DSTP.X)
-DSTP.PushEvent = Core.PushEvent
+-- Public API delegates to core (kept on DSTP so modmain/the rest call DSTP.X).
+-- PushEvent delegates DYNAMICALLY (reads Core.PushEvent at call time) so a module that
+-- wraps Core.PushEvent at runtime (e.g. uitest's click tap) is seen by EVERY caller,
+-- including the UICallback RPC handler that goes through require("dstp/client").PushEvent.
+function DSTP.PushEvent(...) return Core.PushEvent(...) end
 DSTP.RegisterCommand = Core.RegisterCommand
 
 -- SendPrivateMessage / SendUrlToAdmin / HookChat / HotToggleEvents / the panel
@@ -69,6 +72,8 @@ local Http = require("dstp/http")
 local Chat = require("dstp/chat")
 -- In-game self-test (run by an admin via #selftest). Isolated mechanic module.
 local SelfTest = require("dstp/selftest")
+-- In-game VISUAL UI smoke test (admin via #uitest). Creates real HUD widgets.
+local UITest = require("dstp/uitest")
 
 -- Game event listeners moved to dstp/events (per-player/world/weather/boss/grief).
 -- Bodies unchanged; gated by core.evt_config. Wired via Events.RegisterGameEvents in
@@ -120,6 +125,9 @@ function DSTP.Init(mod_env, mod_config)
     Commands.RegisterAll(Core)        -- register the ~55 command handlers
     SelfTest.Init(Core)               -- in-game test runner; publishes core.RunSelfTest
     Core.RunSelfTest = SelfTest.Run   -- chat.lua's #selftest (admin) calls this
+    UITest.Init(Core)                 -- in-game visual UI smoke test
+    Core.RunUITest = UITest.Run       -- chat.lua's #uitest (admin)
+    Core.ClearUITest = UITest.Clear   -- chat.lua's #uitest clear
     Chat.Init(Core)                   -- sets core.MaybeNotifyOwnerSetup + core.HotToggleEvents
     Events.Init(Core)                 -- event listeners (read core.evt_config + the chat hooks)
     Http.Init(Core, Collectors)       -- poll loop (needs the collectors)

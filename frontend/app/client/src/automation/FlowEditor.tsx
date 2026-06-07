@@ -471,7 +471,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           onInit={instance => { reactFlowRef.current = instance }}
           nodeTypes={nodeTypes}
           fitView
-          deleteKeyCode={['Backspace', 'Delete']}
+          deleteKeyCode={detailNode ? null : ['Backspace', 'Delete']}
           defaultEdgeOptions={{ style: { stroke: '#555', strokeWidth: 2 }, animated: true }}
           style={{ background: '#0a0a0a' }}
         >

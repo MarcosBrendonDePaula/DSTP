@@ -63,10 +63,14 @@ Two separate codebases in one repo:
 ### DST Mod (Lua) — lives in `DST_MOD/`
 - `DST_MOD/modinfo.lua` — mod config with event categories + server settings
 - `DST_MOD/modmain.lua` — entry point, `net_string` channels on `player_classified` (_dstp_pm, _dstp_ui), Tab scoreboard button, lazy-loading UIWidgets
-- `DST_MOD/scripts/dstp/client.lua` — HTTP bridge (~1400 lines). Polling, 40+ commands, event listeners, debounce
-- `DST_MOD/scripts/dstp/ui_widgets.lua` — client-side widget renderer (notification/label/panel/button/progress_bar)
+- `DST_MOD/scripts/dstp/client.lua` — glue/init only; `DSTP.Init` wires the modules below (the old god-module was split). The mod uses **dependency injection via a mutable `core` table**: `Core.Init(_G,json,config)` first, then each submodule's `M.Init(core)` (so a module reads `core._G` instead of copying `_G`, which is nil pre-Init)
+- `DST_MOD/scripts/dstp/core.lua` — shared state + ubiquitous helpers (event queue + per-player debounce, command registry `ProcessCommands`/`ExecuteCommand`, `RunGuarded` loop watchdog, logging, JSON)
+- `DST_MOD/scripts/dstp/{collectors,commands,http,chat}.lua` — server data collectors · ~55 command handlers · poll loop · chat hook + `#`-commands
+- `DST_MOD/scripts/dstp/events.lua` + `events/<category>.lua` — event listeners, one file per category (facade fans out per-player/world); all register at boot, gate on `core.evt_config`
+- `DST_MOD/scripts/dstp/ui_widgets.lua` — client-side widget renderer: a generic **tree renderer** (col/row/tabs/text/icon/image/button/bar/panel/**text_input**) + thin flat adapters (label/panel/button/progress_bar) + `notification`/`follow`. `MakeHitTarget`/`MaybeClickable` make text/icon/image clickable; `panel` supports `draggable=true` (drag by the title bar via a global `TheInput:AddMoveHandler`); `text_input` is an editable HUD field (TextEdit + `SetForceEdit` grabs the keyboard / suppresses WASD; Enter returns the typed string via `ui_callback` `callback_data.value`). All three are the same focus-based HUD-input pattern — see the HUD-focus note under **Testing the mod**
 - `DST_MOD/scripts/dstp/rules_engine.lua` — client-side interpreter for declarative `when/do` rules pushed from the backend
-- `DST_MOD/scripts_extracted/` — vanilla DST scripts extracted for reference (git-ignored, not part of the mod)
+- `DST_MOD/scripts/dstp/{selftest,uitest}.lua` — in-game test runners (`#selftest`/`#uitest`, admin-only) — see **Testing the mod**
+- `DST_MOD/scripts_extracted/` (and `/tmp/dstscripts/scripts`) — vanilla DST scripts extracted for reference (git-ignored, not part of the mod)
 
 Key constraints:
 - DST Lua sandbox: no sockets, no FFI, no threads. Only HTTP via `TheSim:QueryServer(url, callback, method, body)`
@@ -103,6 +107,10 @@ cd frontend && bun run dev          # Start full-stack dev server (port 3000)
 
 # TypeScript
 cd frontend && bunx tsc --noEmit    # Type check
+
+# Tests
+cd frontend && bun run test:unit    # vitest + the fengari bun:test suite (run-bun-tests)
+cd frontend && bun test app/server/live/<file>.test.ts   # one bun:test file
 
 # Database
 cd frontend && bun run db:generate  # Generate migration from schema changes
@@ -306,6 +314,61 @@ Start/Stop capture from flow editor. Next execution records full trace (input co
 
 ## Multi-Shard
 Each DST server has 1-2 shards: master (overworld) and caves. The mod sends `shard_id = "server-1:master"` or `"server-1:caves"`. Backend groups by `server_id`, frontend shows tabs. Server ID auto-generated from `TheWorld.meta.session_identifier`.
+
+## Testing the mod (two layers — the mod is Lua, some behavior is engine-only)
+
+**fengari test kit** (`app/server/live/mod-test-kit.ts` + `__lua__/kit.lua`) — runs the
+mod's REAL Lua modules (core/commands/rules_engine/ui_widgets/selftest/uitest) under a
+Lua-in-JS interpreter with a mocked `_G`, so mod *behavior* is tested in CI (`bun:test`)
+without a running game. `runLuaHarness({ modules: { CORE: modSource('core.lua') }, harness })`
+loads each module source as `MOD_<NAME>`, runs a Lua `harness` string that drives the
+module and returns `"OK"`/`"FAIL: ..."`. The kit's mock `_G` includes Lua-5.1 compat
+shims (`loadstring`/`setfenv`/`unpack` — **DST is Lua 5.1, fengari is 5.3**) and stock
+globals (`debug`/`coroutine`/`rawset`/…). Used by `debounce`/`http-drain`/`execute-guard`/
+`netstring-clobber`/`ui-click`/`ui-fold` tests. **Mutation-check** new behavioral tests
+(break the code, confirm the test fails) — that's how we know they bite.
+
+**What fengari CANNOT test** (write an in-game runner instead): the engine input/focus
+hit-test (mouse clicks), `debug.sethook` real preemption, DST **strict mode** (a bare
+`_G.X = v` for a new global raises — use `rawset`), real net_string clobber, render
+geometry. These only surface on the live engine.
+
+**In-game test runners** (admin-only chat commands; suppressed from public chat; gated
+via `client.admin` in `chat.lua` `HandleBuiltinCommand`, same as `#panel`):
+- `#selftest` — `selftest.lua`: asserts core behavior in the live master sim (coalescing,
+  per-player debounce, loop watchdog, execute gate). PMs a PASS/FAIL summary; details to
+  `server_log.txt` (`DSTP SELF-TEST`). A mechanic module that **saves+restores** every
+  bit of core state it mutates so running it never disturbs the live mod.
+- `#uitest` / `#uitest clear` — `uitest.lua`: spawns one of each HUD widget (incl.
+  clickable text/icon/image) on the admin's screen; each click logs `UITEST CLICK`. Sends
+  the widgets in ONE coalesced `_dstp_ui` batch (else they'd clobber). `hit_debug=true` on
+  a node tints its clickable region for calibration.
+- Each runner has a fengari **meta-test** (`selftest-module`/`uitest-module.test.ts`) that
+  runs the REAL module so a false in-game result / state leak is caught in CI first.
+
+**HUD click is FOCUS-based** (cost real debugging — #16): a click reaches a widget only if
+it holds focus; focus is granted on hover to whichever entity wins the engine hit-test
+(`GetEntitiesAtScreenPoint`), which **only includes entities with a real clickable region
+(opaque texture) flagged `SetClickable(true)`**, and `Button:OnControl` fires `onclick`
+only when `self.focus`. So a bare Text/Image is never clickable; to make one clickable,
+overlay an **opaque** `ImageButton` (square.tex), make it invisible via per-state alpha-0
+colours (`SetImageNormalColour/FocusColour/DisabledColour`) + `scale_on_focus=false` (so
+hover doesn't resize/re-show it), `ForceImageSize(w,h)` for the hit region, `SetClickable(true)`,
+`MoveToFront()`. See `ui_widgets.lua` `MakeHitTarget`. The same HUD-input family, each
+solved and validated in-game (the engine input/focus path is NOT testable in fengari):
+- **Click** → `MakeHitTarget`/`MaybeClickable` (above).
+- **Drag** (`panel draggable=true`) → on mouse-down register a GLOBAL `TheInput:AddMoveHandler`
+  (fires every cursor move regardless of focus — vanilla's own `Widget:FollowMouse`) +
+  `AddMouseButtonHandler` for the up; `:Remove()` both on release. The widget's
+  focus-gated `OnUpdate` is NOT enough (a fast move off the bar drops focus and stalls).
+  Convert the screen-pixel delta to HUD-local by dividing by the parent's accumulated
+  scale (HUD is `SCALEMODE_PROPORTIONAL`).
+- **Text input** (`text_input`) → a `widgets/textedit` child with `SetForceEdit(true)` then
+  `SetEditing(true)` (on the click overlay) routes all keys to the field via
+  `TheFrontEnd:SetForceProcessTextInput` AND suppresses WASD/hotkeys (player controller
+  `IsEnabled` goes false); Enter→`OnTextEntered`→`ctx.callback_fn(cb, root_id, {value,id})`,
+  riding the existing `ui_callback` as `callback_data`. Release the grab (`SetEditing(false)`)
+  on destroy so the player isn't left unable to move.
 
 ## Branches
 - `main` — stable releases
