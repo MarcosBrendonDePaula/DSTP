@@ -22,16 +22,20 @@ local _installed = false
 -- names we can actually resolve. Guard each (constant availability varies by build).
 local function BuildKeyMaps()
     local function add(name, const)
-        local code = _G[const]
+        -- DST runs in STRICT MODE: a bare `_G[const]` for a KEY_* constant that
+        -- doesn't exist on this build raises "variable 'KEY_x' is not declared"
+        -- (the strict metatable intercepts __index). rawget bypasses the metatable
+        -- and returns nil for a missing constant instead of crashing.
+        local code = rawget(_G, const)
         if code ~= nil then
             _name_to_code[name] = code
             _code_to_name[code] = name
         end
     end
-    -- Letters A-Z -> KEY_A..KEY_Z
+    -- Letters A-Z -> KEY_A..KEY_Z (DST constants are UPPERCASE: KEY_A, KEY_H, ...)
     for i = 0, 25 do
         local ch = string.char(65 + i)         -- 'A'..'Z'
-        add(ch, "KEY_" .. string.lower(ch))    -- KEY_a..KEY_z (DST uses lowercase)
+        add(ch, "KEY_" .. ch)                  -- KEY_A..KEY_Z
     end
     -- Digits 0-9 -> KEY_0..KEY_9
     for i = 0, 9 do add(tostring(i), "KEY_" .. tostring(i)) end
