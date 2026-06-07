@@ -32,6 +32,17 @@ function M.RegisterWorld(inst)
     -- entity_death (notable-mob death) is now dispatched centrally by the facade via
     -- M.OnEntityDeath (single world listener fanned out) — see events.lua.
 
+    -- Toadstool (mushroom boss) spawner state machine changed
+    -- ("toadstoolstatechanged", toadstoolspawner.lua:70; data = { spawner, state }).
+    -- The closest thing to "a boss is now spawnable" — no generic boss-spawn event
+    -- exists (giants are SpawnPrefab'd with no PushEvent). state is a number/enum.
+    inst:ListenForEvent("toadstoolstatechanged", function(world, data)
+        if not evt_config.bosses then return end
+        DSTP.PushEvent("toadstool_state_changed", {
+            state = data and tostring(data.state) or "unknown",
+        }, data)
+    end)
+
     -- NOTE: ms_registerfire was REMOVED. It is NOT a real fire-START event — burnable.lua
     -- fires `onignite` per-burnable (burnable.lua:375), never an `ms_registerfire` on the
     -- world, so this listener was dead (never fired). A genuine "fire started" detector
@@ -52,9 +63,23 @@ function M.OnEntityDeath(world, data)
     if data and data.inst and not data.inst:HasTag("player") then
         local prefab = data.inst.prefab
         if NOTABLE[prefab] then
+            local x, _, z = 0, 0, 0
+            if data.inst.Transform then x, _, z = data.inst.Transform:GetWorldPosition() end
+            -- Closest player to where the boss fell — usually the killer / the player
+            -- who fought it. Lets a flow react "near that player" (e.g. spawn the next
+            -- boss next to them) instead of only at the death coords. May be nil if no
+            -- player is loaded near the death (e.g. a far-away/automated kill).
+            local userid, pname
+            local FCP = _G.FindClosestPlayerToInst
+            if FCP then
+                local pl = FCP(data.inst, 40, true)  -- 40-tile radius, must be alive
+                if pl then userid, pname = pl.userid, pl.name end
+            end
             DSTP.PushEvent("boss_killed", {
                 prefab = prefab,
                 cause = type(data.cause) == "string" and data.cause or (data.cause and data.cause.prefab) or "unknown",
+                x = math.floor(x), z = math.floor(z),
+                userid = userid or "", name = pname or "",
             }, data)
         end
     end

@@ -35,6 +35,11 @@ export interface EngineHost {
 
 // Shared storage between flows — Script nodes can read/write via context.store
 const MAX_STORE_KEYS = 500
+// Max overlapping executions of a SINGLE flow. A flow whose actions loop back into its
+// own trigger (e.g. an ai_agent that announces → chat_message → re-triggers) or that
+// fires in a burst would otherwise stack runaway concurrent runs. Excess triggers are
+// dropped + logged. Keep small: most flows finish fast; a handful in flight is plenty.
+const MAX_CONCURRENT_PER_FLOW = 3
 // Capture mode — when active, execution traces are collected and emitted at the end
 const MAX_CAPTURE_TRACE = 200
 // Upper bound for a delay node (1h). Prevents a flow holding an execution +
@@ -58,6 +63,8 @@ const NUMERIC_PARAM_KEYS = new Set([
   'amount', 'count', 'x', 'y', 'z', 'radius', 'limit', 'duration', 'days', 'speed',
   'length', 'day', 'dusk', 'night', 'slot', 'width', 'height', 'value', 'max',
   'offset_x', 'offset_z',
+  // entity control: GUID + state mutators
+  'guid', 'percent', 'delta', 'coldness',
 ])
 const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop', 'visible'])
 
@@ -100,6 +107,14 @@ export class FlowEngine {
 
   // Shared storage between flows — Script nodes can read/write via context.store
   private _flowStorage: Record<string, Record<string, any>> = {}
+
+  // In-flight executions per flow id: the set of AbortControllers for runs currently
+  // executing. Two jobs: (1) cap concurrent runs of ONE flow (the "4 IAs at once" bug —
+  // a flow whose announce loops back into chat_message, or a burst of the same trigger);
+  // (2) let the main thread CANCEL a flow's in-flight runs when it's deleted/disabled
+  // (abortFlow) — the worker gets a 'flowDisabled' message and aborts, so a long
+  // ai_agent loop stops instead of finishing after you turned it off.
+  private _inFlight: Map<string, Set<AbortController>> = new Map()
 
   getStore(serverId: string): Record<string, any> {
     if (!this._flowStorage[serverId]) this._flowStorage[serverId] = {}
@@ -287,6 +302,16 @@ export class FlowEngine {
       findPlayerInServer: (predicate) => this.findPlayerInServer(serverId, predicate),
       evaluateCondition: () => this.evaluateCondition(node, context),
       followOutEdges,
+      resetVisits: (nodeIds) => {
+        const guard = (context as any)[LOOP_GUARD_KEY] as LoopGuard | undefined
+        if (!guard) return
+        // Clear ONLY the per-node visit counts so the loop body can re-run without
+        // tripping MAX_NODE_VISITS. We do NOT refund guard.steps: that counter is
+        // the AGGREGATE-work backstop (MAX_TOTAL_STEPS), and refunding it let nested
+        // loops execute unbounded real work (200×200×… ) without ever tripping it.
+        // Keeping steps cumulative makes the aggregate cap a real ceiling again.
+        for (const id of nodeIds) guard.visits.delete(id)
+      },
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
       log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
       runFlowAction: () => this.runFlowAction(serverId, node, context),
@@ -320,6 +345,11 @@ export class FlowEngine {
     setContext: (nodeId: string, value: any) => void,
     stopAtWait: boolean = false,
   ): Promise<FlowNode | null> {
+    // ── Abort check ── the flow was deleted/disabled (abortFlow signalled this run).
+    // Checked before EVERY node so a run parked in a delay/ai_agent stops the moment
+    // it resumes, instead of finishing downstream actions after the flow was unloaded.
+    if ((context as any)._signal?.aborted) return null
+
     // ── Loop protection ── (see loop-guard.ts)
     // DSTP has no loop node, so a node repeating within one execution means the
     // graph has an accidental cycle. The guard rides on the context so every
@@ -412,7 +442,55 @@ export class FlowEngine {
 
   // ─── Simple Flow Execution (no Wait nodes) ─────────
 
+  // Register an in-flight run of a flow under the concurrency cap, run `fn` with the
+  // run's AbortSignal, and always deregister. Returns false WITHOUT running if the
+  // cap is already reached (caller decides whether to log a drop). Shared by the
+  // simple path (executeFlow) and the post-wait path (executeBranchFromWait) so both
+  // honor MAX_CONCURRENT_PER_FLOW and respond to abortFlow().
+  private async runTracked(flowId: string, fn: (signal: AbortSignal) => Promise<void>): Promise<boolean> {
+    let set = this._inFlight.get(flowId)
+    if (set && set.size >= MAX_CONCURRENT_PER_FLOW) return false
+    if (!set) { set = new Set(); this._inFlight.set(flowId, set) }
+    const ac = new AbortController()
+    set.add(ac)
+    try {
+      await fn(ac.signal)
+      return true
+    } finally {
+      set.delete(ac)
+      if (set.size === 0) this._inFlight.delete(flowId)
+    }
+  }
+
   private async executeFlow(flow: Flow, trigger: FlowNode, event: any, serverId: string) {
+    // Concurrency guard: cap how many runs of THIS flow can overlap. A flow whose
+    // actions feed back into its own trigger (announce → chat_message) or that fires in
+    // a burst would otherwise accumulate runaway concurrent executions ("4 IAs at once").
+    const ran = await this.runTracked(flow.id, (signal) =>
+      this._executeFlowInner(flow, trigger, event, serverId, signal),
+    )
+    if (!ran) {
+      const n = this._inFlight.get(flow.id)?.size ?? MAX_CONCURRENT_PER_FLOW
+      this.safeLog(serverId, {
+        flowId: flow.id, flowName: flow.name, eventType: event.type,
+        actions: [`dropped: flow already running ${n}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
+      })
+    }
+  }
+
+  // Abort every in-flight run of a flow (called when it's deleted/disabled). A long
+  // ai_agent loop checks the signal and stops instead of finishing post-disable.
+  // Returns how many runs were signalled.
+  abortFlow(flowId: string): number {
+    const set = this._inFlight.get(flowId)
+    if (!set || set.size === 0) return 0
+    const n = set.size
+    for (const ac of set) { try { ac.abort() } catch { /* ignore */ } }
+    this._inFlight.delete(flowId)
+    return n
+  }
+
+  private async _executeFlowInner(flow: Flow, trigger: FlowNode, event: any, serverId: string, signal?: AbortSignal) {
     const nodes = flow.nodes as FlowNode[]
     const edges = flow.edges as FlowEdge[]
     const executedActions: string[] = []
@@ -434,6 +512,8 @@ export class FlowEngine {
       _flowId: flow.id,
       _flowName: flow.name,
       _serverId: serverId,
+      _signal: signal,  // aborted when the flow is deleted/disabled (read by ai_agent)
+      vars: {},         // in-memory mutable namespace for edit_variable ({{vars.x}})
     }
     // Lazy {{environment.x.y}} / {{env.y}} accessors (decrypt on read, masked later).
     installVaultAccessors(context, serverId)
@@ -454,6 +534,7 @@ export class FlowEngine {
     try {
       const outEdges = edges.filter(e => e.source === trigger.id)
       for (const edge of outEdges) {
+        if (signal?.aborted) break  // flow deleted/disabled mid-run → stop following edges
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
         await this.processNode(target, nodes, edges, context, serverId, executedActions, setContext, false)
@@ -527,6 +608,7 @@ export class FlowEngine {
       _flowId: flow.id,
       _flowName: flow.name,
       _serverId: serverId,
+      vars: {},         // in-memory mutable namespace for edit_variable ({{vars.x}})
     }
     installVaultAccessors(context, serverId)
     if (trigger.data.alias) {
@@ -543,10 +625,18 @@ export class FlowEngine {
 
     this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
-    try {
+    // The walk-to-wait runs inside runTracked so abortFlow() (flow deleted/disabled)
+    // stops it too, same as the simple path — context._signal is the live signal for
+    // the duration of the walk. It's cheap (walks to the Wait and parks), so it's
+    // never dropped by the cap. The heavy post-wait work is capped separately in
+    // executeBranchFromWait.
+    await this.runTracked(flow.id, async (signal) => {
+     context._signal = signal
+     try {
       // Walk from trigger, stopping at Wait nodes
       const outEdges = edges.filter(e => e.source === trigger.id)
       for (const edge of outEdges) {
+        if (signal.aborted) break
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
 
@@ -595,9 +685,10 @@ export class FlowEngine {
           )
         }
       }
-    } catch (err) {
+     } catch (err) {
       console.error(`[DSTP Automation] Flow "${flow.name}" stateful branch error:`, maskSecrets(String((err as any)?.message ?? err), context))
-    }
+     }
+    })
 
     // Log the branch arrival (not the full flow completion)
     if (executedActions.length > 0) {
@@ -637,6 +728,9 @@ export class FlowEngine {
     // non-enumerable vault accessors — reinstall so post-wait nodes can resolve
     // {{environment.x.y}} / {{env.y}} again (and secrets get masked in logs).
     installVaultAccessors(mergedContext, serverId)
+    // vars is enumerable so it survives the branch snapshot, but a flow that only
+    // starts using vars after the wait won't have it — ensure it exists.
+    if (!mergedContext.vars) mergedContext.vars = {}
 
     const setContext = (nodeId: string, value: any) => {
       mergedContext[nodeId] = value
@@ -648,25 +742,40 @@ export class FlowEngine {
 
     this.pushTrace(serverId, waitNode.id, 'completed', {}, waitOutput, undefined, mergedContext)
 
-    try {
-      // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
-      const outEdges = edges.filter(e => {
-        if (e.source !== waitNode.id) return false
-        if (sourceHandle) {
-          // Follow edges matching the source handle, or edges with no handle
-          return e.sourceHandle === sourceHandle || !e.sourceHandle
-        }
-        // No source handle filter - follow all non-timeout edges
-        return e.sourceHandle !== 'timeout'
-      })
+    // The post-wait branch is the heavy half (it can run ai_agent / delay / long
+    // chains), so it's tracked like the simple path: honors MAX_CONCURRENT_PER_FLOW
+    // and aborts when the flow is deleted/disabled (processNode checks
+    // mergedContext._signal before each node).
+    const ran = await this.runTracked(flow.id, async (signal) => {
+      mergedContext._signal = signal
+      try {
+        // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
+        const outEdges = edges.filter(e => {
+          if (e.source !== waitNode.id) return false
+          if (sourceHandle) {
+            // Follow edges matching the source handle, or edges with no handle
+            return e.sourceHandle === sourceHandle || !e.sourceHandle
+          }
+          // No source handle filter - follow all non-timeout edges
+          return e.sourceHandle !== 'timeout'
+        })
 
-      for (const edge of outEdges) {
-        const nextNode = nodes.find(n => n.id === edge.target)
-        if (!nextNode) continue
-        await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
+        for (const edge of outEdges) {
+          if (signal.aborted) break
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (!nextNode) continue
+          await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
+        }
+      } catch (err) {
+        console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, maskSecrets(String((err as any)?.message ?? err), mergedContext))
       }
-    } catch (err) {
-      console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, maskSecrets(String((err as any)?.message ?? err), mergedContext))
+    })
+    if (!ran) {
+      const n = this._inFlight.get(flow.id)?.size ?? MAX_CONCURRENT_PER_FLOW
+      this.safeLog(serverId, {
+        flowId: flow.id, flowName: flow.name, eventType: '_wait_satisfied',
+        actions: [`dropped: flow already running ${n}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
+      })
     }
 
     // Log the post-wait execution
@@ -1237,10 +1346,15 @@ export class FlowEngine {
       player_new_character: 'players', player_resurrected: 'players', player_migrated: 'players',
       structure_burnt: 'griefing', structure_hammered: 'griefing',
       container_opened: 'griefing', container_closed: 'griefing',
+      structure_worked: 'griefing', object_ignited: 'griefing',
+      container_opened_entity: 'griefing', container_item_taken: 'griefing',
+      container_item_added: 'griefing',
       chat_message: 'chat', command: 'chat',
       new_day: 'world', phase_changed: 'world', season_changed: 'world',
       moon_phase_changed: 'world', earthquake: 'world', sinkhole_warn: 'world',
       world_save: 'world', player_teleported: 'world', rift_spawned: 'world',
+      rift_closed: 'world', nightmare_phase: 'world', item_planted: 'world',
+      object_activated: 'world', machine_toggled: 'world',
       player_kill: 'combat', player_attacked: 'combat',
       player_attack_other: 'combat', player_hit_other: 'combat',
       player_block: 'combat', player_attack_miss: 'combat',
@@ -1250,10 +1364,14 @@ export class FlowEngine {
       player_item_get: 'inventory', inventory_full: 'inventory', trade_received: 'inventory',
       player_craft: 'crafting', player_build: 'crafting',
       recipe_unlocked: 'crafting', tech_tree_changed: 'crafting',
+      structure_built: 'crafting',
       player_equip: 'inventory', player_pickup: 'inventory', player_drop: 'inventory', player_unequip: 'inventory',
       storm_changed: 'weather', precipitation: 'weather', lightning_strike: 'weather',
       boss_event: 'bosses', boss_killed: 'bosses',
-      hound_warning: 'bosses',
+      hound_warning: 'bosses', toadstool_state_changed: 'bosses',
+      beefalo_tamed: 'creatures', beefalo_feral: 'creatures',
+      mob_transform: 'creatures', mob_frozen: 'creatures',
+      resource_picked: 'creatures', mount_rider_changed: 'creatures',
       player_eat: 'survival', player_insane: 'survival', player_sane: 'survival',
       player_starving: 'survival', player_fed: 'survival',
       player_freezing: 'survival', player_cooled: 'survival',

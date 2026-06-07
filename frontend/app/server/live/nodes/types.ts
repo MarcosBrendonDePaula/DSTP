@@ -51,6 +51,11 @@ export interface NodeRunContext {
    *  node or null. Most handlers DON'T call this — they return 'continue' and let
    *  the dispatcher follow edges. condition calls it with a true/false filter. */
   followOutEdges: (filter?: (edge: FlowEdge) => boolean) => Promise<FlowNode | null>
+  /** Loop support: clear the loop-guard visit counts (and matching step credit)
+   *  for the given node ids, so an INTENTIONAL loop can re-run its body subgraph
+   *  without tripping the per-node visit cap. The loop's own per-iteration cap is
+   *  what bounds it; the total-steps backstop still applies to net non-looped work. */
+  resetVisits: (nodeIds: string[]) => void
 
   // ── Side-effects / heavy helpers (stay in the engine, injected here) ──
   pushCommand: (type: string, data: any) => void

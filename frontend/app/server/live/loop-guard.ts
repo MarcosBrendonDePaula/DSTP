@@ -7,7 +7,13 @@
 // pathological (huge but acyclic) graph.
 
 export const MAX_NODE_VISITS = 50
-export const MAX_TOTAL_STEPS = 1000
+// Aggregate-work ceiling across the WHOLE execution. With the `loop` node, the body
+// is intentionally revisited (its per-node counts are reset each iteration), so this
+// is the real backstop against runaway/nested loops: loop cap (200) × a reasonable
+// body still fits, but an explosive 200×200×… of real work trips here. Raised from
+// 1000 once loops existed — at 1000 a single 200-iteration loop over a ~5-node body
+// would false-trip.
+export const MAX_TOTAL_STEPS = 50000
 
 export interface LoopGuard {
   visits: Map<string, number>

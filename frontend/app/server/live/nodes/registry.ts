@@ -41,6 +41,18 @@ import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch
 import { handler as switchHandler } from '@shared/automation/nodes/logic/branch/switch/exec'
 import { meta as foreachMeta } from '@shared/automation/nodes/logic/loop/foreach/meta'
 import { handler as foreachHandler } from '@shared/automation/nodes/logic/loop/foreach/exec'
+import { meta as loopMeta } from '@shared/automation/nodes/logic/loop/loop/meta'
+import { handler as loopHandler } from '@shared/automation/nodes/logic/loop/loop/exec'
+import { meta as breakMeta } from '@shared/automation/nodes/logic/loop/break/meta'
+import { handler as breakHandler } from '@shared/automation/nodes/logic/loop/break/exec'
+import { meta as editVarMeta } from '@shared/automation/nodes/data/vars/edit_variable/meta'
+import { handler as editVarHandler } from '@shared/automation/nodes/data/vars/edit_variable/exec'
+import { meta as aggregateMeta } from '@shared/automation/nodes/data/vars/aggregate/meta'
+import { handler as aggregateHandler } from '@shared/automation/nodes/data/vars/aggregate/exec'
+import { meta as datetimeMeta } from '@shared/automation/nodes/data/transform/datetime/meta'
+import { handler as datetimeHandler } from '@shared/automation/nodes/data/transform/datetime/exec'
+import { meta as tryCatchMeta } from '@shared/automation/nodes/logic/branch/try_catch/meta'
+import { handler as tryCatchHandler } from '@shared/automation/nodes/logic/branch/try_catch/exec'
 import { meta as filterMeta } from '@shared/automation/nodes/logic/branch/filter/meta'
 import { handler as filterHandler } from '@shared/automation/nodes/logic/branch/filter/exec'
 import { meta as logMeta } from '@shared/automation/nodes/data/debug/log/meta'
@@ -91,6 +103,12 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: conditionMeta, handler: conditionHandler },
   { meta: switchMeta, handler: switchHandler },
   { meta: foreachMeta, handler: foreachHandler },
+  { meta: loopMeta, handler: loopHandler },
+  { meta: breakMeta, handler: breakHandler },
+  { meta: editVarMeta, handler: editVarHandler },
+  { meta: aggregateMeta, handler: aggregateHandler },
+  { meta: datetimeMeta, handler: datetimeHandler },
+  { meta: tryCatchMeta, handler: tryCatchHandler },
   { meta: filterMeta, handler: filterHandler },
   { meta: logMeta, handler: logHandler },
   { meta: randomMeta, handler: randomHandler },

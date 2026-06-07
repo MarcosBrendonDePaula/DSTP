@@ -121,3 +121,61 @@ describe('mod listeners — loot hook no longer leaks (#7)', () => {
     expect(count(code, '_dstp_loot_hooked = nil')).toBe(1)
   })
 })
+
+// ── Entity-events base (#52-55) ────────────────────────────────────────────
+// Each new entity/world trigger must have a real DST listener in the right Lua
+// module — otherwise the catalog/categoryMap entry is orphaned and the trigger
+// never fires. We assert the underlying DST engine event is listened to where the
+// hook lives. (The catalog↔categoryMap side is covered by event-categories.test.ts.)
+describe('mod listeners — entity-events base hooks the real DST events', () => {
+  it('world.lua listens to the new low-effort world events', () => {
+    const events = listenedEvents(src('events/world.lua'))
+    expect(events).toContain('ms_riftremovedfrompool')  // rift_closed
+    expect(events).toContain('nightmarephasechanged')   // nightmare_phase
+    expect(events).toContain('itemplanted')              // item_planted
+  })
+
+  it('boss.lua listens to toadstoolstatechanged (toadstool_state_changed)', () => {
+    expect(listenedEvents(src('events/boss.lua'))).toContain('toadstoolstatechanged')
+  })
+
+  it('nonplayer.lua hooks the structure/container engine events', () => {
+    const events = listenedEvents(src('events/nonplayer.lua'))
+    expect(events).toContain('workfinished')  // structure_worked
+    expect(events).toContain('onignite')      // object_ignited
+    expect(events).toContain('onopen')        // container_opened_entity
+    expect(events).toContain('itemget')       // container_item_added
+    expect(events).toContain('itemlose')      // container_item_taken
+  })
+
+  it('nonplayer.lua hooks the creature engine events', () => {
+    const events = listenedEvents(src('events/nonplayer.lua'))
+    expect(events).toContain('domesticated')     // beefalo_tamed
+    expect(events).toContain('goneferal')        // beefalo_feral
+    expect(events).toContain('transformwere')    // mob_transform (were)
+    expect(events).toContain('transformnormal')  // mob_transform (normal)
+    expect(events).toContain('freeze')           // mob_frozen
+    expect(events).toContain('picked')           // resource_picked
+    expect(events).toContain('riderchanged')     // mount_rider_changed
+    expect(events).toContain('onactivated')      // object_activated
+    expect(events).toContain('machineturnedon')  // machine_toggled (on)
+    expect(events).toContain('machineturnedoff') // machine_toggled (off)
+  })
+
+  it('the new component hooks are published on core (events.lua) and wired in modmain', () => {
+    const facade = src('events.lua')
+    const modmain = readFileSync(
+      join(MOD, '..', '..', 'modmain.lua'), 'utf8')
+    for (const hook of [
+      'HookWorkableComponent', 'HookBurnableComponent', 'HookContainerComponent',
+      'HookDomesticatableComponent', 'HookWerebeastComponent', 'HookFreezableComponent',
+      'HookPickableComponent', 'HookRideableComponent', 'HookActivatableComponent',
+      'HookMachineComponent',
+    ]) {
+      expect(facade).toContain(`core.${hook}`)   // published
+      expect(modmain).toContain(hook)            // attached via AddComponentPostInit
+    }
+    // structure_built is emitted from the builder DoBuild override (no ListenForEvent)
+    expect(modmain).toContain('structure_built')
+  })
+})

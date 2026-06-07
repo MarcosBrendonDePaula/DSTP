@@ -56,6 +56,7 @@ export function makeRc(opts: {
     findPlayerInServer: (pred) => (opts.players ?? []).find(pred) ?? null,
     evaluateCondition: () => evalCond({ field: param('field'), operator: param('operator'), value: param('value') }, context),
     followOutEdges: async () => null,
+    resetVisits: () => {},
     pushCommand: (type, d) => { commands.push({ type, data: d }) },
     log: (m) => { logs.push(m) },
     runFlowAction: () => {},

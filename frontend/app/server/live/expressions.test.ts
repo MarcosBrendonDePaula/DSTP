@@ -155,6 +155,16 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition({ field: 'name', operator: 'ends_with', value: 'Wil' }, ctx)).toBe(false)
   })
 
+  it('not_starts_with / not_contains negate (used to drop the bot\'s own [ia] echoes)', () => {
+    const own = { trigger: { message: '[ia] a new boss has appeared' } }
+    const player = { trigger: { message: 'hello bot' } }
+    // not_starts_with: the AI chat agent filters out its own "[ia] ..." announcements
+    expect(evaluateCondition({ field: 'message', operator: 'not_starts_with', value: '[ia]' }, own)).toBe(false)
+    expect(evaluateCondition({ field: 'message', operator: 'not_starts_with', value: '[ia]' }, player)).toBe(true)
+    expect(evaluateCondition({ field: 'message', operator: 'not_contains', value: 'bot' }, player)).toBe(false)
+    expect(evaluateCondition({ field: 'message', operator: 'not_contains', value: 'zzz' }, player)).toBe(true)
+  })
+
   it('exists is true for present values including falsy ones', () => {
     expect(evaluateCondition({ field: 'name', operator: 'exists' }, ctx)).toBe(true)
     expect(evaluateCondition({ field: 'dead', operator: 'exists' }, ctx)).toBe(true) // false is present

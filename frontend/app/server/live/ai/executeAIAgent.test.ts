@@ -106,11 +106,32 @@ describe('schemaForNode', () => {
     expect(s.properties.name).toBeUndefined()
   })
 
-  it('exposes a template-valued param as a fillable input', () => {
-    const n = node('x', 'action', { action_type: 'heal', params: { userid: '{{trigger.userid}}', amount: '50' } })
+  it('treats a {{template}} param as FIXED (engine resolves it) — NOT a model input', () => {
+    // userid is a template ("{{trigger.userid}}") → the author is saying "resolve this
+    // from context", so it must NOT be a model input (the model can't know the value and
+    // would guess). Only the truly-empty params are model inputs. amount=50 is literal-fixed.
+    const n = node('x', 'action', { action_type: 'spawn_prefab', params: { prefab: '', x: '{{trigger.x}}', z: '{{trigger.z}}', count: '1' } })
     const s = schemaForNode(n)
-    // userid is a template (placeholder) → fillable; amount fixed at 50 → not
-    expect(Object.keys(s.properties)).toEqual(['userid'])
+    // only `prefab` (empty) is fillable; x/z (templates) and count (literal) are fixed
+    expect(Object.keys(s.properties)).toEqual(['prefab'])
+    expect(s.properties.x).toBeUndefined()
+    expect(s.properties.z).toBeUndefined()
+  })
+
+  it('gives common params a rich hint so the model picks valid values (not a default)', () => {
+    const n = node('x', 'action', { action_type: 'spawn_prefab', params: { prefab: '' } })
+    const s = schemaForNode(n)
+    // prefab must carry the boss/mob list so the model varies it instead of always
+    // defaulting to one prefab (the "only spawns dragonfly" bug).
+    expect(s.properties.prefab.description).toContain('deerclops')
+    expect(s.properties.prefab.description).toContain('bearger')
+    expect(s.properties.prefab.description).not.toBe('Parameter "prefab"')
+  })
+
+  it('a node\'s aiParamDescriptions overrides the default hint', () => {
+    const n = node('x', 'action', { action_type: 'spawn_prefab', params: { prefab: '' }, aiParamDescriptions: { prefab: 'ONLY deerclops or bearger.' } })
+    const s = schemaForNode(n)
+    expect(s.properties.prefab.description).toBe('ONLY deerclops or bearger.')
   })
 })
 

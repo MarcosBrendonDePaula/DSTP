@@ -272,6 +272,7 @@ dstp.Init(env, {
         character = GetModConfigData("EVT_CHARACTER") == true,
         exploration = GetModConfigData("EVT_EXPLORATION") == true,
         griefing = GetModConfigData("EVT_GRIEFING") == true,
+        creatures = GetModConfigData("EVT_CREATURES") == true,
     },
 })
 
@@ -405,8 +406,14 @@ local function ClaimPos(inst)
     end
 end
 
--- workable: blocks hammer / mine / chop / deconstruct on protected structures.
+-- The events core, read dynamically so AddComponentPostInit load order can't matter
+-- (the hooks are published on core by Events.Init, run inside dstp.Init above).
+local _evcore = GLOBAL.require("dstp/core")
+
+-- workable: blocks hammer / mine / chop / deconstruct on protected structures, AND
+-- surfaces structure_worked (the destroy moment) via the module hook.
 AddComponentPostInit("workable", function(self)
+    if _evcore.HookWorkableComponent then _evcore.HookWorkableComponent(self) end
     local _WorkedBy_Internal = self.WorkedBy_Internal
     if not _WorkedBy_Internal then return end
     function self:WorkedBy_Internal(worker, numworks, ...)
@@ -418,8 +425,10 @@ AddComponentPostInit("workable", function(self)
     end
 end)
 
--- burnable: blocks igniting protected structures (player- or world-caused fire).
+-- burnable: blocks igniting protected structures (player- or world-caused fire), AND
+-- surfaces object_ignited (the arsonist, at ignition) via the module hook.
 AddComponentPostInit("burnable", function(self)
+    if _evcore.HookBurnableComponent then _evcore.HookBurnableComponent(self) end
     local _Ignite = self.Ignite
     if not _Ignite then return end
     function self:Ignite(immediate, source, doer, ...)
@@ -434,7 +443,9 @@ end)
 -- builder: blocks PLACING structures inside someone else's claim. DoBuild's `pt`
 -- is the world placement point (Vector3) for placer recipes; a nil pt means an
 -- inventory craft (a spear, food…) which is NOT grief — so we only guard when a
--- pt is present. The doer is the builder's inst (self.inst).
+-- pt is present. The doer is the builder's inst (self.inst). On a SUCCESSFUL placed
+-- build we also emit structure_built (the structure side; onbuilt fires on the product
+-- which would need per-prefab hooks, so we read recname/pt straight off DoBuild).
 AddComponentPostInit("builder", function(self)
     local _DoBuild = self.DoBuild
     if not _DoBuild then return end
@@ -442,7 +453,19 @@ AddComponentPostInit("builder", function(self)
         if pt and pt.x and _claims.IsProtected(pt.x, pt.z, self.inst) then
             return false  -- protected area: refuse to place the structure
         end
-        return _DoBuild(self, recname, pt, ...)
+        local ok = _DoBuild(self, recname, pt, ...)
+        -- Only a PLACED build (pt present) is a structure; inventory crafts have no pt.
+        if ok and pt and pt.x and _evcore.PushEvent and _evcore.evt_config
+            and _evcore.evt_config.crafting then
+            local doer = self.inst
+            _evcore.PushEvent("structure_built", {
+                userid = doer and doer.userid or "",
+                name = doer and doer.name or "unknown",
+                prefab = tostring(recname),
+                x = math.floor(pt.x), z = math.floor(pt.z),
+            })
+        end
+        return ok
     end
 end)
 
@@ -450,13 +473,40 @@ end)
 -- on the NPC/structure RECEIVER — neither is a player, so they can't ride the per-
 -- player fan-out. We attach a ListenForEvent to EVERY combat/trader entity here; the
 -- module (events/nonplayer.lua) filters hard (combat: only mob→player aggro) and gates
--- on evt_config, so with those categories off it's a cheap early-return. The hooks are
--- published on core by Events.Init (already run inside dstp.Init above); read them
--- dynamically so load order can't matter.
-local _evcore = GLOBAL.require("dstp/core")
+-- on evt_config, so with those categories off it's a cheap early-return.
 AddComponentPostInit("combat", function(self)
     if _evcore.HookCombatComponent then _evcore.HookCombatComponent(self) end
 end)
 AddComponentPostInit("trader", function(self)
     if _evcore.HookTraderComponent then _evcore.HookTraderComponent(self) end
+end)
+-- container: open/deposit/withdraw on PLACED world chests (anti-grief). The module
+-- hard-filters to structure containers, so backpacks/inventory churn is skipped.
+AddComponentPostInit("container", function(self)
+    if _evcore.HookContainerComponent then _evcore.HookContainerComponent(self) end
+end)
+
+-- Creature hooks. domesticatable/werebeast/rideable are RARE (cheap); freezable/pickable
+-- are COMMON but the module hard-filters (real mobs only / loot-count) and gates on
+-- evt_config.creatures. machine/activatable are RARE and ride the 'world' category.
+AddComponentPostInit("domesticatable", function(self)
+    if _evcore.HookDomesticatableComponent then _evcore.HookDomesticatableComponent(self) end
+end)
+AddComponentPostInit("werebeast", function(self)
+    if _evcore.HookWerebeastComponent then _evcore.HookWerebeastComponent(self) end
+end)
+AddComponentPostInit("freezable", function(self)
+    if _evcore.HookFreezableComponent then _evcore.HookFreezableComponent(self) end
+end)
+AddComponentPostInit("pickable", function(self)
+    if _evcore.HookPickableComponent then _evcore.HookPickableComponent(self) end
+end)
+AddComponentPostInit("rideable", function(self)
+    if _evcore.HookRideableComponent then _evcore.HookRideableComponent(self) end
+end)
+AddComponentPostInit("activatable", function(self)
+    if _evcore.HookActivatableComponent then _evcore.HookActivatableComponent(self) end
+end)
+AddComponentPostInit("machine", function(self)
+    if _evcore.HookMachineComponent then _evcore.HookMachineComponent(self) end
 end)

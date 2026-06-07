@@ -133,6 +133,47 @@ function M.RegisterWorld(inst)
             shard_type = config.shard_type,
         }, data)
     end)
+
+    -- A rift CLOSED ("ms_riftremovedfrompool", riftspawner.lua:68; data.rift = the
+    -- rift entity removed). Counterpart of rift_spawned above.
+    inst:ListenForEvent("ms_riftremovedfrompool", function(world, data)
+        if not evt_config.world then return end
+        local rift = data and data.rift
+        local x, _, z = 0, 0, 0
+        if rift and rift.Transform then x, _, z = rift.Transform:GetWorldPosition() end
+        DSTP.PushEvent("rift_closed", {
+            rift_prefab = rift and rift.prefab or "unknown",
+            x = math.floor(x), z = math.floor(z),
+            shard_type = config.shard_type,
+        }, data)
+    end)
+
+    -- Ruins nightmare cycle (CAVES shard only). "nightmarephasechanged"
+    -- (nightmareclock.lua:255) carries the phase name: calm/warn/wild/dawn — drives
+    -- shadow-creature spawns in the ruins. The cb's 2nd arg IS the phase string.
+    inst:ListenForEvent("nightmarephasechanged", function(world, phase)
+        if not evt_config.world then return end
+        DSTP.PushEvent("nightmare_phase", {
+            phase = tostring(phase or (world.state and world.state.nightmarephase) or "unknown"),
+            shard_type = config.shard_type,
+        }, phase)
+    end)
+
+    -- Something deployed/planted in the world ("itemplanted", deployable.lua:144;
+    -- data = { doer = deployer, pos = Vector3 }). A cheap "a player placed a sapling/
+    -- structure/trap" signal. doer is the placing player.
+    inst:ListenForEvent("itemplanted", function(world, data)
+        if not evt_config.world then return end
+        local doer = data and data.doer
+        local pos = data and data.pos
+        DSTP.PushEvent("item_planted", {
+            userid = doer and doer.userid or "",
+            name = doer and doer.name or "unknown",
+            x = pos and pos.x and math.floor(pos.x) or 0,
+            z = pos and pos.z and math.floor(pos.z) or 0,
+            shard_type = config.shard_type,
+        }, data)
+    end)
 end
 
 return M

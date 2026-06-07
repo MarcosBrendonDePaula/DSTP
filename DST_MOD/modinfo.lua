@@ -169,7 +169,14 @@ configuration_options = {
     {
         name = "EVT_GRIEFING",
         label = "Events: Griefing (Anti-Grief)",
-        hover = "Track structures burnt, hammered, containers opened/closed. Useful for anti-grief detection.",
+        hover = "Track structures burnt, hammered, built, ignited; containers opened/looted. Useful for anti-grief detection.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
+        name = "EVT_CREATURES",
+        label = "Events: Creatures",
+        hover = "Track non-player creatures: beefalo tamed/feral, mob transform/frozen, mount rider, resource nodes picked.",
         options = {{description = "On", data = true}, {description = "Off", data = false}},
         default = false,
     },

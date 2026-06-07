@@ -48,6 +48,22 @@ Effort: **low** = world `ListenForEvent`; **medium** = component hook
 module (callback-wrap or per-prefab constructor hook). Each new trigger = 3 wiring
 points (Lua listener + `TRIGGER_EVENTS` catalog + `FlowEngine.categoryMap`).
 
+> **STATUS (implemented — the low/medium-effort tier, mod entity-events base):**
+> `structure_built` (#1, via the `Builder:DoBuild` override, not a per-prefab `onbuilt` hook),
+> `rift_closed` (#3), `nightmare_phase` (#5), `structure_worked` (#6), `object_ignited` (#7),
+> `container_opened_entity` (#8), `container_item_taken` (#9), `container_item_added` (#10),
+> `beefalo_tamed` (#11), `beefalo_feral` (#12), `mob_transform` (#13), `mob_frozen` (#14),
+> `resource_picked` (#15), `item_planted` (#16), `machine_toggled` (#17), `object_activated` (#18),
+> `mount_rider_changed` (#20), `toadstool_state_changed` (#22).
+> New **`creatures`** category added (`EVT_CREATURES`). The component hooks (`HookWorkable`/
+> `HookBurnable`/`HookContainer`/`HookDomesticatable`/`HookWerebeast`/`HookFreezable`/
+> `HookPickable`/`HookRideable`/`HookActivatable`/`HookMachine`) live in `events/nonplayer.lua`,
+> published on `core`, attached in `modmain.lua`. **NOT yet done (high-effort / lower-value):**
+> `#2 sandstorm_changed` (likely covered by `storm_changed`), `#4 moon_phase_full` (fold into
+> `moon_phase_changed`), `#19 item_perished`, `#21 trap_sprung`, `#23-25` production
+> (crockpot/dryer/crop — need callback-wrap mechanic modules), `#26 creature_spawned`
+> (per-prefab constructor hook).
+
 | # | Proposed trigger | DST event | Fires on | Hook (effort) | Category | Data emitted |
 |---|------------------|-----------|----------|---------------|----------|--------------|
 | 1 | `structure_built` | `onbuilt` | the built structure (product) | `AddComponentPostInit("builder")` → one-shot `onbuilt` on the product, OR a tiny override of `Builder:DoBuild` (medium) | crafting | `{userid,name,prefab,x,z}` |

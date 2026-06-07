@@ -188,6 +188,14 @@ class ServerCoreManager {
     if (core) core.worker.postMessage({ type: 'mirror', groups: this.groupsFor(serverId) })
   }
 
+  // A flow was deleted or disabled on the main thread — tell the worker (where the
+  // engine actually runs) to abort any in-flight runs of it, so a long ai_agent loop
+  // stops instead of finishing after the toggle. No-op if the core isn't spawned yet.
+  unloadFlow(serverId: string, flowId: string) {
+    const core = this.cores.get(serverId)
+    if (core) core.worker.postMessage({ type: 'unloadFlow', flowId })
+  }
+
   startCapture(serverId: string) {
     this.get(serverId).worker.postMessage({ type: 'startCapture' })
   }

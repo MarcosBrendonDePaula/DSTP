@@ -63,14 +63,14 @@ flowchart TB
 
 ### 🛠 Real-time administration
 - Live state: players (vitals, position, inventory, age, admin), world (day/phase/season), multi-shard (overworld + caves grouped into tabs)
-- **56 command actions**: heal, feed, godmode, kick, ban, respawn, give/remove item, teleport, set_phase/season, skip_day, rollback, regenerate, lightning, spawn…
+- **60+ command actions**: heal, feed, godmode, kick, ban, respawn, give/remove item, teleport, set_phase/season, skip_day, rollback, regenerate, lightning, spawn, entity read/control…
 - Private messages and announcements; chat captured in real time
 - **Per-server auth** (password + sessions; in-game magic-link via `#panel`)
 
 ### ⚡ Visual automation (flows)
-n8n-style drag-and-drop editor. **11 node types**, **74 triggers**, **56 actions**.
+n8n-style drag-and-drop editor. **11 node types**, **88 triggers**, **60+ actions**.
 
-- **Triggers** across 13 categories: players, chat, combat, crafting, inventory, health, gathering, world, weather, bosses, survival, character, exploration, ui, **economy**
+- **Triggers** across 14 categories: players, chat, combat, crafting, inventory, health, gathering, world, weather, bosses, survival, character, exploration, **creatures**, ui, **economy**
 - **Nodes:** trigger · condition · action · delay · http_request · set_variable · **script (JS via Monaco)** · get_player · find_player · memory (persistent SQLite) · wait/merge
 - **n8n-style context:** `{{node.field}}` / `{{alias.field}}`, deep-path resolution, types preserved
 - **Capture/debug** per-node traces; **auto-activation** of event categories when a flow needs them
@@ -85,6 +85,12 @@ n8n-style drag-and-drop editor. **11 node types**, **74 triggers**, **56 actions
 - **Draggable windows** (`panel draggable=true`) and an **editable text field** (Enter returns the typed value to the flow) — all validated on the real engine
 - Client-side **tabs** (switch with no round-trip) and **follow-entity** (a HUD that tracks a mob/boss in the world)
 - Declarative **rules engine**: reactive local HUD (live HP bar) with no backend round-trip
+
+### 🐾 Entity events & control — *non-player mobs, structures, world objects*
+Beyond per-player events, flows can react to and control **any entity** the game spawns.
+
+- **14 entity triggers** (+ a `creatures` category): structure built/worked/ignited, container opened/looted, rift closed, nightmare phase, beefalo tamed/feral, mob transform/frozen, resource picked, mount rider changed…
+- **Control actions keyed by GUID** (from an event) or prefab+position: `get_entity` (read any component — health, fuel, fire, container contents…), set health / kill / extinguish / ignite / set fuel / freeze, and **spawn returns the GUID** so a flow can spawn → control → react. See `specs/entity-control-catalog.md`.
 
 ### 🔗 Bindings — server-only data on the client
 DST does **not** replicate data like mob health to the client. The **bindings** system adds its own netvars to ship server-only data to the client — generic and safe (curated catalog, gated by prefab).
@@ -198,6 +204,8 @@ docs/                             # AUTOMATION.md, WORKERS.md, IDEAS.md
 | `DST_MOD/specs/dst-client-constraints.md` | **Read before touching UI/networking** — what the DST client sees/doesn't, netvar pitfalls |
 | `DST_MOD/specs/ui-by-nodes.md` · `ui-system.md` | UI by flows and the widget-tree contract |
 | `DST_MOD/specs/dynamic-data-bindings.md` · `data-catalog.md` | Bindings system and which data is worth replicating |
+| `DST_MOD/specs/entity-events-catalog.md` · `entity-control-catalog.md` | Entity triggers and GUID-keyed read/control actions |
+| `DST_MOD/specs/dynamic-content-feasibility.md` · `http-prefab-transport.md` | What can/can't be added at runtime (assets are Workshop-only) |
 
 ---
 
@@ -212,6 +220,7 @@ docs/                             # AUTOMATION.md, WORKERS.md, IDEAS.md
 - **Bindings**: mob health replicated to the client (real HP bar)
 - Live player HUD (position, vitals, coins, day)
 - **Encrypted Environments vault** for flow secrets
+- **Entity events + control**: 14 non-player triggers, GUID-keyed read/mutate actions (validated in-game)
 
 ### 🔜 Next (clear path)
 - **Bindings authoring UI** — declare data to replicate from the panel, no Lua editing

@@ -66,7 +66,7 @@ export function resolveConditionField(field: any, context: Record<string, any>):
 
 export type ConditionOperator =
   | 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains'
-  | 'starts_with' | 'ends_with' | 'exists'
+  | 'not_contains' | 'starts_with' | 'not_starts_with' | 'ends_with' | 'exists'
 
 // Evaluate one condition. A missing field or operator is treated as "pass"
 // (true) so an unconfigured condition node doesn't block the flow.
@@ -86,9 +86,13 @@ export function evaluateCondition(
     case 'greater_than': return Number(actual) > Number(resolvedValue)
     case 'less_than': return Number(actual) < Number(resolvedValue)
     case 'contains': return String(actual).includes(String(resolvedValue))
+    case 'not_contains': return !String(actual).includes(String(resolvedValue))
     // starts_with avoids the classic "!ban matches !banana" / "!hp matches chp"
     // false positive that `contains` has for chat-command triggers.
     case 'starts_with': return String(actual).startsWith(String(resolvedValue))
+    // not_starts_with: e.g. filter out the bot's own "[ia] ..." announcements so an
+    // AI chat agent doesn't reply to itself (announce is global → comes back as chat).
+    case 'not_starts_with': return !String(actual).startsWith(String(resolvedValue))
     case 'ends_with': return String(actual).endsWith(String(resolvedValue))
     case 'exists': return actual != null
     default: return true
