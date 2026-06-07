@@ -1,6 +1,7 @@
 import { Elysia } from "elysia"
 import { validateWebhook } from "../live/webhook"
 import { processAutomationEvent } from "../live/LiveAutomation"
+import { isSafeServerId } from "../db/connection"
 
 // Inbound webhook triggers: an external service POSTs/GETs here to fire a flow
 // whose entry point is a `webhook` node with the matching id.
@@ -13,6 +14,12 @@ import { processAutomationEvent } from "../live/LiveAutomation"
 // execution is routed into the per-server worker like a normal game event.
 
 function handle(serverId: string, webhookId: string, method: string, ctx: any) {
+  // serverId reaches the per-server db (FlowRepository) — reject a path-traversal /
+  // hostile id with a clean 400 before validateWebhook touches getDb.
+  if (!isSafeServerId(serverId)) {
+    ctx.set.status = 400
+    return { ok: false, error: 'invalid server_id' }
+  }
   const token = ctx.headers?.['x-webhook-token'] ?? (ctx.query as any)?.token ?? null
   const verdict = validateWebhook(serverId, webhookId, {
     method,

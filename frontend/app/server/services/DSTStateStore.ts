@@ -61,7 +61,7 @@ class DSTStateStore {
     entry.last_seen = Date.now()
     entry.online = true
 
-    if (events && events.length > 0) {
+    if (Array.isArray(events) && events.length > 0) {
       for (const evt of events) {
         entry.events.push({ ...evt, shard_id, server_id, shard_type, received_at: Date.now() })
       }
