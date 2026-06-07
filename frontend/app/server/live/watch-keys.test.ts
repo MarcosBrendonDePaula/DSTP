@@ -22,7 +22,7 @@ afterAll(() => {
 })
 
 let engine: FlowEngine
-let watchCalls: Array<{ serverId: string; keys: string[] }>
+let watchCalls: Array<{ serverId: string; keys: string[]; combos?: any[] }>
 
 function makeHost() {
   watchCalls = []
@@ -31,7 +31,7 @@ function makeHost() {
     getServerGroups: () => [],
     emitState: () => {},
     requestEventToggle: () => {},
-    requestWatchKeys: (serverId, keys) => { watchCalls.push({ serverId, keys }) },
+    requestWatchKeys: (serverId, keys, combos) => { watchCalls.push({ serverId, keys, combos }) },
   }
   return host
 }
@@ -97,6 +97,58 @@ describe('collectWatchKeys — derives the full watch set from enabled flows', (
   })
 })
 
+// key_combo: collectWatchKeys must derive both the combo descriptors AND fold their
+// individual keys into the flat watch set (so the client's OnRawKey doesn't ignore
+// them). Modifiers (CTRL/SHIFT/ALT) must NEVER enter the flat key set.
+describe('collectWatchKeys — key_combo', () => {
+  const comboFlow = (params: any, enabled = true) => ({
+    id: uid(), name: 'c', enabled,
+    nodes: [{ id: 'cmb', type: 'trigger', data: { event_type: 'key_combo', params }, position: { x: 0, y: 0 } }],
+    edges: [],
+  })
+  const lastCombos = () => watchCalls.length ? (watchCalls[watchCalls.length - 1].combos ?? []) : []
+
+  it('simultaneous: main key in watch set, modifiers NOT, combo descriptor emitted', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'simultaneous', key: 'h', modifiers: ['CTRL', 'SHIFT'] }))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual(['H'])                 // main key in, CTRL/SHIFT out
+    const c = lastCombos()
+    expect(c).toHaveLength(1)
+    expect(c[0]).toMatchObject({ mode: 'simultaneous', key: 'H', modifiers: ['CTRL', 'SHIFT'] })
+    expect(c[0].id).toBeString()
+  })
+
+  it('sequence: all keys folded into watch set, timeout defaulted', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'sequence', keys: 'h, j, k' }))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual(['H', 'J', 'K'])
+    expect(lastCombos()[0]).toMatchObject({ mode: 'sequence', keys: ['H', 'J', 'K'], timeoutMs: 1000 })
+  })
+
+  it('any: all keys folded into watch set', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'any', keys: 'F1,F2,F3' }))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual(['F1', 'F2', 'F3'])
+    expect(lastCombos()[0]).toMatchObject({ mode: 'any', keys: ['F1', 'F2', 'F3'] })
+  })
+
+  it('key_pressed and a combo sharing a key dedupe in the flat set', () => {
+    const repo = new FlowRepository(SERVER)
+    repo.save(keyFlow('H'))
+    repo.save(comboFlow({ mode: 'simultaneous', key: 'H', modifiers: ['CTRL'] }))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual(['H'])                 // H once
+    expect(lastCombos()).toHaveLength(1)
+  })
+
+  it('disabled combo flow is excluded', () => {
+    new FlowRepository(SERVER).save(comboFlow({ mode: 'any', keys: 'F5' }, false))
+    engine.collectWatchKeys(SERVER)
+    expect(lastKeys()).toEqual([])
+    expect(lastCombos()).toEqual([])
+  })
+})
+
 // Reconnection reconciliation: when a shard goes offline and comes back (game/server
 // restart), the mod loses its watch set. The backend still remembers last_keys, so a
 // plain "unchanged → skip" would never re-send. resetWatchKeysFor + recompute fixes
@@ -113,7 +165,7 @@ describe('DSTStateStore — watch keys re-sent on reconnect', () => {
     dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
     dstStateStore.requestWatchKeysForServer(SRV, ['H'])
     const r1 = dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
-    expect(r1.watch_keys).toEqual(['H'])
+    expect(r1.watch_keys).toEqual({ keys: ['H'], combos: [] })
 
     // Steady state: same set, not re-sent.
     dstStateStore.requestWatchKeysForServer(SRV, ['H'])
@@ -126,6 +178,6 @@ describe('DSTStateStore — watch keys re-sent on reconnect', () => {
     dstStateStore.resetWatchKeysFor(SRV)
     dstStateStore.requestWatchKeysForServer(SRV, ['H']) // recompute requests same set
     const r3 = dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
-    expect(r3.watch_keys).toEqual(['H']) // re-delivered despite being unchanged
+    expect(r3.watch_keys).toEqual({ keys: ['H'], combos: [] }) // re-delivered despite being unchanged
   })
 })

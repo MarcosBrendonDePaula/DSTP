@@ -19,6 +19,20 @@ import type { NodeRunContext } from './nodes/types'
 // All external side-effects the engine needs are injected via this host, so the
 // same engine can run against the main process (direct) or a worker (RPC).
 
+// A key_combo the client should watch for. Mirrors the trigger's config; the client
+// (keys.lua) detects it and fires a `key_combo` event tagged with `id`.
+//   - simultaneous: `key` pressed while all `modifiers` (CTRL/SHIFT/ALT) are held
+//   - sequence:     `keys` pressed in order within `timeoutMs`
+//   - any:          any of `keys` pressed (event reports which)
+export interface KeyCombo {
+  id: string
+  mode: 'simultaneous' | 'sequence' | 'any'
+  key?: string            // simultaneous: the main key
+  keys?: string[]         // sequence/any: the key set
+  modifiers?: string[]    // simultaneous: subset of CTRL/SHIFT/ALT
+  timeoutMs?: number      // sequence
+}
+
 export interface EngineHost {
   // enqueue a command for the DST server (today: dstStateStore.pushCommandToServer)
   pushCommand(serverId: string, type: string, data: any): void
@@ -28,9 +42,10 @@ export interface EngineHost {
   emitState(delta: Record<string, any>): void
   // request activation of an event category (today: dstStateStore.requestEventToggleForServer)
   requestEventToggle(serverId: string, category: string, enabled: boolean): void
-  // set the FULL set of keys the client should watch for the key_pressed trigger
-  // (today: dstStateStore.requestWatchKeysForServer). NOT a category — a parallel channel.
-  requestWatchKeys(serverId: string, keys: string[]): void
+  // set the FULL set of keys + combos the client should watch for the key_pressed /
+  // key_combo triggers (today: dstStateStore.requestWatchKeysForServer). NOT a
+  // category — a parallel channel.
+  requestWatchKeys(serverId: string, keys: string[], combos?: KeyCombo[]): void
 }
 
 // Shared storage between flows — Script nodes can read/write via context.store
@@ -186,6 +201,11 @@ export class FlowEngine {
         if (matches && event.type === 'key_pressed') {
           const want = String(this.param(trigger, 'key') ?? '').toUpperCase()
           matches = want !== '' && want === String(event.data?.key ?? '').toUpperCase()
+        }
+        // key_combo matches by combo id (= the trigger node's id, set in collectWatchKeys),
+        // so the right combo trigger fires and not every key_combo on the server.
+        if (matches && event.type === 'key_combo') {
+          matches = event.data?.combo_id === trigger.id
         }
         if (matches) {
           const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
@@ -1408,14 +1428,52 @@ export class FlowEngine {
   // (DSTStateStore) only re-sends to the game when the set actually changes.
   collectWatchKeys(serverId: string) {
     const keys = new Set<string>()
+    const combos: KeyCombo[] = []
     for (const flow of this.flowRepo(serverId).findEnabled()) {
       for (const node of (flow.nodes as FlowNode[]) || []) {
-        if (node.type === 'trigger' && node.data.event_type === 'key_pressed') {
+        if (node.type !== 'trigger') continue
+        if (node.data.event_type === 'key_pressed') {
           const k = String(this.param(node, 'key') ?? '').toUpperCase().trim()
           if (k !== '') keys.add(k)
+        } else if (node.data.event_type === 'key_combo') {
+          const combo = this.comboFromNode(node)
+          if (combo) {
+            combos.push(combo)
+            // Every INDIVIDUAL key of a combo must enter the watch set, or the
+            // client's OnRawKey fast-path ignores it. Modifiers (CTRL/SHIFT/ALT)
+            // are queried via IsKeyDown, NOT watched — so they never go in `keys`.
+            if (combo.key) keys.add(combo.key)
+            for (const k of combo.keys ?? []) keys.add(k)
+          }
         }
       }
     }
-    this.host.requestWatchKeys(serverId, [...keys])
+    this.host.requestWatchKeys(serverId, [...keys], combos)
+  }
+
+  // Build a KeyCombo from a key_combo trigger node. `id` = node.id (stable + unique;
+  // evaluateEvent matches the fired combo back to its trigger by this id). Returns
+  // null if the config is incomplete (no usable keys).
+  private comboFromNode(node: FlowNode): KeyCombo | null {
+    const mode = String(this.param(node, 'mode') ?? 'simultaneous')
+    const norm = (s: any) => String(s ?? '').toUpperCase().trim()
+    const splitKeys = (v: any): string[] => {
+      if (Array.isArray(v)) return v.map(norm).filter(Boolean)
+      return String(v ?? '').split(',').map(norm).filter(Boolean)
+    }
+    if (mode === 'simultaneous') {
+      const key = norm(this.param(node, 'key'))
+      if (!key) return null
+      const modifiers = splitKeys(this.param(node, 'modifiers'))
+        .filter(m => m === 'CTRL' || m === 'SHIFT' || m === 'ALT')
+      return { id: node.id, mode, key, modifiers }
+    }
+    const keys = splitKeys(this.param(node, 'keys'))
+    if (keys.length === 0) return null
+    if (mode === 'sequence') {
+      const timeoutMs = Math.max(100, Math.min(5000, Number(this.param(node, 'timeoutMs')) || 1000))
+      return { id: node.id, mode, keys, timeoutMs }
+    }
+    return { id: node.id, mode: 'any', keys }
   }
 }

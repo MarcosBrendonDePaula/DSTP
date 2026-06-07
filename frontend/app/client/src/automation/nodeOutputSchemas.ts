@@ -473,6 +473,16 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'world_z', type: 'number', description: 'Mouse Z in WORLD coords at the moment of the press (for Teleport/Spawn). Absent if the cursor was not over terrain.' },
     ],
   },
+  key_combo: {
+    description: 'Player completed a key combo (Ctrl+H, a sequence, or any of a set). Carries the mouse world position.',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Who triggered the combo (player user ID)' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'key', type: 'string', description: 'The key that fired it (main key for simultaneous, last for sequence, the pressed one for "any")' },
+      { name: 'world_x', type: 'number', description: 'Mouse X in WORLD coords at the moment of the combo (for Teleport/Spawn). Absent if cursor was not over terrain.' },
+      { name: 'world_z', type: 'number', description: 'Mouse Z in WORLD coords at the moment of the combo. Absent if cursor was not over terrain.' },
+    ],
+  },
 }
 
 // ─── Node type outputs ───────────────────────────────

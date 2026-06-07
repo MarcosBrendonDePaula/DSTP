@@ -85,7 +85,7 @@ class ServerCoreManager {
         dstStateStore.requestEventToggleForServer(args[0], args[1], args[2])
         break
       case 'requestWatchKeys':
-        dstStateStore.requestWatchKeysForServer(args[0], args[1])
+        dstStateStore.requestWatchKeysForServer(args[0], args[1], args[2])
         break
       case 'logError':
         console.error(`[ServerCore ${serverId}]`, args[1])

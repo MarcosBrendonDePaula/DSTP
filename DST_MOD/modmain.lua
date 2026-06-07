@@ -84,6 +84,25 @@ AddModRPCHandler(modname, "KeyPressed", function(player, key, down, wx, wz)
     end
 end)
 
+-- key_combo: client detected a combo (simultaneous / sequence / any). The combo_id
+-- is the trigger node's id, so the backend matches it to the right key_combo flow.
+AddModRPCHandler(modname, "KeyCombo", function(player, combo_id, key, wx, wz)
+    if player and type(combo_id) == "string" and combo_id ~= "" then
+        local dstp_mod = require("dstp/client")
+        local data = {
+            userid = player.userid,
+            name = player.name or "unknown",
+            combo_id = combo_id,
+            key = (type(key) == "string") and key or "",
+        }
+        if type(wx) == "number" and wx == wx and type(wz) == "number" and wz == wz then
+            data.world_x = wx
+            data.world_z = wz
+        end
+        dstp_mod.PushEvent("key_combo", data)
+    end
+end)
+
 AddModRPCHandler(modname, "RequestPanel", function(player)
     DebugLog("[DSTP] RPC RequestPanel received from:", player and player.name or "unknown")
     -- Server validates: is this player actually an admin?
@@ -237,14 +256,22 @@ AddPrefabPostInit("player_classified", function(inst)
                                 wx or 0/0, wz or 0/0)
                         end
                     end,
+                    -- key_combo: fire the matched combo's id (+ the key that fired it
+                    -- and the mouse world pos) so the backend matches it to its trigger.
+                    SendComboRPC = function(combo_id, key, wx, wz)
+                        if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyCombo"] then
+                            SendModRPCToServer(MOD_RPC[modname]["KeyCombo"], combo_id, key or "",
+                                wx or 0/0, wz or 0/0)
+                        end
+                    end,
                 })
             end
-            local list = {}
+            local payload = {}
             if raw and raw ~= "" then
                 local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, raw)
-                if ok and type(parsed) == "table" then list = parsed end
+                if ok and type(parsed) == "table" then payload = parsed end
             end
-            Keys.SetWatchKeys(list)
+            Keys.SetWatch(payload)
         end)
     end
 end)

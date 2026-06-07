@@ -40,7 +40,7 @@ const _headlessHost: EngineHost = {
   getServerGroups: () => dstStateStore.getServerGroups(),
   emitState: (delta) => { Object.assign(_headlessState, delta) },
   requestEventToggle: (serverId, cat, en) => dstStateStore.requestEventToggleForServer(serverId, cat, en),
-  requestWatchKeys: (serverId, keys) => dstStateStore.requestWatchKeysForServer(serverId, keys),
+  requestWatchKeys: (serverId, keys, combos) => dstStateStore.requestWatchKeysForServer(serverId, keys, combos),
 }
 
 function _getEngine(): FlowEngine {
@@ -137,7 +137,7 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
       getServerGroups: () => dstStateStore.getServerGroups(),
       emitState: (delta) => this.setState(delta as any),
       requestEventToggle: (serverId, cat, en) => dstStateStore.requestEventToggleForServer(serverId, cat, en),
-      requestWatchKeys: (serverId, keys) => dstStateStore.requestWatchKeysForServer(serverId, keys),
+      requestWatchKeys: (serverId, keys, combos) => dstStateStore.requestWatchKeysForServer(serverId, keys, combos),
     }
     engine.setHost(directHost)
     this._engine = engine

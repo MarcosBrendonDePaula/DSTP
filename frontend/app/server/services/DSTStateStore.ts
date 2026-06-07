@@ -3,6 +3,8 @@
 // State is keyed by shard_id (e.g. "server-1:master", "server-1:caves")
 // Grouped by server_id for the frontend
 
+import type { KeyCombo } from '../live/FlowEngine'
+
 const MAX_EVENTS_PER_SHARD = 200
 
 interface ShardEntry {
@@ -25,6 +27,9 @@ interface ShardEntry {
   // last_keys is what was last delivered (we only re-send on change).
   requested_keys: string[] | null
   last_keys: string[]
+  // key_combo watch set — same full-set + re-send-on-change model as keys.
+  requested_combos: KeyCombo[] | null
+  last_combos: KeyCombo[]
 }
 
 export interface ServerGroup {
@@ -42,7 +47,7 @@ class DSTStateStore {
   version: number = 0
 
   // Called by REST route when a DST shard syncs
-  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: string[] } {
+  handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: { keys: string[]; combos: KeyCombo[] } } {
     let entry = this.shards.get(shard_id)
     if (!entry) {
       entry = {
@@ -52,6 +57,7 @@ class DSTStateStore {
         active_events: {}, requested_events: null,
         debounce: {}, requested_debounce: null,
         requested_keys: null, last_keys: [],
+        requested_combos: null, last_combos: [],
       }
       this.shards.set(shard_id, entry)
     }
@@ -84,7 +90,7 @@ class DSTStateStore {
     this.commandQueues.set(shard_id, [])
 
     // Check for pending requests
-    const result: { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: string[] } = { commands: queue }
+    const result: { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: { keys: string[]; combos: KeyCombo[] } } = { commands: queue }
     if (entry.requested_events) {
       result.enable_events = entry.requested_events
       entry.requested_events = null
@@ -93,10 +99,16 @@ class DSTStateStore {
       result.debounce = entry.requested_debounce
       entry.requested_debounce = null
     }
-    if (entry.requested_keys) {
-      result.watch_keys = entry.requested_keys
-      entry.last_keys = entry.requested_keys
+    // keys and combos travel together in one watch_keys envelope. If EITHER changed,
+    // (re)send the full current set of both (the client replaces its whole watch set).
+    if (entry.requested_keys || entry.requested_combos) {
+      const keys = entry.requested_keys ?? entry.last_keys
+      const combos = entry.requested_combos ?? entry.last_combos
+      result.watch_keys = { keys, combos }
+      entry.last_keys = keys
+      entry.last_combos = combos
       entry.requested_keys = null
+      entry.requested_combos = null
     }
 
     return result
@@ -116,7 +128,7 @@ class DSTStateStore {
   // wrongly skip the re-send.
   resetWatchKeysFor(server_id: string) {
     for (const shard of this.shards.values()) {
-      if (shard.server_id === server_id) shard.last_keys = []
+      if (shard.server_id === server_id) { shard.last_keys = []; shard.last_combos = [] }
     }
   }
 
@@ -261,14 +273,18 @@ class DSTStateStore {
   // was deleted/disabled) shrinks the watch set. Only flags a re-send when the
   // sorted/deduped set actually differs from what was last delivered, so a steady
   // state produces no traffic.
-  requestWatchKeysForServer(server_id: string, keys: string[]) {
+  requestWatchKeysForServer(server_id: string, keys: string[], combos: KeyCombo[] = []) {
     const next = [...new Set(keys.map(k => String(k).toUpperCase()))].sort()
+    // Combos are compared by a stable JSON signature (order-independent on id).
+    const sig = (cs: KeyCombo[]) => JSON.stringify([...cs].sort((a, b) => a.id.localeCompare(b.id)))
+    const nextComboSig = sig(combos)
     for (const shard of this.shards.values()) {
       if (shard.server_id === server_id) {
         const current = [...shard.last_keys].sort()
-        if (next.length !== current.length || next.some((k, i) => k !== current[i])) {
-          shard.requested_keys = next
-        }
+        const keysChanged = next.length !== current.length || next.some((k, i) => k !== current[i])
+        const combosChanged = nextComboSig !== sig(shard.last_combos)
+        if (keysChanged) shard.requested_keys = next
+        if (combosChanged) shard.requested_combos = combos
       }
     }
   }

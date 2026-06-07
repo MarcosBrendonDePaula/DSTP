@@ -1,6 +1,12 @@
 import { useCallback } from 'react'
-import { BaseNode, NodeField, NodeSelect } from '@client/src/automation/nodes/BaseNode'
+import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
 import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
+
+const COMBO_MODES = [
+  { value: 'simultaneous', label: 'Simultânea (Ctrl+H)' },
+  { value: 'sequence', label: 'Sequência (H, J, K)' },
+  { value: 'any', label: 'Qualquer uma da lista' },
+]
 
 export const TRIGGER_EVENTS = [
   // Players
@@ -133,7 +139,11 @@ export const TRIGGER_EVENTS = [
   // Input — NOT a DST event category. Key presses ride a separate watch_keys
   // channel: the backend tells the client which keys to watch (set the key below).
   { value: 'key_pressed', label: '⌨ Tecla Pressionada', category: 'input' },
+  { value: 'key_combo', label: '⌨ Combo de Teclas', category: 'input' },
 ]
+
+// Modifier keys for the simultaneous combo mode (queried via IsKeyDown, not watched).
+export const COMBO_MODIFIERS = ['CTRL', 'SHIFT', 'ALT']
 
 // Keys offerable to the key_pressed trigger. Must match what the mod's keys.lua can
 // map to a DST KEY_* constant. Strings are what travel on the wire (uppercase).
@@ -178,6 +188,52 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
           />
         </NodeField>
       )}
+      {data.event_type === 'key_combo' && (() => {
+        const p = data.params || {}
+        const mode = p.mode || 'simultaneous'
+        const setP = (patch: any) => updateNodeData(id, { ...data, params: { ...p, ...patch } })
+        const mods: string[] = Array.isArray(p.modifiers) ? p.modifiers : []
+        const toggleMod = (m: string) => setP({ modifiers: mods.includes(m) ? mods.filter(x => x !== m) : [...mods, m] })
+        return (
+          <>
+            <NodeField label="Modo">
+              <NodeSelect value={mode} onChange={(v: string) => setP({ mode: v })} options={COMBO_MODES} />
+            </NodeField>
+            {mode === 'simultaneous' && (
+              <>
+                <NodeField label="Tecla principal">
+                  <NodeSelect value={p.key || ''} onChange={(v: string) => setP({ key: v })} options={WATCHABLE_KEYS} />
+                </NodeField>
+                <NodeField label="Modificadores">
+                  <div className="flex gap-2">
+                    {COMBO_MODIFIERS.map(m => (
+                      <label key={m} className="flex items-center gap-1 text-[9px] text-gray-400 cursor-pointer">
+                        <input type="checkbox" checked={mods.includes(m)} onChange={() => toggleMod(m)} />
+                        {m}
+                      </label>
+                    ))}
+                  </div>
+                </NodeField>
+              </>
+            )}
+            {mode === 'sequence' && (
+              <>
+                <NodeField label="Sequência (vírgula)">
+                  <NodeInput value={p.keys || ''} onChange={(v: string) => setP({ keys: v })} placeholder="H, J, K" />
+                </NodeField>
+                <NodeField label="Tempo limite (ms)">
+                  <NodeInput value={p.timeoutMs || ''} onChange={(v: string) => setP({ timeoutMs: v })} placeholder="1000" />
+                </NodeField>
+              </>
+            )}
+            {mode === 'any' && (
+              <NodeField label="Teclas (vírgula)">
+                <NodeInput value={p.keys || ''} onChange={(v: string) => setP({ keys: v })} placeholder="F1, F2, F3" />
+              </NodeField>
+            )}
+          </>
+        )
+      })()}
       {selectedEvent && (
         <div className="text-[9px] text-gray-500 mt-1">
           Categoria: {selectedEvent.category}
