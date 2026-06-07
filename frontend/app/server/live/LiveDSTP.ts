@@ -54,10 +54,17 @@ export function notifyLiveDSTP(serverId?: string) {
 // Global timer so per-server room state stays fresh even for servers no single panel
 // is actively viewing-change (e.g. player moves). pushServerData is a no-op for rooms
 // with no members, so this is cheap. Runs once for the process, not per connection.
-let _roomTimer: NodeJS.Timeout | null = null
+//
+// Pinned on globalThis (like ServerCoreManager / WorkflowInstanceStore) so it
+// survives HMR: a plain module-level `let` is reset to null on every hot reload,
+// and the next mount would spawn a fresh 2s interval while the previous module's
+// interval keeps firing forever (its handle now unreachable) — one leaked timer
+// per reload. The globalThis flag makes ensureRoomTimer idempotent across reloads.
+const ROOM_TIMER_KEY = Symbol.for('dstp.liveDSTP.roomTimer')
 function ensureRoomTimer() {
-  if (_roomTimer) return
-  _roomTimer = setInterval(() => pushAllServerData(), 2000)
+  const g = globalThis as any
+  if (g[ROOM_TIMER_KEY]) return
+  g[ROOM_TIMER_KEY] = setInterval(() => pushAllServerData(), 2000)
 }
 
 export class LiveDSTP extends LiveComponent<DSTPState> {

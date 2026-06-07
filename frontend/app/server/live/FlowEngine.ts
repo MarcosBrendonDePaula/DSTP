@@ -432,26 +432,39 @@ export class FlowEngine {
 
   // ─── Simple Flow Execution (no Wait nodes) ─────────
 
+  // Register an in-flight run of a flow under the concurrency cap, run `fn` with the
+  // run's AbortSignal, and always deregister. Returns false WITHOUT running if the
+  // cap is already reached (caller decides whether to log a drop). Shared by the
+  // simple path (executeFlow) and the post-wait path (executeBranchFromWait) so both
+  // honor MAX_CONCURRENT_PER_FLOW and respond to abortFlow().
+  private async runTracked(flowId: string, fn: (signal: AbortSignal) => Promise<void>): Promise<boolean> {
+    let set = this._inFlight.get(flowId)
+    if (set && set.size >= MAX_CONCURRENT_PER_FLOW) return false
+    if (!set) { set = new Set(); this._inFlight.set(flowId, set) }
+    const ac = new AbortController()
+    set.add(ac)
+    try {
+      await fn(ac.signal)
+      return true
+    } finally {
+      set.delete(ac)
+      if (set.size === 0) this._inFlight.delete(flowId)
+    }
+  }
+
   private async executeFlow(flow: Flow, trigger: FlowNode, event: any, serverId: string) {
     // Concurrency guard: cap how many runs of THIS flow can overlap. A flow whose
     // actions feed back into its own trigger (announce → chat_message) or that fires in
     // a burst would otherwise accumulate runaway concurrent executions ("4 IAs at once").
-    let set = this._inFlight.get(flow.id)
-    if (set && set.size >= MAX_CONCURRENT_PER_FLOW) {
+    const ran = await this.runTracked(flow.id, (signal) =>
+      this._executeFlowInner(flow, trigger, event, serverId, signal),
+    )
+    if (!ran) {
+      const n = this._inFlight.get(flow.id)?.size ?? MAX_CONCURRENT_PER_FLOW
       this.safeLog(serverId, {
         flowId: flow.id, flowName: flow.name, eventType: event.type,
-        actions: [`dropped: flow already running ${set.size}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
+        actions: [`dropped: flow already running ${n}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
       })
-      return
-    }
-    if (!set) { set = new Set(); this._inFlight.set(flow.id, set) }
-    const ac = new AbortController()
-    set.add(ac)
-    try {
-      await this._executeFlowInner(flow, trigger, event, serverId, ac.signal)
-    } finally {
-      set.delete(ac)
-      if (set.size === 0) this._inFlight.delete(flow.id)
     }
   }
 
@@ -600,10 +613,18 @@ export class FlowEngine {
 
     this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
-    try {
+    // The walk-to-wait runs inside runTracked so abortFlow() (flow deleted/disabled)
+    // stops it too, same as the simple path — context._signal is the live signal for
+    // the duration of the walk. It's cheap (walks to the Wait and parks), so it's
+    // never dropped by the cap. The heavy post-wait work is capped separately in
+    // executeBranchFromWait.
+    await this.runTracked(flow.id, async (signal) => {
+     context._signal = signal
+     try {
       // Walk from trigger, stopping at Wait nodes
       const outEdges = edges.filter(e => e.source === trigger.id)
       for (const edge of outEdges) {
+        if (signal.aborted) break
         const target = nodes.find(n => n.id === edge.target)
         if (!target) continue
 
@@ -652,9 +673,10 @@ export class FlowEngine {
           )
         }
       }
-    } catch (err) {
+     } catch (err) {
       console.error(`[DSTP Automation] Flow "${flow.name}" stateful branch error:`, maskSecrets(String((err as any)?.message ?? err), context))
-    }
+     }
+    })
 
     // Log the branch arrival (not the full flow completion)
     if (executedActions.length > 0) {
@@ -705,25 +727,40 @@ export class FlowEngine {
 
     this.pushTrace(serverId, waitNode.id, 'completed', {}, waitOutput, undefined, mergedContext)
 
-    try {
-      // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
-      const outEdges = edges.filter(e => {
-        if (e.source !== waitNode.id) return false
-        if (sourceHandle) {
-          // Follow edges matching the source handle, or edges with no handle
-          return e.sourceHandle === sourceHandle || !e.sourceHandle
-        }
-        // No source handle filter - follow all non-timeout edges
-        return e.sourceHandle !== 'timeout'
-      })
+    // The post-wait branch is the heavy half (it can run ai_agent / delay / long
+    // chains), so it's tracked like the simple path: honors MAX_CONCURRENT_PER_FLOW
+    // and aborts when the flow is deleted/disabled (processNode checks
+    // mergedContext._signal before each node).
+    const ran = await this.runTracked(flow.id, async (signal) => {
+      mergedContext._signal = signal
+      try {
+        // Filter outgoing edges, optionally by sourceHandle (for timeout branches)
+        const outEdges = edges.filter(e => {
+          if (e.source !== waitNode.id) return false
+          if (sourceHandle) {
+            // Follow edges matching the source handle, or edges with no handle
+            return e.sourceHandle === sourceHandle || !e.sourceHandle
+          }
+          // No source handle filter - follow all non-timeout edges
+          return e.sourceHandle !== 'timeout'
+        })
 
-      for (const edge of outEdges) {
-        const nextNode = nodes.find(n => n.id === edge.target)
-        if (!nextNode) continue
-        await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
+        for (const edge of outEdges) {
+          if (signal.aborted) break
+          const nextNode = nodes.find(n => n.id === edge.target)
+          if (!nextNode) continue
+          await this.processNode(nextNode, nodes, edges, mergedContext, serverId, executedActions, setContext, false)
+        }
+      } catch (err) {
+        console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, maskSecrets(String((err as any)?.message ?? err), mergedContext))
       }
-    } catch (err) {
-      console.error(`[DSTP Automation] Flow "${flow.name}" post-wait error:`, maskSecrets(String((err as any)?.message ?? err), mergedContext))
+    })
+    if (!ran) {
+      const n = this._inFlight.get(flow.id)?.size ?? MAX_CONCURRENT_PER_FLOW
+      this.safeLog(serverId, {
+        flowId: flow.id, flowName: flow.name, eventType: '_wait_satisfied',
+        actions: [`dropped: flow already running ${n}x (max ${MAX_CONCURRENT_PER_FLOW}) — possible feedback loop`],
+      })
     }
 
     // Log the post-wait execution

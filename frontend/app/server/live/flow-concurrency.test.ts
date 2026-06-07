@@ -33,6 +33,8 @@ const delayNode = (id: string, ms: number): any =>
   ({ id, type: 'delay', data: { params: { delay_ms: String(ms) } }, position: { x: 0, y: 0 } })
 const action = (id: string, actionType: string, params: any = {}): any =>
   ({ id, type: 'action', data: { action_type: actionType, params }, position: { x: 0, y: 0 } })
+const waitNode = (id: string, cfg: any): any =>
+  ({ id, type: 'wait', data: { ...cfg }, position: { x: 0, y: 0 } })
 const edge = (source: string, target: string): any => ({ id: `${source}->${target}`, source, target })
 
 let engine: FlowEngine
@@ -98,5 +100,29 @@ describe('FlowEngine — abortFlow cancels in-flight runs (delete/disable unload
 
   it('abortFlow on a flow with no in-flight runs is a no-op (returns 0)', () => {
     expect(engine.abortFlow('nope')).toBe(0)
+  })
+
+  // Regression: stateful (Wait) flows used to bypass _inFlight entirely, so the
+  // heavy post-wait branch kept running after the flow was deleted/disabled. Now
+  // executeBranchFromWait runs under runTracked with a _signal, so abortFlow stops
+  // a post-wait branch parked in a delay just like the simple path.
+  it('a post-wait branch aborted mid-delay does not fire its downstream action', async () => {
+    const id = 'abortwait'
+    const nodes = [
+      trigger('t', 'player_death'),
+      waitNode('w', { mode: 'any', correlation: 'broadcast', timeoutMs: 60000 }),
+      delayNode('d', 150),
+      action('a', 'announce', { message: 'should-not-fire' }),
+    ]
+    new Repo(SERVER).save({ id, name: id, enabled: true, nodes, edges: [edge('t', 'w'), edge('w', 'd'), edge('d', 'a')] })
+
+    engine.evaluateEvent(SERVER, { type: 'player_death', data: {} })
+    // wait satisfied (mode any) → post-wait branch now parked in the 150ms delay
+    await new Promise(r => setTimeout(r, 40))
+    const n = engine.abortFlow(id)
+    expect(n).toBeGreaterThanOrEqual(1) // the in-flight post-wait run was signalled
+    await new Promise(r => setTimeout(r, 250))
+
+    expect(commands.filter(c => c.type === 'announce').length).toBe(0)
   })
 })
