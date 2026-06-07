@@ -17,6 +17,22 @@ function toMs(raw: any, now: number): number {
   return Number.isNaN(parsed) ? now : parsed
 }
 
+// JS Date supports ±8.64e15 ms; beyond that (or NaN/Infinity) `new Date(ms)` is an
+// Invalid Date and `.toISOString()` THROWS RangeError — which would propagate out
+// of the handler and abort the whole flow. Clamp to the valid range and never throw.
+const MAX_DATE_MS = 8.64e15
+function clampMs(ms: number): number {
+  if (!Number.isFinite(ms)) return ms > 0 ? MAX_DATE_MS : -MAX_DATE_MS
+  if (ms > MAX_DATE_MS) return MAX_DATE_MS
+  if (ms < -MAX_DATE_MS) return -MAX_DATE_MS
+  return ms
+}
+function safeIso(ms: number): string {
+  const d = new Date(clampMs(ms))
+  const t = d.getTime()
+  return Number.isNaN(t) ? '' : d.toISOString()
+}
+
 // Date/time helper. Date.now()/new Date() are fine here (this is a backend node
 // handler, NOT a workflow script — only Workflow scripts forbid Date.now()).
 export const handler: NodeHandler = async (rc) => {
@@ -25,21 +41,23 @@ export const handler: NodeHandler = async (rc) => {
 
   switch (op) {
     case 'now': {
-      rc.setContext({ ms: now, iso: new Date(now).toISOString(), value: now })
+      rc.setContext({ ms: now, iso: safeIso(now), value: now })
       break
     }
     case 'format': {
       const ms = toMs(rc.resolve(rc.param('value')), now)
-      const iso = new Date(ms).toISOString()
+      const iso = safeIso(ms)
       rc.setContext({ ms, iso, value: iso })
       break
     }
     case 'add': {
       const ms = toMs(rc.resolve(rc.param('value')), now)
-      const amount = Number(rc.resolve(rc.param('amount'))) || 0
+      // Number(x) || 0 does NOT contain Infinity (it's truthy) — guard explicitly.
+      const amountRaw = Number(rc.resolve(rc.param('amount')))
+      const amount = Number.isFinite(amountRaw) ? amountRaw : 0
       const unit = String(rc.param('unit', 'seconds'))
       const result = ms + amount * (UNIT_MS[unit] ?? 1000)
-      rc.setContext({ ms: result, iso: new Date(result).toISOString(), value: result })
+      rc.setContext({ ms: result, iso: safeIso(result), value: result })
       break
     }
     case 'diff': {
@@ -51,7 +69,7 @@ export const handler: NodeHandler = async (rc) => {
       break
     }
     default:
-      rc.setContext({ ms: now, iso: new Date(now).toISOString(), value: now })
+      rc.setContext({ ms: now, iso: safeIso(now), value: now })
   }
 
   return 'continue'

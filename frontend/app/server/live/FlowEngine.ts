@@ -305,13 +305,12 @@ export class FlowEngine {
       resetVisits: (nodeIds) => {
         const guard = (context as any)[LOOP_GUARD_KEY] as LoopGuard | undefined
         if (!guard) return
-        for (const id of nodeIds) {
-          // Give back the step credit we charged for these visits, so the global
-          // runaway backstop measures net non-looped work — the loop's own cap is
-          // the real bound on the loop.
-          guard.steps = Math.max(0, guard.steps - (guard.visits.get(id) ?? 0))
-          guard.visits.delete(id)
-        }
+        // Clear ONLY the per-node visit counts so the loop body can re-run without
+        // tripping MAX_NODE_VISITS. We do NOT refund guard.steps: that counter is
+        // the AGGREGATE-work backstop (MAX_TOTAL_STEPS), and refunding it let nested
+        // loops execute unbounded real work (200×200×… ) without ever tripping it.
+        // Keeping steps cumulative makes the aggregate cap a real ceiling again.
+        for (const id of nodeIds) guard.visits.delete(id)
       },
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
       log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
