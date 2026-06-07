@@ -722,6 +722,26 @@ describe('FlowEngine e2e — basic primitives', () => {
     expect(commands[0].data.message).toBe(15)
   })
 
+  it('transform replace substitutes the operand with the replacement', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('x', 'transform', { value: '{{trigger.s}}', operation: 'replace', operand: '_', replacement: '-' }),
+      action('a', 'announce', { message: '{{x.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'x'), edge('x', 'a')], { type: 'chat_message', data: { s: 'a_b_c' } })
+    expect(commands[0].data.message).toBe('a-b-c')
+  })
+
+  it('transform replace with empty replacement still removes (back-compat)', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      node('x', 'transform', { value: '{{trigger.s}}', operation: 'replace', operand: '-' }),
+      action('a', 'announce', { message: '{{x.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'x'), edge('x', 'a')], { type: 'chat_message', data: { s: 'a-b-c' } })
+    expect(commands[0].data.message).toBe('abc')
+  })
+
   it('random picks an item from the list', async () => {
     const nodes = [
       trigger('t', 'chat_message'),

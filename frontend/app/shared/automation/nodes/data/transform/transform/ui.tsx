@@ -17,7 +17,7 @@ const OPS = [
   { value: 'json_stringify', label: 'objeto → JSON' },
   { value: 'after', label: 'Texto depois de (separador)' },
   { value: 'before', label: 'Texto antes de (separador)' },
-  { value: 'replace', label: 'Remover trecho' },
+  { value: 'replace', label: 'Substituir trecho' },
 ]
 const MATH = new Set(['add', 'sub', 'mul', 'div'])
 // these also use the operand field (as a separator / substring, not a number)
@@ -40,8 +40,13 @@ export const ui = function TransformNode({ id, data, selected }: any) {
         <NodeSelect value={op} onChange={v => setParam('operation', v)} options={OPS} />
       </NodeField>
       {NEEDS_OPERAND.has(op) && (
-        <NodeField label={MATH.has(op) ? 'Operando' : 'Separador / trecho'}>
+        <NodeField label={MATH.has(op) ? 'Operando' : op === 'replace' ? 'Trecho a substituir' : 'Separador / trecho'}>
           <NodeInput value={data.params?.operand || ''} onChange={v => setParam('operand', v)} placeholder={MATH.has(op) ? 'número ou {{ref}}' : 'ex: ":"'} />
+        </NodeField>
+      )}
+      {op === 'replace' && (
+        <NodeField label="Substituir por">
+          <NodeInput value={data.params?.replacement || ''} onChange={v => setParam('replacement', v)} placeholder="vazio = remover" />
         </NodeField>
       )}
       <div className="text-[8px] text-gray-500 mt-1">Saída: <code className="text-purple-400">{'{{'}node.value{'}}'}</code></div>

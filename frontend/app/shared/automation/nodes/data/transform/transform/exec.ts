@@ -28,7 +28,10 @@ export const handler: NodeHandler = async (rc) => {
     // no template split). With no separator present, returns the input unchanged.
     case 'after': { const s = String(input ?? ''); const i = s.indexOf(String(operand ?? '')); value = i < 0 ? s : s.slice(i + String(operand ?? '').length); break }
     case 'before': { const s = String(input ?? ''); const i = s.indexOf(String(operand ?? '')); value = i < 0 ? s : s.slice(0, i); break }
-    case 'replace': value = String(input ?? '').split(String(operand ?? '')).join(''); break
+    // Replace ALL literal occurrences of `operand` with `replacement` (no regex).
+    // `replacement` defaults to "" so an unset field behaves as a remove — keeping
+    // the old behavior for existing flows.
+    case 'replace': value = String(input ?? '').split(String(operand ?? '')).join(String(rc.resolve(rc.param('replacement')) ?? '')); break
     default: value = input
   }
 
