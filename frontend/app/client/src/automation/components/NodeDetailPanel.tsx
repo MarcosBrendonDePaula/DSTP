@@ -7,7 +7,6 @@ import {
   type OutputField,
   type NodeOutputSchema,
 } from '../nodeOutputSchemas'
-import { TRIGGER_EVENTS } from '../nodes'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
 import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
 import { ConfigOnlyContext } from '../nodes/BaseNode'
@@ -259,13 +258,12 @@ function NodeConfigEditor({ nodeId, type, data, updateData }: { nodeId: string; 
     updateData({ params: { ...(data.params || {}), [key]: value } })
   }
 
-  if (type === 'trigger') {
-    return (
-      <ConfigField label="Evento">
-        <ConfigSelect value={data.event_type || ''} onChange={event_type => updateData({ event_type })} options={TRIGGER_EVENTS} />
-      </ConfigField>
-    )
-  }
+  // NOTE: `trigger` is intentionally NOT special-cased here. It falls through to the
+  // RegistryNode path below, which renders the node's OWN ui.tsx (single source of
+  // truth per the Node Module System). The old hard-coded trigger editor here only
+  // rendered the event select and silently dropped the key_pressed "Tecla" field
+  // that ui.tsx has — so the trigger never got its key and never fired. Deleting the
+  // duplicate makes the modal and the canvas show the exact same fields, always.
 
   if (type === 'condition') {
     return (
