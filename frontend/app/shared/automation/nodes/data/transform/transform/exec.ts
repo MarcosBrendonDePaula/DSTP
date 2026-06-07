@@ -21,7 +21,9 @@ export const handler: NodeHandler = async (rc) => {
     case 'mul': value = n(input) * n(operand); break
     case 'div': value = n(operand) === 0 ? 0 : n(input) / n(operand); break
     case 'json_parse': try { value = JSON.parse(String(input)) } catch { value = null }; break
-    case 'json_stringify': value = JSON.stringify(input); break
+    // Guard circular structures (JSON.stringify throws TypeError on them) so a bad
+    // input degrades to null instead of aborting the flow — mirrors json_parse.
+    case 'json_stringify': try { value = JSON.stringify(input) } catch { value = null }; break
     // String slicing by a separator (operand). `after`/`before` take the text on
     // one side of the FIRST separator — e.g. after("buy:spear", ":") → "spear".
     // Needed to pull a payload out of a callback/command string (the engine has
