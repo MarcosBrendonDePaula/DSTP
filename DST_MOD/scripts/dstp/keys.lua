@@ -65,13 +65,28 @@ local function IsTyping()
     return false
 end
 
-local function OnRawKey(code, down)
+local DEBUG = true  -- TEMP: verbose key tracing in client_log to diagnose key_pressed
+
+-- DST's input layer calls handlers added via AddKeyHandler as fn(key, down) where
+-- `down` comes from OnRawKey(key, is_up) → it is actually IS_UP (true on release).
+-- So the real key-down edge is `not is_up`. (Confirmed in vanilla input.lua:186/765.)
+local function OnRawKey(code, is_up)
+    local down = not is_up
+    if DEBUG then
+        print("[DSTP KEYS] OnRawKey code=" .. tostring(code) .. " down=" .. tostring(down)
+            .. " watched=" .. tostring(_watch[code] ~= nil)
+            .. " name=" .. tostring(_code_to_name[code]))
+    end
     if not _watch[code] then return end           -- fast path: not watched → ignore
     if down then
         if _held[code] then return end             -- auto-repeat while held → swallow
         _held[code] = true
-        if IsTyping() then return end              -- typing in chat → don't fire (but keep held state)
+        if IsTyping() then
+            if DEBUG then print("[DSTP KEYS] suppressed (typing in chat/console)") end
+            return
+        end
         local name = _code_to_name[code]
+        if DEBUG then print("[DSTP KEYS] FIRING RPC for key=" .. tostring(name) .. " SendRPC=" .. tostring(SendRPC ~= nil)) end
         if name and SendRPC then SendRPC(name, true) end
     else
         _held[code] = nil                          -- released → allow next down to fire
@@ -83,9 +98,18 @@ function M.Init(opts)
     _G = opts.GLOBAL
     SendRPC = opts.SendRPC
     BuildKeyMaps()
+    local mapped = 0
+    for _ in pairs(_name_to_code) do mapped = mapped + 1 end
+    if DEBUG then
+        print("[DSTP KEYS] Init: mapped " .. mapped .. " key names; KEY_H="
+            .. tostring(_name_to_code["H"]) .. " TheInput="
+            .. tostring(_G.TheInput ~= nil) .. " AddKeyHandler="
+            .. tostring(_G.TheInput and _G.TheInput.AddKeyHandler ~= nil))
+    end
     if not _installed and _G.TheInput and _G.TheInput.AddKeyHandler then
         _G.TheInput:AddKeyHandler(OnRawKey)
         _installed = true
+        if DEBUG then print("[DSTP KEYS] key handler INSTALLED") end
     end
     return M
 end
@@ -94,10 +118,19 @@ end
 -- names (no KEY_* mapping) are skipped. Clears held-state for keys no longer watched.
 function M.SetWatchKeys(list)
     _watch = {}
+    if DEBUG then
+        local n = (type(list) == "table") and #list or "?"
+        print("[DSTP KEYS] SetWatchKeys received " .. tostring(n) .. " keys: "
+            .. (type(list) == "table" and table.concat(list, ",") or tostring(list)))
+    end
     if type(list) == "table" then
         for _, name in ipairs(list) do
             local code = _name_to_code[string.upper(tostring(name))]
-            if code ~= nil then _watch[code] = true end
+            if code ~= nil then
+                _watch[code] = true
+            elseif DEBUG then
+                print("[DSTP KEYS] WARN: key '" .. tostring(name) .. "' has no KEY_ mapping (ignored)")
+            end
         end
     end
     -- Drop stale held flags so a release we now ignore can't wedge a future press.
