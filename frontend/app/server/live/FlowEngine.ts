@@ -302,6 +302,17 @@ export class FlowEngine {
       findPlayerInServer: (predicate) => this.findPlayerInServer(serverId, predicate),
       evaluateCondition: () => this.evaluateCondition(node, context),
       followOutEdges,
+      resetVisits: (nodeIds) => {
+        const guard = (context as any)[LOOP_GUARD_KEY] as LoopGuard | undefined
+        if (!guard) return
+        for (const id of nodeIds) {
+          // Give back the step credit we charged for these visits, so the global
+          // runaway backstop measures net non-looped work — the loop's own cap is
+          // the real bound on the loop.
+          guard.steps = Math.max(0, guard.steps - (guard.visits.get(id) ?? 0))
+          guard.visits.delete(id)
+        }
+      },
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
       log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
       runFlowAction: () => this.runFlowAction(serverId, node, context),
@@ -503,6 +514,7 @@ export class FlowEngine {
       _flowName: flow.name,
       _serverId: serverId,
       _signal: signal,  // aborted when the flow is deleted/disabled (read by ai_agent)
+      vars: {},         // in-memory mutable namespace for edit_variable ({{vars.x}})
     }
     // Lazy {{environment.x.y}} / {{env.y}} accessors (decrypt on read, masked later).
     installVaultAccessors(context, serverId)
@@ -597,6 +609,7 @@ export class FlowEngine {
       _flowId: flow.id,
       _flowName: flow.name,
       _serverId: serverId,
+      vars: {},         // in-memory mutable namespace for edit_variable ({{vars.x}})
     }
     installVaultAccessors(context, serverId)
     if (trigger.data.alias) {
@@ -716,6 +729,9 @@ export class FlowEngine {
     // non-enumerable vault accessors — reinstall so post-wait nodes can resolve
     // {{environment.x.y}} / {{env.y}} again (and secrets get masked in logs).
     installVaultAccessors(mergedContext, serverId)
+    // vars is enumerable so it survives the branch snapshot, but a flow that only
+    // starts using vars after the wait won't have it — ensure it exists.
+    if (!mergedContext.vars) mergedContext.vars = {}
 
     const setContext = (nodeId: string, value: any) => {
       mergedContext[nodeId] = value
