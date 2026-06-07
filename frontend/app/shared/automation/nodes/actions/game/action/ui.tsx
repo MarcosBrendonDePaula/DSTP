@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { BaseNode, NodeField, NodeSelect, NodeInput, NodePrefabInput } from '@client/src/automation/nodes/BaseNode'
 import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 import { ACTION_TYPES } from '@client/src/automation/nodes/actions/actionTypes'
 
@@ -35,11 +35,9 @@ export const ui = function ActionNode({ id, data, selected }: any) {
       </NodeField>
       {actionDef && actionDef.params.map(p => (
         <NodeField key={p.key} label={p.label}>
-          <NodeInput
-            value={data.params?.[p.key] || ''}
-            onChange={v => updateParam(p.key, v)}
-            placeholder={p.placeholder}
-          />
+          {p.key === 'prefab'
+            ? <NodePrefabInput value={data.params?.[p.key] || ''} onChange={v => updateParam(p.key, v)} placeholder={p.placeholder} />
+            : <NodeInput value={data.params?.[p.key] || ''} onChange={v => updateParam(p.key, v)} placeholder={p.placeholder} />}
         </NodeField>
       ))}
       {actionDef && (

@@ -44,7 +44,24 @@ export interface ServerGroup {
 class DSTStateStore {
   private shards: Map<string, ShardEntry> = new Map()
   private commandQueues: Map<string, any[]> = new Map()
+  // Per-server prefab list (the prefabs registered on that DST server at runtime).
+  // Sent once by the mod; used for the flow editor's prefab autocomplete. In-memory:
+  // if the backend restarts, hasPrefabs() is false and the sync route asks the mod
+  // to resend.
+  private prefabs: Map<string, string[]> = new Map()
   version: number = 0
+
+  setPrefabs(server_id: string, list: string[]) {
+    // Bound the list defensively (a server with many mods can have thousands).
+    const clean = [...new Set(list.filter(p => typeof p === 'string' && p))].slice(0, 20000)
+    this.prefabs.set(server_id, clean)
+  }
+  hasPrefabs(server_id: string): boolean {
+    return (this.prefabs.get(server_id)?.length ?? 0) > 0
+  }
+  getPrefabs(server_id: string): string[] {
+    return this.prefabs.get(server_id) ?? []
+  }
 
   // Called by REST route when a DST shard syncs
   handleSync(server_id: string, shard_id: string, shard_type: string, server: any, players: any[], events: any[], active_events?: Record<string, boolean>, debounce?: Record<string, number>): { commands: any[]; enable_events?: Record<string, boolean>; debounce?: Record<string, number>; watch_keys?: { keys: string[]; combos: KeyCombo[] } } {

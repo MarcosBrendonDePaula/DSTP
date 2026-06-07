@@ -6,7 +6,7 @@
 // first-class palette node to ~one meta + one line of ui, with zero new Lua and zero
 // new backend dispatch — it reuses the existing command + runFlowAction pipeline.
 import { useCallback } from 'react'
-import { BaseNode, NodeField, NodeInput } from '@client/src/automation/nodes/BaseNode'
+import { BaseNode, NodeField, NodeInput, NodePrefabInput } from '@client/src/automation/nodes/BaseNode'
 import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 import { ACTION_TYPES } from '@client/src/automation/nodes/actions/actionTypes'
 
@@ -23,7 +23,9 @@ export function makeFixedActionUi(actionType: string, icon: string, label: strin
       <BaseNode type="action" icon={icon} label={label} selected={selected} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
         {(def?.params || []).map(p => (
           <NodeField key={p.key} label={p.label}>
-            <NodeInput value={data.params?.[p.key] || ''} onChange={v => updateParam(p.key, v)} placeholder={p.placeholder} />
+            {p.key === 'prefab'
+              ? <NodePrefabInput value={data.params?.[p.key] || ''} onChange={v => updateParam(p.key, v)} placeholder={p.placeholder} />
+              : <NodeInput value={data.params?.[p.key] || ''} onChange={v => updateParam(p.key, v)} placeholder={p.placeholder} />}
           </NodeField>
         ))}
         <div className="text-[8px] text-gray-500 mt-1">💡 {'{{trigger.userid}}'}, {'{{trigger.world_x}}'}...</div>

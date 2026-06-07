@@ -1,5 +1,6 @@
 import { Handle, Position, useReactFlow } from '@xyflow/react'
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useState, useEffect, useId } from 'react'
+import { getPrefabs, subscribePrefabs } from '../prefabCache'
 
 // Config-only mode: when the detail modal renders a node's ui.tsx as its config
 // editor, it provides this context. `configOnly` makes BaseNode emit ONLY the
@@ -306,5 +307,35 @@ export function NodeInput({ value, onChange, placeholder }: { value: string; onC
       className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
       title="Aceita drop de expressoes {{...}} vindas do schema"
     />
+  )
+}
+
+// Like NodeInput but with a <datalist> of this server's runtime prefabs (spawn /
+// give_item etc). It's a free-text input — autocomplete suggestions, not a hard
+// restriction — so templates like {{trigger.prefab}} still work.
+export function NodePrefabInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [prefabs, setPrefabs] = useState<string[]>(() => getPrefabs())
+  useEffect(() => {
+    const off = subscribePrefabs(() => setPrefabs(getPrefabs()))
+    setPrefabs(getPrefabs()) // triggers a fetch if not cached
+    return off
+  }, [])
+  const listId = useId()
+  return (
+    <>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        list={prefabs.length ? listId : undefined}
+        placeholder={placeholder}
+        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
+        title={prefabs.length ? `${prefabs.length} prefabs deste servidor` : 'Lista de prefabs ainda nao carregada'}
+      />
+      {prefabs.length > 0 && (
+        <datalist id={listId}>
+          {prefabs.slice(0, 2000).map(p => <option key={p} value={p} />)}
+        </datalist>
+      )}
+    </>
   )
 }

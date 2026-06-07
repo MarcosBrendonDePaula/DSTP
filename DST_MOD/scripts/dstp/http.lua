@@ -8,7 +8,7 @@ local Http = {}
 
 local core, _G, config, state, evt_config, event_debounce
 local SafeEncode, SafeDecode, ProcessCommands, LogError
-local GetServerInfo, GetAllPlayersData, RefreshClientTable
+local GetServerInfo, GetAllPlayersData, RefreshClientTable, GetPrefabList
 -- HotToggleEvents comes from core (set by chat.Init); read dynamically.
 local function HotToggleEvents(req) if core.HotToggleEvents then core.HotToggleEvents(req) end end
 -- SetWatchKeys (key_pressed watch set) lives on core; read dynamically.
@@ -77,6 +77,16 @@ local function DoPoll()
         debounce = event_debounce,
     }
 
+    -- Prefab list: the full set of prefabs registered on THIS server, sent ONCE (it's
+    -- big and static for the session). The backend caches it per server for the flow
+    -- editor's prefab autocomplete, and can ask for it again (data.request_prefabs)
+    -- if its cache was lost (restart). Marked sent only AFTER the POST confirms.
+    local sending_prefabs = false
+    if not state.prefabs_sent and GetPrefabList then
+        payload.prefabs = GetPrefabList()
+        sending_prefabs = true
+    end
+
     local json_data = SafeEncode(payload)
     if not json_data then
         state.poll_in_flight = false  -- never sent; release the guard
@@ -110,6 +120,10 @@ local function DoPoll()
                     state.connected = true
                     state.connection_errors = 0
                     state.last_successful_poll = _G.GetTime()
+                    -- Prefab list confirmed received → don't resend every poll.
+                    if sending_prefabs then state.prefabs_sent = true end
+                    -- Backend lost its cache (restart) → resend on the next poll.
+                    if data.request_prefabs then state.prefabs_sent = false end
                     if data.commands and #data.commands > 0 then
                         state.last_cmd_count = #data.commands
                         ProcessCommands(data.commands)
@@ -168,6 +182,7 @@ function Http.Init(c, collectors)
     GetServerInfo = collectors.GetServerInfo
     GetAllPlayersData = collectors.GetAllPlayersData
     RefreshClientTable = collectors.RefreshClientTable
+    GetPrefabList = collectors.GetPrefabList
     state.next_poll_delay = nil
     state.last_cmd_count = 0
     return Http

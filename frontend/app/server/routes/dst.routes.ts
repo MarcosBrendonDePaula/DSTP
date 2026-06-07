@@ -22,7 +22,7 @@ export function handleDstSync(data: any) {
   // input has to degrade to a clean error, never a 500.
   if (!data || typeof data !== 'object') return { error: 'invalid body' }
 
-  const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = data
+  const { server_id, shard_id, shard_type, server, players, events, active_events, debounce, prefabs } = data
   if (!server_id || !shard_id) return { error: 'missing server_id or shard_id' }
   // server_id becomes a sqlite filename (1 db per server) — reject path-traversal /
   // hostile charset HERE, before any getDb call, so it never reaches the filesystem.
@@ -45,6 +45,11 @@ export function handleDstSync(data: any) {
     try { (require("../live/LiveAutomation") as any).reconcileWatchKeys?.(server_id) } catch {}
   }
 
+  // Prefab list: the mod sends it once per session. Cache it per server (only the
+  // master shard's list matters; both shards share the same registry). If we have no
+  // cache yet (e.g. backend restarted), ask the mod to resend on the next sync.
+  if (Array.isArray(prefabs)) dstStateStore.setPrefabs(server_id, prefabs)
+
   const result = dstStateStore.handleSync(
     server_id,
     shard_id,
@@ -55,6 +60,7 @@ export function handleDstSync(data: any) {
     active_events,
     debounce,
   )
+  if (!dstStateStore.hasPrefabs(server_id)) (result as any).request_prefabs = true
 
   try { (require("../live/LiveDSTP") as any).notifyLiveDSTP?.(server_id) } catch {}
 
@@ -211,6 +217,15 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
     }))
   }, {
     detail: { tags: ['DST'], summary: 'List servers' }
+  })
+
+  // The prefab list this server has at runtime (for the flow editor's prefab
+  // autocomplete). Empty until the mod has sent it at least once this session.
+  .get("/prefabs/:serverId", ({ params }) => {
+    if (!isSafeServerId(params.serverId)) return { prefabs: [], error: 'invalid server_id' }
+    return { prefabs: dstStateStore.getPrefabs(params.serverId) }
+  }, {
+    detail: { tags: ['DST'], summary: 'Runtime prefab list for a server' }
   })
 
 

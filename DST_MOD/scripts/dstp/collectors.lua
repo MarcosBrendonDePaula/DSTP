@@ -187,6 +187,23 @@ function Collectors.GetAllPlayersData()
     return players
 end
 
+-- The full list of prefab names registered on THIS server at runtime (vanilla +
+-- whatever mods added). Read from the global `Prefabs` table — the same one the
+-- game's own console autocomplete iterates (consolescreen.lua: `for name,_ in
+-- pairs(Prefabs)`). Sorted for stable output. Sent once to the backend so the
+-- flow editor can autocomplete the `prefab` field with what this server actually has.
+function Collectors.GetPrefabList()
+    local out = {}
+    local prefabs = rawget(Core._G, "Prefabs")
+    if type(prefabs) == "table" then
+        for name in pairs(prefabs) do
+            if type(name) == "string" and name ~= "" then out[#out + 1] = name end
+        end
+        table.sort(out)
+    end
+    return out
+end
+
 function Collectors.Init(core)
     Core = core
     return Collectors
