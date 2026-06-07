@@ -202,4 +202,27 @@ describe('cloneSafe — reproduces the original worker crash', () => {
     expect(cap.trace[0].output.ok).toBe(true)
     expect(cap.trace[0].output.fn).toMatch(/^\[Function: /)
   })
+
+  // The pushCommand worker→main path: action params (`data`) can carry a raw
+  // {{scriptNode.fn}} reference (a function/instance/Promise), which would throw
+  // DataCloneError in postMessage just like the capture delta. The worker now
+  // wraps `data` in cloneSafe — assert that contract: exotic params degrade to
+  // markers, the rest of the command survives, and the result is cloneable.
+  it('an action command payload with a script-returned function is cloneable', () => {
+    const actionData = {
+      message: 'hello {{user}}',
+      target: 'KU_123',
+      // a script node returned a function and it was wired as a param value
+      callback: () => 'rce',
+      meta: { handler: function onTick() {}, count: 3 },
+    }
+    expect(() => structuredClone(actionData)).toThrow()
+    const safe = cloneSafe(actionData) as any
+    expect(() => structuredClone(safe)).not.toThrow()
+    expect(safe.message).toBe('hello {{user}}')
+    expect(safe.target).toBe('KU_123')
+    expect(safe.callback).toMatch(/^\[Function: /)
+    expect(safe.meta.handler).toMatch(/^\[Function: onTick\]/)
+    expect(safe.meta.count).toBe(3)
+  })
 })

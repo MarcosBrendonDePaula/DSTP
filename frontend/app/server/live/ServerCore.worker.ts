@@ -37,7 +37,21 @@ let mirror: any[] = []
 // Host: side-effects post to the main thread; player reads come from the mirror.
 const rpcHost: EngineHost = {
   pushCommand: (sid, type, data) => {
-    self.postMessage({ type: 'rpc', method: 'pushCommand', args: [sid, type, data] })
+    // `data` is the resolved action params, and a lone {{scriptNode.field}} resolves
+    // to the raw value by reference — so a script/ai_agent output that's a function,
+    // class instance or Promise can land here and make postMessage throw
+    // DataCloneError, same class as the emitState bug. Sanitize + backstop so a
+    // command with an exotic param degrades (the bad field becomes a marker) instead
+    // of killing the flow with a cryptic clone error and losing the command.
+    try {
+      self.postMessage({ type: 'rpc', method: 'pushCommand', args: [sid, type, cloneSafe(data)] })
+    } catch (err: any) {
+      self.postMessage({
+        type: 'rpc',
+        method: 'logError',
+        args: [serverId, `pushCommand "${type}" dropped (postMessage failed): ${err?.message ?? String(err)}`],
+      })
+    }
   },
   getServerGroups: () => mirror,
   emitState: (delta) => {

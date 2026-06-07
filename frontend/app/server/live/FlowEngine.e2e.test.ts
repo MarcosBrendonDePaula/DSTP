@@ -626,6 +626,55 @@ describe('FlowEngine e2e — foreach', () => {
     await run(nodes, edges, { type: 'player_spawn', data: { list: ['a', 'b'] } })
     expect(commands.map(c => c.data.message)).toEqual(['i=0', 'i=1'])
   })
+
+  it('nested foreach restores the outer loop var after the inner loop (regression)', async () => {
+    // Outer over [A,B]; each runs an inner over [1,2] (announces "in <inner>"),
+    // and on the inner's `done` announces "out <outer>" — which reads the OUTER
+    // {{loop.item}}. Before the fix the inner foreach deleted context.loop on exit,
+    // so "out {{loop.item}}" resolved to the literal string for the rest of the
+    // outer iteration. After the fix the outer item is restored.
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      forEach('outer', '{{trigger.outer}}'),
+      forEach('inner', '{{trigger.inner}}'),
+      action('ai', 'announce', { message: 'in {{loop.item}}' }),
+      action('ao', 'announce', { message: 'out {{loop.item}}' }),
+    ]
+    const edges = [
+      edge('t', 'outer'),
+      edge('outer', 'inner', 'each'),
+      edge('inner', 'ai', 'each'),
+      edge('inner', 'ao', 'done'),
+    ]
+    await run(nodes, edges, { type: 'player_spawn', data: { outer: ['A', 'B'], inner: ['1', '2'] } })
+    expect(commands.map(c => c.data.message)).toEqual([
+      'in 1', 'in 2', 'out A',  // outer item A: inner 1,2 then "out A"
+      'in 1', 'in 2', 'out B',  // outer item B: inner 1,2 then "out B"
+    ])
+  })
+
+  it('nested foreach: inner item does not leak past the inner loop', async () => {
+    // After the inner loop, the outer each-branch must see the OUTER index, not a
+    // stale inner one. announce after the inner loop reads {{loop.index}}.
+    const nodes = [
+      trigger('t', 'player_spawn'),
+      forEach('outer', '{{trigger.outer}}'),
+      forEach('inner', '{{trigger.inner}}'),
+      action('ai', 'announce', { message: 'inner' }),
+      action('ao', 'announce', { message: 'outerIdx={{loop.index}}' }),
+    ]
+    const edges = [
+      edge('t', 'outer'),
+      edge('outer', 'inner', 'each'),
+      edge('inner', 'ai', 'each'),
+      edge('inner', 'ao', 'done'),
+    ]
+    await run(nodes, edges, { type: 'player_spawn', data: { outer: ['A', 'B'], inner: ['x'] } })
+    expect(commands.map(c => c.data.message)).toEqual([
+      'inner', 'outerIdx=0',
+      'inner', 'outerIdx=1',
+    ])
+  })
 })
 
 describe('FlowEngine e2e — basic primitives', () => {
