@@ -96,3 +96,36 @@ describe('collectWatchKeys — derives the full watch set from enabled flows', (
     expect(lastKeys()).toEqual([])
   })
 })
+
+// Reconnection reconciliation: when a shard goes offline and comes back (game/server
+// restart), the mod loses its watch set. The backend still remembers last_keys, so a
+// plain "unchanged → skip" would never re-send. resetWatchKeysFor + recompute fixes
+// it: the SAME watch set is re-delivered on the reconnect sync.
+describe('DSTStateStore — watch keys re-sent on reconnect', () => {
+  // Lazy import to avoid pulling the store into the engine-only tests above.
+  const SRV = `__test_wkrc_${Date.now()}`
+  const SHARD = `${SRV}:master`
+
+  it('re-delivers watch_keys after a shard reconnects, even when unchanged', async () => {
+    const { dstStateStore } = await import('../services/DSTStateStore')
+
+    // First connect: request H, drain it (delivered once).
+    dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
+    dstStateStore.requestWatchKeysForServer(SRV, ['H'])
+    const r1 = dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
+    expect(r1.watch_keys).toEqual(['H'])
+
+    // Steady state: same set, not re-sent.
+    dstStateStore.requestWatchKeysForServer(SRV, ['H'])
+    const r2 = dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
+    expect(r2.watch_keys).toBeUndefined()
+
+    // Simulate reconnect: the route would see isShardOnline()===false and call
+    // resetWatchKeysFor before recompute. Here we drive those two directly.
+    expect(dstStateStore.isShardOnline(SHARD)).toBe(true)
+    dstStateStore.resetWatchKeysFor(SRV)
+    dstStateStore.requestWatchKeysForServer(SRV, ['H']) // recompute requests same set
+    const r3 = dstStateStore.handleSync(SRV, SHARD, 'master', {}, [], [])
+    expect(r3.watch_keys).toEqual(['H']) // re-delivered despite being unchanged
+  })
+})

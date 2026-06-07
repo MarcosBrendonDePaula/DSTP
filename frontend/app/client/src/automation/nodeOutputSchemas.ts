@@ -463,6 +463,16 @@ export const triggerOutputSchemas: Record<string, NodeOutputSchema> = {
       { name: 'callback_data', type: 'object', description: 'Custom data sent with callback (optional)' },
     ],
   },
+  key_pressed: {
+    description: 'Player pressed a watched key (carries the mouse world position at press time)',
+    fields: [
+      { name: 'userid', type: 'string', description: 'Who pressed the key (player user ID)' },
+      { name: 'name', type: 'string', description: 'Player name' },
+      { name: 'key', type: 'string', description: 'The key that was pressed (e.g. "H", "F5")' },
+      { name: 'world_x', type: 'number', description: 'Mouse X in WORLD coords at the moment of the press (for Teleport/Spawn). Absent if the cursor was not over terrain.' },
+      { name: 'world_z', type: 'number', description: 'Mouse Z in WORLD coords at the moment of the press (for Teleport/Spawn). Absent if the cursor was not over terrain.' },
+    ],
+  },
 }
 
 // ─── Node type outputs ───────────────────────────────

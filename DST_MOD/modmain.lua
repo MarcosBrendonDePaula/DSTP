@@ -65,15 +65,22 @@ end)
 -- key_pressed: client → server → backend event queue. The client (keys.lua) only
 -- sends this for keys in the backend-provided watch set, on the down edge. Mirror
 -- of UICallback: validate, then PushEvent so a flow's key_pressed trigger fires.
-AddModRPCHandler(modname, "KeyPressed", function(player, key, down)
+AddModRPCHandler(modname, "KeyPressed", function(player, key, down, wx, wz)
     if player and type(key) == "string" and key ~= "" then
         local dstp_mod = require("dstp/client")
-        dstp_mod.PushEvent("key_pressed", {
+        local data = {
             userid = player.userid,
             name = player.name or "unknown",
             key = key,
             down = (down == true),
-        })
+        }
+        -- Mouse world position at press time (nil when cursor wasn't over terrain).
+        -- The client sends NaN as "no position"; NaN ~= NaN, so this drops it.
+        if type(wx) == "number" and wx == wx and type(wz) == "number" and wz == wz then
+            data.world_x = wx
+            data.world_z = wz
+        end
+        dstp_mod.PushEvent("key_pressed", data)
     end
 end)
 
@@ -222,9 +229,12 @@ AddPrefabPostInit("player_classified", function(inst)
                 Keys = GLOBAL.require("dstp/keys")
                 Keys.Init({
                     GLOBAL = GLOBAL,
-                    SendRPC = function(key, down)
+                    SendRPC = function(key, down, wx, wz)
                         if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyPressed"] then
-                            SendModRPCToServer(MOD_RPC[modname]["KeyPressed"], key, down)
+                            -- RPC args must be non-nil scalars; send the mouse world
+                            -- pos when available, else a NaN sentinel the server drops.
+                            SendModRPCToServer(MOD_RPC[modname]["KeyPressed"], key, down,
+                                wx or 0/0, wz or 0/0)
                         end
                     end,
                 })

@@ -37,6 +37,14 @@ export function handleDstSync(data: any) {
 
   announceSetupTokenIfNeeded(server_id)
 
+  // (Re)connection: if this shard wasn't online, the mod lost its key_pressed watch
+  // set on restart. Recompute + force a re-send BEFORE handleSync drains the request,
+  // so the watch_keys ride out in THIS same sync response. (collectWatchKeys sets
+  // requested_keys; handleSync below puts it on the result.)
+  if (!dstStateStore.isShardOnline(shard_id)) {
+    try { (require("../live/LiveAutomation") as any).reconcileWatchKeys?.(server_id) } catch {}
+  }
+
   const result = dstStateStore.handleSync(
     server_id,
     shard_id,
@@ -204,6 +212,7 @@ export const dstRoutes = new Elysia({ prefix: "/dst" })
   }, {
     detail: { tags: ['DST'], summary: 'List servers' }
   })
+
 
   .get("/players", ({ query }) => {
     const serverId = (query as any)?.server_id

@@ -71,6 +71,20 @@ export function processAutomationEvent(server_id: string, event: any) {
   serverCoreManager.route(server_id, event)
 }
 
+// Recompute and (re)request the key_pressed watch set for a server. Called by the
+// sync route when a shard (re)connects — the mod-side watch set is lost on a game/
+// server restart, but the backend may still hold last_keys and wouldn't otherwise
+// re-send. We clear last_keys for the server's shards so the recompute always
+// re-delivers, then collectWatchKeys derives the set from the enabled flows.
+export function reconcileWatchKeys(server_id: string) {
+  try {
+    dstStateStore.resetWatchKeysFor(server_id)
+    _getEngine().collectWatchKeys(server_id)
+  } catch (e) {
+    console.error('[DSTP Automation] reconcileWatchKeys', e)
+  }
+}
+
 // ─── Component ───────────────────────────────────────
 
 export class LiveAutomation extends LiveComponent<AutomationState> {

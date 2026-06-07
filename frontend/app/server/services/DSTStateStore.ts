@@ -102,6 +102,24 @@ class DSTStateStore {
     return result
   }
 
+  // True if this shard is currently known and online. Used by the sync route to
+  // detect a (re)connection BEFORE handleSync flips it online, so it can recompute
+  // the watch-key set and have it delivered in the SAME response.
+  isShardOnline(shard_id: string): boolean {
+    const entry = this.shards.get(shard_id)
+    return !!entry && entry.online
+  }
+
+  // Forget the last-delivered watch keys for a server's shards, so the next
+  // collectWatchKeys re-sends the set even if it's unchanged. Used on reconnect:
+  // the mod-side watch set is lost on restart, so "unchanged vs last_keys" would
+  // wrongly skip the re-send.
+  resetWatchKeysFor(server_id: string) {
+    for (const shard of this.shards.values()) {
+      if (shard.server_id === server_id) shard.last_keys = []
+    }
+  }
+
   // Get servers grouped by server_id
   getServerGroups(): ServerGroup[] {
     const groups = new Map<string, ServerGroup>()
