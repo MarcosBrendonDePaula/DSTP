@@ -30,8 +30,6 @@ local RulesEngine = nil
 -- lives HERE (the envelope passes only through this router) — sub-commands carry no
 -- seq, so UIWidgets/RulesEngine never re-dedup them.
 local _dstp_ui_seq = -1
--- Client-side key capture (loaded on client only, for the key_pressed trigger)
-local Keys = nil
 
 -- Generate ID from world session_identifier if auto
 local is_auto_id = (SERVER_ID == "" or SERVER_ID == "auto")
@@ -62,46 +60,14 @@ AddModRPCHandler(modname, "UICallback", function(player, callback_name, widget_i
     end
 end)
 
--- key_pressed: client → server → backend event queue. The client (keys.lua) only
--- sends this for keys in the backend-provided watch set, on the down edge. Mirror
--- of UICallback: validate, then PushEvent so a flow's key_pressed trigger fires.
-AddModRPCHandler(modname, "KeyPressed", function(player, key, down, wx, wz)
-    if player and type(key) == "string" and key ~= "" then
-        local dstp_mod = require("dstp/client")
-        local data = {
-            userid = player.userid,
-            name = player.name or "unknown",
-            key = key,
-            down = (down == true),
-        }
-        -- Mouse world position at press time (nil when cursor wasn't over terrain).
-        -- The client sends NaN as "no position"; NaN ~= NaN, so this drops it.
-        if type(wx) == "number" and wx == wx and type(wz) == "number" and wz == wz then
-            data.world_x = wx
-            data.world_z = wz
-        end
-        dstp_mod.PushEvent("key_pressed", data)
-    end
-end)
-
--- key_combo: client detected a combo (simultaneous / sequence / any). The combo_id
--- is the trigger node's id, so the backend matches it to the right key_combo flow.
-AddModRPCHandler(modname, "KeyCombo", function(player, combo_id, key, wx, wz)
-    if player and type(combo_id) == "string" and combo_id ~= "" then
-        local dstp_mod = require("dstp/client")
-        local data = {
-            userid = player.userid,
-            name = player.name or "unknown",
-            combo_id = combo_id,
-            key = (type(key) == "string") and key or "",
-        }
-        if type(wx) == "number" and wx == wx and type(wz) == "number" and wz == wz then
-            data.world_x = wx
-            data.world_z = wz
-        end
-        dstp_mod.PushEvent("key_combo", data)
-    end
-end)
+-- key_pressed + key_combo RPC handlers (client → server → backend event queue) live
+-- in the keys module — modmain just hands it the mod-env refs it needs. The handlers
+-- validate and PushEvent so a flow's key_pressed / key_combo trigger fires.
+GLOBAL.require("dstp/keys").InstallServerRPC({
+    AddModRPCHandler = AddModRPCHandler,
+    modname = modname,
+    PushEvent = function(t, d) require("dstp/client").PushEvent(t, d) end,
+})
 
 AddModRPCHandler(modname, "RequestPanel", function(player)
     DebugLog("[DSTP] RPC RequestPanel received from:", player and player.name or "unknown")
@@ -238,41 +204,12 @@ AddPrefabPostInit("player_classified", function(inst)
             end
         end)
 
-        -- Client: apply the key-watch set the backend shipped. Lazy-init the Keys
-        -- module on first delivery, injecting the RPC sender (keys.lua owns no
-        -- MOD_RPC reference). The handler only fires for watched keys, on the down
-        -- edge, and not while typing — all in keys.lua.
-        inst:ListenForEvent("dstp_keys_dirty", function()
-            local raw = inst._dstp_keys:value()
-            if not Keys then
-                Keys = GLOBAL.require("dstp/keys")
-                Keys.Init({
-                    GLOBAL = GLOBAL,
-                    SendRPC = function(key, down, wx, wz)
-                        if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyPressed"] then
-                            -- RPC args must be non-nil scalars; send the mouse world
-                            -- pos when available, else a NaN sentinel the server drops.
-                            SendModRPCToServer(MOD_RPC[modname]["KeyPressed"], key, down,
-                                wx or 0/0, wz or 0/0)
-                        end
-                    end,
-                    -- key_combo: fire the matched combo's id (+ the key that fired it
-                    -- and the mouse world pos) so the backend matches it to its trigger.
-                    SendComboRPC = function(combo_id, key, wx, wz)
-                        if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyCombo"] then
-                            SendModRPCToServer(MOD_RPC[modname]["KeyCombo"], combo_id, key or "",
-                                wx or 0/0, wz or 0/0)
-                        end
-                    end,
-                })
-            end
-            local payload = {}
-            if raw and raw ~= "" then
-                local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, raw)
-                if ok and type(parsed) == "table" then payload = parsed end
-            end
-            Keys.SetWatch(payload)
-        end)
+        -- Client: the keys module owns the dstp_keys_dirty listener, lazy-Init, RPC
+        -- senders and watch-apply. modmain just hands it the mod-env refs.
+        GLOBAL.require("dstp/keys").WireClient({
+            GLOBAL = GLOBAL, inst = inst, modname = modname,
+            MOD_RPC = MOD_RPC, SendModRPCToServer = SendModRPCToServer,
+        })
     end
 end)
 

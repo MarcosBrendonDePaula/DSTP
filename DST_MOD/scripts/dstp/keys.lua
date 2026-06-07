@@ -268,4 +268,72 @@ function M.SetWatchKeys(list)
     M.SetWatch(list)
 end
 
+-- ── Wiring (keeps modmain to a tiny hook; the RPC/net_string fiação lives here) ──
+--
+-- AddModRPCHandler only exists in modmain's scope, so it (and the mod env refs) are
+-- injected. This is the SERVER half: register the two RPC handlers that turn a client
+-- key/combo into a PushEvent. deps = { AddModRPCHandler, modname, PushEvent }.
+local function dropNaNPos(data, wx, wz)
+    if type(wx) == "number" and wx == wx and type(wz) == "number" and wz == wz then
+        data.world_x = wx
+        data.world_z = wz
+    end
+end
+
+function M.InstallServerRPC(deps)
+    local AddModRPCHandler, modname, PushEvent = deps.AddModRPCHandler, deps.modname, deps.PushEvent
+    -- key_pressed: a single watched key on the down edge.
+    AddModRPCHandler(modname, "KeyPressed", function(player, key, down, wx, wz)
+        if player and type(key) == "string" and key ~= "" then
+            local data = { userid = player.userid, name = player.name or "unknown",
+                key = key, down = (down == true) }
+            dropNaNPos(data, wx, wz)
+            PushEvent("key_pressed", data)
+        end
+    end)
+    -- key_combo: combo_id = the trigger node's id (backend matches it to the flow).
+    AddModRPCHandler(modname, "KeyCombo", function(player, combo_id, key, wx, wz)
+        if player and type(combo_id) == "string" and combo_id ~= "" then
+            local data = { userid = player.userid, name = player.name or "unknown",
+                combo_id = combo_id, key = (type(key) == "string") and key or "" }
+            dropNaNPos(data, wx, wz)
+            PushEvent("key_combo", data)
+        end
+    end)
+end
+
+-- CLIENT half: on the dstp_keys_dirty net_string edge, lazy-Init this module (wiring
+-- the RPC senders) and apply the watch payload. deps = { GLOBAL, inst, modname,
+-- MOD_RPC, SendModRPCToServer }. Call once per player_classified (in the client hook).
+function M.WireClient(deps)
+    local GLOBAL, inst, modname = deps.GLOBAL, deps.inst, deps.modname
+    local MOD_RPC, SendModRPCToServer = deps.MOD_RPC, deps.SendModRPCToServer
+    local started = false
+    inst:ListenForEvent("dstp_keys_dirty", function()
+        local raw = inst._dstp_keys:value()
+        if not started then
+            started = true
+            M.Init({
+                GLOBAL = GLOBAL,
+                SendRPC = function(key, down, wx, wz)
+                    if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyPressed"] then
+                        SendModRPCToServer(MOD_RPC[modname]["KeyPressed"], key, down, wx or 0/0, wz or 0/0)
+                    end
+                end,
+                SendComboRPC = function(combo_id, key, wx, wz)
+                    if MOD_RPC and MOD_RPC[modname] and MOD_RPC[modname]["KeyCombo"] then
+                        SendModRPCToServer(MOD_RPC[modname]["KeyCombo"], combo_id, key or "", wx or 0/0, wz or 0/0)
+                    end
+                end,
+            })
+        end
+        local payload = {}
+        if raw and raw ~= "" then
+            local ok, parsed = GLOBAL.pcall(GLOBAL.json.decode, raw)
+            if ok and type(parsed) == "table" then payload = parsed end
+        end
+        M.SetWatch(payload)
+    end)
+end
+
 return M

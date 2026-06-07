@@ -97,4 +97,37 @@ capturedHandler(72, false) -- auto-repeat (still down)
 C.check("auto-repeat deduped (1 fire)", #pressed == 1)
 capturedHandler(72, true)  -- up
 
+-- ── 6) InstallServerRPC (server half): handlers validate + PushEvent correctly ──
+local rpcHandlers = {}
+local pushed = {}
+Keys.InstallServerRPC({
+  AddModRPCHandler = function(_mod, name, fn) rpcHandlers[name] = fn end,
+  modname = "dstp",
+  PushEvent = function(t, d) pushed[#pushed + 1] = { t = t, d = d } end,
+})
+C.check("KeyPressed handler registered", rpcHandlers.KeyPressed ~= nil)
+C.check("KeyCombo handler registered", rpcHandlers.KeyCombo ~= nil)
+
+-- KeyPressed: valid → key_pressed event with mouse pos
+pushed = {}
+rpcHandlers.KeyPressed({ userid = "KU_1", name = "Bob" }, "H", true, 3, 4)
+C.check("KeyPressed → key_pressed event", #pushed == 1 and pushed[1].t == "key_pressed"
+  and pushed[1].d.key == "H" and pushed[1].d.world_x == 3 and pushed[1].d.world_z == 4)
+
+-- KeyPressed: NaN pos dropped (no world_x/z)
+pushed = {}
+rpcHandlers.KeyPressed({ userid = "KU_1" }, "H", true, 0/0, 0/0)
+C.check("NaN pos dropped", #pushed == 1 and pushed[1].d.world_x == nil)
+
+-- KeyCombo: valid → key_combo event carrying combo_id
+pushed = {}
+rpcHandlers.KeyCombo({ userid = "KU_1", name = "Bob" }, "simul1", "A", 5, 6)
+C.check("KeyCombo → key_combo event", #pushed == 1 and pushed[1].t == "key_combo"
+  and pushed[1].d.combo_id == "simul1" and pushed[1].d.key == "A")
+
+-- KeyCombo: empty combo_id ignored
+pushed = {}
+rpcHandlers.KeyCombo({ userid = "KU_1" }, "", "A", 1, 2)
+C.check("empty combo_id ignored", #pushed == 0)
+
 return C.report()
