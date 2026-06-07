@@ -1,0 +1,12 @@
+{
+  "name": "Input — sequencia H,J,K (cheat code) cura voce e anuncia",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_combo", "params": { "mode": "sequence", "keys": "H, J, K", "timeoutMs": "1500" }, "alias": "combo" } },
+    { "id": "heal", "type": "heal", "position": { "x": 340, "y": -40 }, "data": { "action_type": "heal", "params": { "userid": "{{combo.userid}}", "amount": "max" } } },
+    { "id": "say", "type": "action", "position": { "x": 340, "y": 60 }, "data": { "action_type": "announce", "params": { "message": "Codigo H-J-K ativado: cura completa!" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_heal", "source": "trg", "target": "heal" },
+    { "id": "e_trg_say", "source": "trg", "target": "say" }
+  ]
+}

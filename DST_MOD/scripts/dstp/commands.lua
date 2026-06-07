@@ -31,6 +31,26 @@ function Commands.RegisterAll(core)
     -- plain capture is safe and keeps the claim_* handlers using `LandClaims.Add`.
     local LandClaims = core.LandClaims
 
+    -- The global Prefabs table holds many NON-spawnable entries (placeholders, skins,
+    -- deps) whose .fn (the constructor) is nil. Calling _G.SpawnPrefab on one raises
+    -- an UNCATCHABLE engine LUA ERROR that crashes the master sim — pcall does NOT
+    -- save us. So ALL spawning goes through this ONE helper: it validates the prefab
+    -- is real (registered AND has a constructor fn) before ever touching SpawnPrefab,
+    -- and returns the entity or nil. Never call _G.SpawnPrefab directly.
+    local function IsSpawnablePrefab(name)
+        if type(name) ~= "string" or name == "" then return false end
+        local prefabs = rawget(_G, "Prefabs")
+        local p = prefabs and prefabs[name]
+        return p ~= nil and type(p.fn) == "function"
+    end
+    local function SafeSpawn(name)
+        if not IsSpawnablePrefab(name) then
+            Log("SafeSpawn: '" .. tostring(name) .. "' is not a spawnable prefab — skipped")
+            return nil
+        end
+        return _G.SpawnPrefab(name)
+    end
+
     DSTP.RegisterCommand("announce", function(data)
         if data.message then _G.TheNet:Announce(data.message) end
     end)
@@ -553,7 +573,7 @@ function Commands.RegisterAll(core)
     DSTP.RegisterCommand("give_item", function(data)
         local player = FindPlayer(data.userid)
         if player and data.prefab then
-            local item = _G.SpawnPrefab(data.prefab)
+            local item = SafeSpawn(data.prefab)
             if item then
                 if data.count and item.components.stackable then
                     item.components.stackable:SetStackSize(data.count)
@@ -674,7 +694,7 @@ function Commands.RegisterAll(core)
     DSTP.RegisterCommand("equip_item", function(data)
         local player = FindPlayer(data.userid)
         if player and player.components.inventory and data.prefab then
-            local item = _G.SpawnPrefab(data.prefab)
+            local item = SafeSpawn(data.prefab)
             if item then
                 if item.components.equippable then
                     player.components.inventory:Equip(item)
@@ -790,7 +810,7 @@ function Commands.RegisterAll(core)
             if bp then take(bp.slots) end
             -- give the moved amount to the recipient
             if moved > 0 then
-                local gift = _G.SpawnPrefab(prefab)
+                local gift = SafeSpawn(prefab)
                 if gift then
                     if moved > 1 and gift.components.stackable then
                         gift.components.stackable:SetStackSize(moved)
@@ -974,7 +994,7 @@ function Commands.RegisterAll(core)
 
     DSTP.RegisterCommand("spawn_prefab", function(data)
         if data.prefab and data.x and data.z then
-            local ent = _G.SpawnPrefab(data.prefab)
+            local ent = SafeSpawn(data.prefab)
             if ent then
                 ent.Transform:SetPosition(data.x, 0, data.z)
                 local count = tonumber(data.count) or 1
@@ -1010,7 +1030,7 @@ function Commands.RegisterAll(core)
         local ox, oz = tonumber(data.offset_x) or 0, tonumber(data.offset_z) or 0
         local count = math.max(1, math.min(tonumber(data.count) or 1, 20))
 
-        local first = _G.SpawnPrefab(data.prefab)
+        local first = SafeSpawn(data.prefab)
         if not first then return end
         first.Transform:SetPosition(x + ox, 0, z + oz)
 
@@ -1021,7 +1041,7 @@ function Commands.RegisterAll(core)
             -- Non-stackable (mobs/structures): spawn N separate copies spread in
             -- a small ring around the player so they don't stack on one tile.
             for i = 2, count do
-                local ent = _G.SpawnPrefab(data.prefab)
+                local ent = SafeSpawn(data.prefab)
                 if ent then
                     local ang = (i / count) * 2 * math.pi
                     local r = 2 + (i % 3)

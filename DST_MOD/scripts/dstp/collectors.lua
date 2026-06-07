@@ -196,8 +196,14 @@ function Collectors.GetPrefabList()
     local out = {}
     local prefabs = rawget(Core._G, "Prefabs")
     if type(prefabs) == "table" then
-        for name in pairs(prefabs) do
-            if type(name) == "string" and name ~= "" then out[#out + 1] = name end
+        for name, p in pairs(prefabs) do
+            -- Only SPAWNABLE prefabs: the table also holds placeholders/skins/deps
+            -- whose .fn (constructor) is nil — those crash SpawnPrefab, so don't
+            -- offer them for autocomplete. A real prefab has a function fn.
+            if type(name) == "string" and name ~= ""
+               and type(p) == "table" and type(p.fn) == "function" then
+                out[#out + 1] = name
+            end
         end
         table.sort(out)
     end

@@ -1,0 +1,10 @@
+{
+  "name": "Input — Shift+B spawna um esqueleto na posicao do mouse",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_combo", "params": { "mode": "simultaneous", "keys": "SHIFT, B" }, "alias": "combo" } },
+    { "id": "spawn", "type": "action", "position": { "x": 360, "y": 0 }, "data": { "action_type": "spawn_prefab", "params": { "prefab": "skeleton", "x": "{{combo.world_x}}", "z": "{{combo.world_z}}", "count": "1" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_spawn", "source": "trg", "target": "spawn" }
+  ]
+}

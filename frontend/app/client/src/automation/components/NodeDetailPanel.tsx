@@ -9,7 +9,7 @@ import {
 } from '../nodeOutputSchemas'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
 import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
-import { ConfigOnlyContext } from '../nodes/BaseNode'
+import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -307,7 +307,9 @@ function NodeConfigEditor({ nodeId, type, data, updateData }: { nodeId: string; 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {(actionDef?.params || []).map(param => (
             <ConfigField key={param.key} label={param.label}>
-              <ConfigInput value={data.params?.[param.key] || ''} onChange={value => updateParam(param.key, value)} placeholder={param.placeholder} />
+              {param.key === 'prefab'
+                ? <NodePrefabInput value={data.params?.[param.key] || ''} onChange={value => updateParam(param.key, value)} placeholder={param.placeholder} />
+                : <ConfigInput value={data.params?.[param.key] || ''} onChange={value => updateParam(param.key, value)} placeholder={param.placeholder} />}
             </ConfigField>
           ))}
         </div>

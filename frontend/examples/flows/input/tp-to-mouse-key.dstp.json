@@ -1,0 +1,10 @@
+{
+  "name": "Input — tecla T teleporta voce para onde o mouse aponta",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_pressed", "params": { "key": "T" }, "alias": "key" } },
+    { "id": "tp", "type": "teleport", "position": { "x": 340, "y": 0 }, "data": { "action_type": "teleport", "params": { "userid": "{{key.userid}}", "x": "{{key.world_x}}", "z": "{{key.world_z}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_tp", "source": "trg", "target": "tp" }
+  ]
+}

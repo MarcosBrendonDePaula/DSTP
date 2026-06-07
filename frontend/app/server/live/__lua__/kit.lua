@@ -71,6 +71,11 @@ function KIT.make_G(overrides)
     math = math,
     string = string,
     table = table,
+    -- Mock Prefabs registry: commands.lua's SafeSpawn validates Prefabs[name].fn
+    -- before spawning (real prefabs have a constructor fn; placeholders don't). The
+    -- metatable reports ANY name as spawnable so tests that mock SpawnPrefab work;
+    -- a test can override G.Prefabs to simulate a non-spawnable prefab.
+    Prefabs = setmetatable({}, { __index = function() return { fn = function() end } end }),
   }
   if overrides then for k, v in pairs(overrides) do G[k] = v end end
   -- Self-reference: DST's real _G has _G._G == _G, so code run with setfenv(fn, _G)

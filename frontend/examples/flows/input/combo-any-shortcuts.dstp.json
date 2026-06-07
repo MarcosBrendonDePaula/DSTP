@@ -1,0 +1,10 @@
+{
+  "name": "Input — F1/F2/F3 (qualquer) anuncia qual atalho foi usado",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_combo", "params": { "mode": "any", "keys": "F1, F2, F3" }, "alias": "combo" } },
+    { "id": "say", "type": "action", "position": { "x": 360, "y": 0 }, "data": { "action_type": "announce", "params": { "message": "Atalho {{combo.key}} usado por {{combo.name}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_say", "source": "trg", "target": "say" }
+  ]
+}

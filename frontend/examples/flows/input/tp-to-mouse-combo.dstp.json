@@ -1,0 +1,10 @@
+{
+  "name": "Input — Ctrl+T (combo) teleporta voce para o mouse",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 }, "data": { "event_type": "key_combo", "params": { "mode": "simultaneous", "keys": "CTRL, T" }, "alias": "combo" } },
+    { "id": "tp", "type": "teleport", "position": { "x": 360, "y": 0 }, "data": { "action_type": "teleport", "params": { "userid": "{{combo.userid}}", "x": "{{combo.world_x}}", "z": "{{combo.world_z}}" } } }
+  ],
+  "edges": [
+    { "id": "e_trg_tp", "source": "trg", "target": "tp" }
+  ]
+}
