@@ -22,6 +22,7 @@
 //   worker → main : { type:'rpc', method, args }         fire-and-forget side-effect
 
 import { FlowEngine, type EngineHost } from './FlowEngine'
+import { cloneSafe } from './clone-safe'
 
 declare const self: Worker
 
@@ -40,7 +41,23 @@ const rpcHost: EngineHost = {
   },
   getServerGroups: () => mirror,
   emitState: (delta) => {
-    self.postMessage({ type: 'rpc', method: 'emitState', args: [delta] })
+    // The delta can carry the flow's full execution context/trace (capture mode),
+    // which is full of values structured clone refuses to copy: the `_signal`
+    // AbortSignal, the vault `environment`/`env` Proxies, script-returned
+    // functions/instances, etc. A raw postMessage of that throws DataCloneError —
+    // and because flows run async, the throw escapes as an unhandled rejection
+    // that crashes the worker (and segfaults Bun baseline). cloneSafe() strips the
+    // non-cloneable bits to markers; the try/catch is the last-resort backstop so
+    // an emit can never take the core down. See clone-safe.ts.
+    try {
+      self.postMessage({ type: 'rpc', method: 'emitState', args: [cloneSafe(delta)] })
+    } catch (err: any) {
+      self.postMessage({
+        type: 'rpc',
+        method: 'logError',
+        args: [serverId, `emitState dropped (postMessage failed): ${err?.message ?? String(err)}`],
+      })
+    }
   },
   requestEventToggle: (sid, category, enabled) => {
     self.postMessage({ type: 'rpc', method: 'requestEventToggle', args: [sid, category, enabled] })
@@ -54,6 +71,31 @@ function ensureEngine(): FlowEngine {
   if (!engine) engine = new FlowEngine(rpcHost)
   return engine
 }
+
+// Last line of defense. Flows run async (evaluateEvent is fire-and-forget), so an
+// error thrown deep inside _executeFlowInner — most dangerously a DataCloneError
+// from emitState — does NOT surface in the synchronous try/catch around
+// evaluateEvent. It becomes an unhandled rejection / uncaught error in the worker
+// realm, which on Bun baseline can segfault the whole process instead of just
+// failing the one flow. Catching it here turns a fatal crash into a logged line
+// and keeps the core alive for the next event. (We do NOT rethrow.)
+function reportFatal(kind: string, reason: any) {
+  const msg = reason?.stack ?? reason?.message ?? String(reason)
+  try {
+    self.postMessage({ type: 'rpc', method: 'logError', args: [serverId, `worker ${kind}: ${msg}`] })
+  } catch {
+    // If even reporting fails, swallow — better a lost log line than a crash loop.
+  }
+}
+
+self.addEventListener('unhandledrejection', (e: any) => {
+  e.preventDefault?.()
+  reportFatal('unhandledrejection', e?.reason)
+})
+self.addEventListener('error', (e: any) => {
+  e.preventDefault?.()
+  reportFatal('error', e?.error ?? e?.message ?? e)
+})
 
 self.onmessage = (e: MessageEvent) => {
   const msg = e.data
