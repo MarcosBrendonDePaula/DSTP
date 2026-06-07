@@ -13,6 +13,7 @@ import {
   setInitialPassword,
 } from '@server/services/PanelAuthStore'
 import { dstStateStore } from '@server/services/DSTStateStore'
+import { isSafeServerId } from '@server/db/connection'
 
 const COOKIE_NAME = 'dstp_session'
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 // 7 days in seconds
@@ -46,6 +47,8 @@ export const panelAuthRoutes = new Elysia({ prefix: '/panel-auth', tags: ['Panel
   // `setup`  = server has a password set.
   .get('/status/:serverId', (ctx) => {
     const serverId = ctx.params.serverId
+    // isSetup → getDb; reject a hostile id with a clean 400, not a 500.
+    if (!isSafeServerId(serverId)) { ctx.set.status = 400; return { setup: false, exists: false } }
     const known = dstStateStore.getServerGroups().some(g => g.server_id === serverId)
     const setup = isSetup(serverId)
     return { setup, exists: known || setup }
@@ -91,6 +94,7 @@ export const panelAuthRoutes = new Elysia({ prefix: '/panel-auth', tags: ['Panel
   .post('/setup/:serverId', async (ctx) => {
     const { body, set, params } = ctx
     const serverId = params.serverId
+    if (!isSafeServerId(serverId)) { set.status = 400; return { success: false as const, reason: 'invalid_server_id' } }
     const result = await completeSetup(serverId, body.token, body.password)
     if (!result.ok) {
       set.status = 400

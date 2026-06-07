@@ -17,10 +17,14 @@ export const meta: NodeMeta = {
     fields: [
       { name: 'userid', type: 'string', description: 'Klei user id' },
       { name: 'name', type: 'string', description: 'Display name' },
-      { name: 'health', type: 'number', description: 'Current health' },
-      { name: 'hunger', type: 'number', description: 'Current hunger' },
-      { name: 'sanity', type: 'number', description: 'Current sanity' },
+      { name: 'prefab', type: 'string', description: 'Character prefab (e.g. wilson)' },
       { name: 'admin', type: 'boolean', description: 'Whether the player is a server admin' },
+      // health/hunger/sanity are NESTED objects { current, max } (collectors.lua) —
+      // read them as {{get_player.health.current}}, NOT {{get_player.health}}.
+      { name: 'health', type: 'object', description: 'Health { current, max } — use {{...health.current}}' },
+      { name: 'hunger', type: 'object', description: 'Hunger { current, max } — use {{...hunger.current}}' },
+      { name: 'sanity', type: 'object', description: 'Sanity { current, max } — use {{...sanity.current}}' },
+      { name: 'position', type: 'object', description: 'World position { x, z }' },
       { name: 'error', type: 'string', description: 'Set when the player was not found' },
     ],
   },

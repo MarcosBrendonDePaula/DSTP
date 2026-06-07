@@ -4,17 +4,36 @@ import { processAutomationEvent } from "../live/LiveAutomation"
 import { EventHistoryRepository, EventSchemaRepository } from "../db"
 import { announceSetupTokenIfNeeded } from "../services/PanelAuthStore"
 import { syncRecorder } from "../services/SyncRecorder"
+import { isSafeServerId } from "../db/connection"
 
 setInterval(() => dstStateStore.checkHealth(), 15000)
+
+// Cap how many players/events a single /dst/sync POST can fan out. This endpoint is
+// unauthenticated (trusted LAN by design), but a malformed/hostile relay shouldn't
+// be able to make one request spawn unbounded worker messages + db inserts.
+const MAX_SYNC_PLAYERS = 256
+const MAX_SYNC_EVENTS = 256
 
 // Core sync logic, shared between HTTP POST /dst/sync and the WebSocket relay.
 // Returns the exact response shape the mod expects (`{ commands, enable_events?, debounce? }`).
 export function handleDstSync(data: any) {
+  // Body guard: a malformed/empty/non-JSON POST (onParse → null) must NOT crash the
+  // destructure below. This endpoint is game-facing and unauthenticated, so junk
+  // input has to degrade to a clean error, never a 500.
+  if (!data || typeof data !== 'object') return { error: 'invalid body' }
+
   const { server_id, shard_id, shard_type, server, players, events, active_events, debounce } = data
   if (!server_id || !shard_id) return { error: 'missing server_id or shard_id' }
+  // server_id becomes a sqlite filename (1 db per server) — reject path-traversal /
+  // hostile charset HERE, before any getDb call, so it never reaches the filesystem.
+  if (!isSafeServerId(server_id)) return { error: 'invalid server_id' }
+
+  // Cap fan-out: clamp the arrays so one request can't spawn unbounded work.
+  const playersArr = Array.isArray(players) ? players.slice(0, MAX_SYNC_PLAYERS) : []
+  const eventsArr = Array.isArray(events) ? events.slice(0, MAX_SYNC_EVENTS) : []
 
   // Dev replay recorder — no-op unless a session is active (DSTP_RECORD).
-  syncRecorder.record({ server_id, shard_id, shard_type, server, players, events, active_events })
+  syncRecorder.record({ server_id, shard_id, shard_type, server, players: playersArr, events: eventsArr, active_events })
 
   announceSetupTokenIfNeeded(server_id)
 
@@ -23,18 +42,18 @@ export function handleDstSync(data: any) {
     shard_id,
     shard_type || 'master',
     server,
-    players || [],
-    events || [],
+    playersArr,
+    eventsArr,
     active_events,
     debounce,
   )
 
   try { (require("../live/LiveDSTP") as any).notifyLiveDSTP?.(server_id) } catch {}
 
-  if (events && events.length > 0) {
+  if (eventsArr.length > 0) {
     const eventRepo = new EventHistoryRepository(server_id)
     const schemaRepo = new EventSchemaRepository(server_id)
-    for (const evt of events) {
+    for (const evt of eventsArr) {
       try { eventRepo.create({ type: evt.type, shardId: shard_id, shardType: shard_type, data: evt.data || {} }) } catch {}
       try { schemaRepo.autoDetect(evt.type, evt.data || {}) } catch {}
       try { processAutomationEvent(server_id, evt) } catch (e) { console.error('[DSTP Automation]', e) }

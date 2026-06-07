@@ -47,9 +47,14 @@ setInterval(() => {
 // separators or traversal sequences — otherwise a crafted id like "../../x" would
 // open/create a DB outside DATA_DIR. Allow only the charset real server ids use
 // (auto ids are "dst-<hex>", shards add ":"). Reject everything else loudly.
-const SAFE_SERVER_ID = /^[A-Za-z0-9:_-]+$/
+export const SAFE_SERVER_ID = /^[A-Za-z0-9:_-]+$/
+// Non-throwing check for routes that want to reject hostile ids with a clean 4xx
+// BEFORE touching the db (so a path-traversal id never reaches getDb at all).
+export function isSafeServerId(serverId: unknown): serverId is string {
+  return typeof serverId === 'string' && SAFE_SERVER_ID.test(serverId)
+}
 function assertSafeServerId(serverId: string): void {
-  if (typeof serverId !== 'string' || !SAFE_SERVER_ID.test(serverId)) {
+  if (!isSafeServerId(serverId)) {
     throw new Error(`Invalid serverId: ${JSON.stringify(serverId)}`)
   }
 }
