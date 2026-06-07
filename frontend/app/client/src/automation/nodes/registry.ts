@@ -46,6 +46,12 @@ import { meta as breakMeta } from '@shared/automation/nodes/logic/loop/break/met
 import { ui as breakUi } from '@shared/automation/nodes/logic/loop/break/ui'
 import { meta as editVarMeta } from '@shared/automation/nodes/data/vars/edit_variable/meta'
 import { ui as editVarUi } from '@shared/automation/nodes/data/vars/edit_variable/ui'
+import { meta as aggregateMeta } from '@shared/automation/nodes/data/vars/aggregate/meta'
+import { ui as aggregateUi } from '@shared/automation/nodes/data/vars/aggregate/ui'
+import { meta as datetimeMeta } from '@shared/automation/nodes/data/transform/datetime/meta'
+import { ui as datetimeUi } from '@shared/automation/nodes/data/transform/datetime/ui'
+import { meta as tryCatchMeta } from '@shared/automation/nodes/logic/branch/try_catch/meta'
+import { ui as tryCatchUi } from '@shared/automation/nodes/logic/branch/try_catch/ui'
 import { meta as filterMeta } from '@shared/automation/nodes/logic/branch/filter/meta'
 import { ui as filterUi } from '@shared/automation/nodes/logic/branch/filter/ui'
 import { meta as logMeta } from '@shared/automation/nodes/data/debug/log/meta'
@@ -116,6 +122,9 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: loopMeta, ui: loopUi },
   { meta: breakMeta, ui: breakUi },
   { meta: editVarMeta, ui: editVarUi },
+  { meta: aggregateMeta, ui: aggregateUi },
+  { meta: datetimeMeta, ui: datetimeUi },
+  { meta: tryCatchMeta, ui: tryCatchUi },
   { meta: filterMeta, ui: filterUi },
   { meta: logMeta, ui: logUi },
   { meta: randomMeta, ui: randomUi },

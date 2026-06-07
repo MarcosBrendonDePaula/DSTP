@@ -770,6 +770,40 @@ describe('FlowEngine e2e — loop / break / edit_variable', () => {
     expect(commands.map(c => c.data.message)).toEqual(['iters=60 by=break n=60'])
   })
 
+  it('aggregate collects items across loop iterations into vars', async () => {
+    const aggregate = (id: string, params: any): FlowNode =>
+      ({ id, type: 'aggregate', data: { params }, position: { x: 0, y: 0 } } as any)
+    const nodes = [
+      trigger('t', 'chat_message'),
+      editVar('init', { operation: 'set', key: 'n', value: '0' }),
+      loop('lp', 'while', { field: '{{vars.n}}', operator: 'less_than', value: '3' }),
+      editVar('inc', { operation: 'inc', key: 'n' }),
+      aggregate('agg', { operation: 'push', key: 'collected', value: 'item{{vars.n}}' }),
+      // a lone {{vars.collected}} returns the raw array (type-preserving, like
+      // {{x.value}} returns a number); mixed with text it would stringify.
+      action('done', 'announce', { message: '{{vars.collected}}' }),
+    ]
+    const edges = [
+      edge('t', 'init'), edge('init', 'lp'),
+      edge('lp', 'inc', 'body'), edge('inc', 'agg'),
+      edge('lp', 'done', 'done'),
+    ]
+    await run(nodes, edges, { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toEqual(['item1', 'item2', 'item3'])
+  })
+
+  it('datetime add/diff computes through the engine', async () => {
+    const dt = (id: string, params: any): FlowNode =>
+      ({ id, type: 'datetime', data: { params }, position: { x: 0, y: 0 } } as any)
+    const nodes = [
+      trigger('t', 'chat_message'),
+      dt('d', { operation: 'diff', value: '0', value2: '60000', unit: 'minutes' }),
+      action('a', 'announce', { message: '{{d.value}}' }),
+    ]
+    await run(nodes, [edge('t', 'd'), edge('d', 'a')], { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toBe(1) // 60000ms = 1 minute
+  })
+
   it('loop hard-caps at 200 iterations when nothing stops it', async () => {
     const nodes = [
       trigger('t', 'chat_message'),
