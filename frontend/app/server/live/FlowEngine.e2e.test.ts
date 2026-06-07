@@ -677,6 +677,116 @@ describe('FlowEngine e2e — foreach', () => {
   })
 })
 
+describe('FlowEngine e2e — loop / break / edit_variable', () => {
+  // loop: field/operator/value live on data.* (like condition); mode on data.params.
+  const loop = (id: string, mode: string, cond: any = {}): FlowNode =>
+    ({ id, type: 'loop', data: { params: { mode }, ...cond }, position: { x: 0, y: 0 } } as any)
+  const brk = (id: string, data: any = {}): FlowNode =>
+    ({ id, type: 'break', data, position: { x: 0, y: 0 } } as any)
+  const editVar = (id: string, params: any): FlowNode =>
+    ({ id, type: 'edit_variable', data: { params }, position: { x: 0, y: 0 } } as any)
+
+  it('edit_variable set/inc is readable via {{vars.x}}', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      editVar('v0', { operation: 'set', key: 'count', value: '0' }),
+      editVar('v1', { operation: 'inc', key: 'count' }),
+      editVar('v2', { operation: 'inc', key: 'count', value: '5' }),
+      action('a', 'announce', { message: 'c={{vars.count}}' }),
+    ]
+    await run(nodes, [edge('t', 'v0'), edge('v0', 'v1'), edge('v1', 'v2'), edge('v2', 'a')], { type: 'chat_message', data: {} })
+    expect(commands[0].data.message).toBe('c=6')
+  })
+
+  it('edit_variable append builds a list, toggle flips, delete removes', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      editVar('v1', { operation: 'append', key: 'items', value: 'a' }),
+      editVar('v2', { operation: 'append', key: 'items', value: 'b' }),
+      editVar('v3', { operation: 'toggle', key: 'flag' }),
+      action('a', 'announce', { message: '{{vars.items}}|{{vars.flag}}' }),
+    ]
+    await run(nodes, [edge('t', 'v1'), edge('v1', 'v2'), edge('v2', 'v3'), edge('v3', 'a')], { type: 'chat_message', data: {} })
+    // {{vars.items}} alone would be the raw array, but mixed with text it stringifies.
+    expect(commands[0].data.message).toBe('a,b|true')
+  })
+
+  it('loop runs the body until a Break (with a counter in vars)', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      editVar('init', { operation: 'set', key: 'n', value: '0' }),
+      loop('lp', 'while'), // no condition → loops until break
+      // body: increment n, announce it, break when n>=3
+      editVar('inc', { operation: 'inc', key: 'n' }),
+      action('say', 'announce', { message: 'n={{vars.n}}' }),
+      brk('b', { params: { conditional: true }, field: '{{vars.n}}', operator: 'greater_than', value: '2' }),
+      action('done', 'announce', { message: 'done {{lp.iterations}} {{lp.stoppedBy}}' }),
+    ]
+    const edges = [
+      edge('t', 'init'), edge('init', 'lp'),
+      edge('lp', 'inc', 'body'), edge('inc', 'say'), edge('say', 'b'),
+      edge('lp', 'done', 'done'),
+    ]
+    await run(nodes, edges, { type: 'chat_message', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual([
+      'n=1', 'n=2', 'n=3', 'done 3 break',
+    ])
+  })
+
+  it('loop mode "while" stops when the condition turns false', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      editVar('init', { operation: 'set', key: 'n', value: '0' }),
+      loop('lp', 'while', { field: '{{vars.n}}', operator: 'less_than', value: '3' }),
+      editVar('inc', { operation: 'inc', key: 'n' }),
+      action('say', 'announce', { message: 'n={{vars.n}}' }),
+      action('done', 'announce', { message: 'stopped {{lp.stoppedBy}}' }),
+    ]
+    const edges = [
+      edge('t', 'init'), edge('init', 'lp'),
+      edge('lp', 'inc', 'body'), edge('inc', 'say'),
+      edge('lp', 'done', 'done'),
+    ]
+    await run(nodes, edges, { type: 'chat_message', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual(['n=1', 'n=2', 'n=3', 'stopped condition'])
+  })
+
+  it('loop survives MANY iterations without tripping the loop-guard', async () => {
+    // 60 iterations × a 2-node body would blow MAX_NODE_VISITS=50 without
+    // resetVisits. We break at index>=59 and assert all 60 ran (no guard abort).
+    const nodes = [
+      trigger('t', 'chat_message'),
+      loop('lp', 'while'),
+      editVar('inc', { operation: 'inc', key: 'n' }),
+      brk('b', { params: { conditional: true }, field: '{{loop.index}}', operator: 'greater_than', value: '58' }),
+      action('done', 'announce', { message: 'iters={{lp.iterations}} by={{lp.stoppedBy}} n={{vars.n}}' }),
+    ]
+    const edges = [
+      edge('t', 'lp'),
+      edge('lp', 'inc', 'body'), edge('inc', 'b'),
+      edge('lp', 'done', 'done'),
+    ]
+    await run(nodes, edges, { type: 'chat_message', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual(['iters=60 by=break n=60'])
+  })
+
+  it('loop hard-caps at 200 iterations when nothing stops it', async () => {
+    const nodes = [
+      trigger('t', 'chat_message'),
+      loop('lp', 'while'), // always-true (no condition), no break → cap
+      editVar('inc', { operation: 'inc', key: 'n' }),
+      action('done', 'announce', { message: 'iters={{lp.iterations}} by={{lp.stoppedBy}}' }),
+    ]
+    const edges = [
+      edge('t', 'lp'),
+      edge('lp', 'inc', 'body'),
+      edge('lp', 'done', 'done'),
+    ]
+    await run(nodes, edges, { type: 'chat_message', data: {} })
+    expect(commands.map(c => c.data.message)).toEqual(['iters=200 by=cap'])
+  })
+})
+
 describe('FlowEngine e2e — basic primitives', () => {
   const node = (id: string, type: string, params: any, extra: any = {}): FlowNode =>
     ({ id, type, data: { params, ...extra }, position: { x: 0, y: 0 } } as any)

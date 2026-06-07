@@ -40,6 +40,12 @@ import { meta as switchMeta } from '@shared/automation/nodes/logic/branch/switch
 import { ui as switchUi } from '@shared/automation/nodes/logic/branch/switch/ui'
 import { meta as foreachMeta } from '@shared/automation/nodes/logic/loop/foreach/meta'
 import { ui as foreachUi } from '@shared/automation/nodes/logic/loop/foreach/ui'
+import { meta as loopMeta } from '@shared/automation/nodes/logic/loop/loop/meta'
+import { ui as loopUi } from '@shared/automation/nodes/logic/loop/loop/ui'
+import { meta as breakMeta } from '@shared/automation/nodes/logic/loop/break/meta'
+import { ui as breakUi } from '@shared/automation/nodes/logic/loop/break/ui'
+import { meta as editVarMeta } from '@shared/automation/nodes/data/vars/edit_variable/meta'
+import { ui as editVarUi } from '@shared/automation/nodes/data/vars/edit_variable/ui'
 import { meta as filterMeta } from '@shared/automation/nodes/logic/branch/filter/meta'
 import { ui as filterUi } from '@shared/automation/nodes/logic/branch/filter/ui'
 import { meta as logMeta } from '@shared/automation/nodes/data/debug/log/meta'
@@ -107,6 +113,9 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: conditionMeta, ui: conditionUi },
   { meta: switchMeta, ui: switchUi },
   { meta: foreachMeta, ui: foreachUi },
+  { meta: loopMeta, ui: loopUi },
+  { meta: breakMeta, ui: breakUi },
+  { meta: editVarMeta, ui: editVarUi },
   { meta: filterMeta, ui: filterUi },
   { meta: logMeta, ui: logUi },
   { meta: randomMeta, ui: randomUi },
