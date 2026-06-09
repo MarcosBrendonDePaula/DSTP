@@ -1,5 +1,5 @@
 import { Handle, Position, useReactFlow } from '@xyflow/react'
-import { createContext, useContext, useState, useEffect, useId } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getPrefabs, subscribePrefabs } from '../prefabCache'
 
 // Config-only mode: when the detail modal renders a node's ui.tsx as its config
@@ -310,35 +310,75 @@ export function NodeInput({ value, onChange, placeholder }: { value: string; onC
   )
 }
 
-// Like NodeInput but with a <datalist> of this server's runtime prefabs (spawn /
-// give_item etc). It's a free-text input — autocomplete suggestions, not a hard
+// Like NodeInput but with an autocomplete dropdown of this server's runtime prefabs
+// (spawn / give_item etc). It's a free-text input — suggestions, not a hard
 // restriction — so templates like {{trigger.prefab}} still work.
+//
+// We render our OWN dropdown instead of the native <datalist>: the DST/Steam
+// in-game browser is an old CEF (Chromium Embedded) that does not render the
+// native datalist popup at all. A React-rendered popover works in any Chromium.
 export function NodePrefabInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [prefabs, setPrefabs] = useState<string[]>(() => getPrefabs())
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const boxRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const off = subscribePrefabs(() => setPrefabs(getPrefabs()))
     setPrefabs(getPrefabs()) // triggers a fetch if not cached
     return off
   }, [])
-  // useId() yields ids containing ':' (e.g. ":r0:"), which browsers reject when
-  // matching an <input list=...> against a <datalist id=...> — the autocomplete
-  // silently never opens. Strip the colons so the association works.
-  const listId = `prefablist-${useId().replace(/:/g, '')}`
+  // Close on click outside.
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  // Filter by what's typed (case-insensitive substring). Skip filtering when the
+  // field holds a template so {{...}} isn't drowned by 6k unrelated suggestions.
+  const q = value.trim().toLowerCase()
+  const isTemplate = value.includes('{{')
+  const matches = (!isTemplate && prefabs.length)
+    ? (q ? prefabs.filter(p => p.toLowerCase().includes(q)) : prefabs).slice(0, 50)
+    : []
+  const showList = open && matches.length > 0
+
+  const pick = (p: string) => { onChange(p); setOpen(false) }
+
   return (
-    <>
+    <div ref={boxRef} className="relative">
       <input
         value={value}
-        onChange={e => onChange(e.target.value)}
-        list={prefabs.length ? listId : undefined}
+        onChange={e => { onChange(e.target.value); setOpen(true); setActive(0) }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (!showList) return
+          if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, matches.length - 1)) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)) }
+          else if (e.key === 'Enter' && matches[active]) { e.preventDefault(); pick(matches[active]) }
+          else if (e.key === 'Escape') { setOpen(false) }
+        }}
         placeholder={placeholder}
         className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-blue-500/30 focus:outline-none placeholder:text-gray-600"
         title={prefabs.length ? `${prefabs.length} prefabs deste servidor` : 'Lista de prefabs ainda nao carregada'}
       />
-      {prefabs.length > 0 && (
-        <datalist id={listId}>
-          {prefabs.slice(0, 2000).map(p => <option key={p} value={p} />)}
-        </datalist>
+      {showList && (
+        <div className="absolute z-50 left-0 right-0 mt-0.5 max-h-44 overflow-y-auto bg-[#1a1d24] border border-white/15 rounded shadow-lg">
+          {matches.map((p, i) => (
+            <div
+              key={p}
+              onMouseDown={e => { e.preventDefault(); pick(p) }}
+              onMouseEnter={() => setActive(i)}
+              className={`px-2 py-1 text-[10px] cursor-pointer ${i === active ? 'bg-blue-500/30 text-white' : 'text-gray-300'}`}
+            >
+              {p}
+            </div>
+          ))}
+        </div>
       )}
-    </>
+    </div>
   )
 }
