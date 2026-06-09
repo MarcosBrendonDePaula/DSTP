@@ -320,7 +320,10 @@ export function NodePrefabInput({ value, onChange, placeholder }: { value: strin
     setPrefabs(getPrefabs()) // triggers a fetch if not cached
     return off
   }, [])
-  const listId = useId()
+  // useId() yields ids containing ':' (e.g. ":r0:"), which browsers reject when
+  // matching an <input list=...> against a <datalist id=...> — the autocomplete
+  // silently never opens. Strip the colons so the association works.
+  const listId = `prefablist-${useId().replace(/:/g, '')}`
   return (
     <>
       <input
