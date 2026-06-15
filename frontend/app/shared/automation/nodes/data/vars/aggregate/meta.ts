@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     value: 'The value to append (push). Templates allowed, e.g. {{loop.item}}.',
   },
   kind: 'data',
+
+  subgroup: 'Variáveis',
   defaults: { params: { operation: 'push', key: 'items', value: '' } },
   outputSchema: {
     description: 'The accumulated array',

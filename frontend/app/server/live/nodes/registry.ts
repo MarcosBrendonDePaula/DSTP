@@ -17,6 +17,14 @@ import { meta as setVarMeta } from '@shared/automation/nodes/data/vars/set_varia
 import { handler as setVarHandler } from '@shared/automation/nodes/data/vars/set_variable/exec'
 import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_player/meta'
 import { handler as getPlayerHandler } from '@shared/automation/nodes/data/player/get_player/exec'
+import { meta as getServerInfoMeta } from '@shared/automation/nodes/data/server/get_server_info/meta'
+import { handler as getServerInfoHandler } from '@shared/automation/nodes/data/server/get_server_info/exec'
+import { meta as getInventoryMeta } from '@shared/automation/nodes/data/player/get_player_inventory/meta'
+import { handler as getInventoryHandler } from '@shared/automation/nodes/data/player/get_player_inventory/exec'
+import { meta as getBuffsMeta } from '@shared/automation/nodes/data/player/get_player_buffs/meta'
+import { handler as getBuffsHandler } from '@shared/automation/nodes/data/player/get_player_buffs/exec'
+import { meta as listAllPlayersMeta } from '@shared/automation/nodes/data/player/list_all_players/meta'
+import { handler as listAllPlayersHandler } from '@shared/automation/nodes/data/player/list_all_players/exec'
 import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
 import { handler as findPlayerHandler } from '@shared/automation/nodes/data/player/find_player/exec'
 import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/player_state/meta'
@@ -77,6 +85,124 @@ import { meta as respawnMeta } from '@shared/automation/nodes/actions/game/respa
 import { handler as respawnHandler } from '@shared/automation/nodes/actions/game/respawn/exec'
 import { meta as giveItemMeta } from '@shared/automation/nodes/actions/game/give_item/meta'
 import { handler as giveItemHandler } from '@shared/automation/nodes/actions/game/give_item/exec'
+// BEGIN GEN-ACTIONS server
+import { meta as announceMeta } from '@shared/automation/nodes/actions/communication/announce/meta'
+import { handler as announceHandler } from '@shared/automation/nodes/actions/communication/announce/exec'
+import { meta as privateMessageMeta } from '@shared/automation/nodes/actions/communication/private_message/meta'
+import { handler as privateMessageHandler } from '@shared/automation/nodes/actions/communication/private_message/exec'
+import { meta as chatSendMeta } from '@shared/automation/nodes/actions/communication/chat_send/meta'
+import { handler as chatSendHandler } from '@shared/automation/nodes/actions/communication/chat_send/exec'
+import { meta as feedMeta } from '@shared/automation/nodes/actions/player/feed/meta'
+import { handler as feedHandler } from '@shared/automation/nodes/actions/player/feed/exec'
+import { meta as restoreSanityMeta } from '@shared/automation/nodes/actions/player/restore_sanity/meta'
+import { handler as restoreSanityHandler } from '@shared/automation/nodes/actions/player/restore_sanity/exec'
+import { meta as godmodeMeta } from '@shared/automation/nodes/actions/player/godmode/meta'
+import { handler as godmodeHandler } from '@shared/automation/nodes/actions/player/godmode/exec'
+import { meta as teleportToPlayerMeta } from '@shared/automation/nodes/actions/player/teleport_to_player/meta'
+import { handler as teleportToPlayerHandler } from '@shared/automation/nodes/actions/player/teleport_to_player/exec'
+import { meta as setSeasonMeta } from '@shared/automation/nodes/actions/world/set_season/meta'
+import { handler as setSeasonHandler } from '@shared/automation/nodes/actions/world/set_season/exec'
+import { meta as setPhaseMeta } from '@shared/automation/nodes/actions/world/set_phase/meta'
+import { handler as setPhaseHandler } from '@shared/automation/nodes/actions/world/set_phase/exec'
+import { meta as skipDayMeta } from '@shared/automation/nodes/actions/world/skip_day/meta'
+import { handler as skipDayHandler } from '@shared/automation/nodes/actions/world/skip_day/exec'
+import { meta as setRainMeta } from '@shared/automation/nodes/actions/world/set_rain/meta'
+import { handler as setRainHandler } from '@shared/automation/nodes/actions/world/set_rain/exec'
+import { meta as stopRainMeta } from '@shared/automation/nodes/actions/world/stop_rain/meta'
+import { handler as stopRainHandler } from '@shared/automation/nodes/actions/world/stop_rain/exec'
+import { meta as pauseMeta } from '@shared/automation/nodes/actions/world/pause/meta'
+import { handler as pauseHandler } from '@shared/automation/nodes/actions/world/pause/exec'
+import { meta as unpauseMeta } from '@shared/automation/nodes/actions/world/unpause/meta'
+import { handler as unpauseHandler } from '@shared/automation/nodes/actions/world/unpause/exec'
+import { meta as setSpeedMeta } from '@shared/automation/nodes/actions/world/set_speed/meta'
+import { handler as setSpeedHandler } from '@shared/automation/nodes/actions/world/set_speed/exec'
+import { meta as rollbackMeta } from '@shared/automation/nodes/actions/admin/rollback/meta'
+import { handler as rollbackHandler } from '@shared/automation/nodes/actions/admin/rollback/exec'
+import { meta as executeMeta } from '@shared/automation/nodes/actions/admin/execute/meta'
+import { handler as executeHandler } from '@shared/automation/nodes/actions/admin/execute/exec'
+import { meta as banMeta } from '@shared/automation/nodes/actions/admin/ban/meta'
+import { handler as banHandler } from '@shared/automation/nodes/actions/admin/ban/exec'
+import { meta as lightningMeta } from '@shared/automation/nodes/actions/player/lightning/meta'
+import { handler as lightningHandler } from '@shared/automation/nodes/actions/player/lightning/exec'
+import { meta as regenerateMeta } from '@shared/automation/nodes/actions/admin/regenerate/meta'
+import { handler as regenerateHandler } from '@shared/automation/nodes/actions/admin/regenerate/exec'
+import { meta as setNextPhaseMeta } from '@shared/automation/nodes/actions/world/set_next_phase/meta'
+import { handler as setNextPhaseHandler } from '@shared/automation/nodes/actions/world/set_next_phase/exec'
+import { meta as setSnowMeta } from '@shared/automation/nodes/actions/world/set_snow/meta'
+import { handler as setSnowHandler } from '@shared/automation/nodes/actions/world/set_snow/exec'
+import { meta as setDayLengthMeta } from '@shared/automation/nodes/actions/world/set_day_length/meta'
+import { handler as setDayLengthHandler } from '@shared/automation/nodes/actions/world/set_day_length/exec'
+import { meta as setSeasonLengthMeta } from '@shared/automation/nodes/actions/world/set_season_length/meta'
+import { handler as setSeasonLengthHandler } from '@shared/automation/nodes/actions/world/set_season_length/exec'
+import { meta as removeInventoryMeta } from '@shared/automation/nodes/actions/inventory/remove_inventory/meta'
+import { handler as removeInventoryHandler } from '@shared/automation/nodes/actions/inventory/remove_inventory/exec'
+import { meta as removeItemMeta } from '@shared/automation/nodes/actions/inventory/remove_item/meta'
+import { handler as removeItemHandler } from '@shared/automation/nodes/actions/inventory/remove_item/exec'
+import { meta as countItemMeta } from '@shared/automation/nodes/actions/inventory/count_item/meta'
+import { handler as countItemHandler } from '@shared/automation/nodes/actions/inventory/count_item/exec'
+import { meta as hasItemMeta } from '@shared/automation/nodes/actions/inventory/has_item/meta'
+import { handler as hasItemHandler } from '@shared/automation/nodes/actions/inventory/has_item/exec'
+import { meta as equipItemMeta } from '@shared/automation/nodes/actions/inventory/equip_item/meta'
+import { handler as equipItemHandler } from '@shared/automation/nodes/actions/inventory/equip_item/exec'
+import { meta as unequipMeta } from '@shared/automation/nodes/actions/inventory/unequip/meta'
+import { handler as unequipHandler } from '@shared/automation/nodes/actions/inventory/unequip/exec'
+import { meta as dropItemMeta } from '@shared/automation/nodes/actions/inventory/drop_item/meta'
+import { handler as dropItemHandler } from '@shared/automation/nodes/actions/inventory/drop_item/exec'
+import { meta as clearInventoryMeta } from '@shared/automation/nodes/actions/inventory/clear_inventory/meta'
+import { handler as clearInventoryHandler } from '@shared/automation/nodes/actions/inventory/clear_inventory/exec'
+import { meta as transferItemMeta } from '@shared/automation/nodes/actions/inventory/transfer_item/meta'
+import { handler as transferItemHandler } from '@shared/automation/nodes/actions/inventory/transfer_item/exec'
+import { meta as dumpInventoryMeta } from '@shared/automation/nodes/actions/inventory/dump_inventory/meta'
+import { handler as dumpInventoryHandler } from '@shared/automation/nodes/actions/inventory/dump_inventory/exec'
+import { meta as uiTrackMeta } from '@shared/automation/nodes/actions/interface/ui_track/meta'
+import { handler as uiTrackHandler } from '@shared/automation/nodes/actions/interface/ui_track/exec'
+import { meta as spawnAtPlayerMeta } from '@shared/automation/nodes/actions/entity/spawn_at_player/meta'
+import { handler as spawnAtPlayerHandler } from '@shared/automation/nodes/actions/entity/spawn_at_player/exec'
+import { meta as spawnPrefabMeta } from '@shared/automation/nodes/actions/entity/spawn_prefab/meta'
+import { handler as spawnPrefabHandler } from '@shared/automation/nodes/actions/entity/spawn_prefab/exec'
+import { meta as removeNearPlayerMeta } from '@shared/automation/nodes/actions/entity/remove_near_player/meta'
+import { handler as removeNearPlayerHandler } from '@shared/automation/nodes/actions/entity/remove_near_player/exec'
+import { meta as removeNearMeta } from '@shared/automation/nodes/actions/entity/remove_near/meta'
+import { handler as removeNearHandler } from '@shared/automation/nodes/actions/entity/remove_near/exec'
+import { meta as destroyStructureMeta } from '@shared/automation/nodes/actions/entity/destroy_structure/meta'
+import { handler as destroyStructureHandler } from '@shared/automation/nodes/actions/entity/destroy_structure/exec'
+import { meta as getEntityMeta } from '@shared/automation/nodes/actions/entity/get_entity/meta'
+import { handler as getEntityHandler } from '@shared/automation/nodes/actions/entity/get_entity/exec'
+import { meta as entitySetHealthMeta } from '@shared/automation/nodes/actions/entity/entity_set_health/meta'
+import { handler as entitySetHealthHandler } from '@shared/automation/nodes/actions/entity/entity_set_health/exec'
+import { meta as entityKillMeta } from '@shared/automation/nodes/actions/entity/entity_kill/meta'
+import { handler as entityKillHandler } from '@shared/automation/nodes/actions/entity/entity_kill/exec'
+import { meta as killAreaMeta } from '@shared/automation/nodes/actions/entity/kill_area/meta'
+import { handler as killAreaHandler } from '@shared/automation/nodes/actions/entity/kill_area/exec'
+import { meta as entityExtinguishMeta } from '@shared/automation/nodes/actions/entity/entity_extinguish/meta'
+import { handler as entityExtinguishHandler } from '@shared/automation/nodes/actions/entity/entity_extinguish/exec'
+import { meta as entityIgniteMeta } from '@shared/automation/nodes/actions/entity/entity_ignite/meta'
+import { handler as entityIgniteHandler } from '@shared/automation/nodes/actions/entity/entity_ignite/exec'
+import { meta as entitySetFuelMeta } from '@shared/automation/nodes/actions/entity/entity_set_fuel/meta'
+import { handler as entitySetFuelHandler } from '@shared/automation/nodes/actions/entity/entity_set_fuel/exec'
+import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entity/entity_freeze/meta'
+import { handler as entityFreezeHandler } from '@shared/automation/nodes/actions/entity/entity_freeze/exec'
+import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
+import { handler as entityUnfreezeHandler } from '@shared/automation/nodes/actions/entity/entity_unfreeze/exec'
+import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
+import { handler as uiNotificationHandler } from '@shared/automation/nodes/actions/interface/ui_notification/exec'
+import { meta as uiLabelMeta } from '@shared/automation/nodes/actions/interface/ui_label/meta'
+import { handler as uiLabelHandler } from '@shared/automation/nodes/actions/interface/ui_label/exec'
+import { meta as uiProgressBarMeta } from '@shared/automation/nodes/actions/interface/ui_progress_bar/meta'
+import { handler as uiProgressBarHandler } from '@shared/automation/nodes/actions/interface/ui_progress_bar/exec'
+import { meta as uiSetMeta } from '@shared/automation/nodes/actions/interface/ui_set/meta'
+import { handler as uiSetHandler } from '@shared/automation/nodes/actions/interface/ui_set/exec'
+import { meta as uiDestroyMeta } from '@shared/automation/nodes/actions/interface/ui_destroy/meta'
+import { handler as uiDestroyHandler } from '@shared/automation/nodes/actions/interface/ui_destroy/exec'
+import { meta as uiClearMeta } from '@shared/automation/nodes/actions/interface/ui_clear/meta'
+import { handler as uiClearHandler } from '@shared/automation/nodes/actions/interface/ui_clear/exec'
+import { meta as ruleInstallMeta } from '@shared/automation/nodes/actions/rules/rule_install/meta'
+import { handler as ruleInstallHandler } from '@shared/automation/nodes/actions/rules/rule_install/exec'
+import { meta as ruleUninstallMeta } from '@shared/automation/nodes/actions/rules/rule_uninstall/meta'
+import { handler as ruleUninstallHandler } from '@shared/automation/nodes/actions/rules/rule_uninstall/exec'
+import { meta as ruleSetStateMeta } from '@shared/automation/nodes/actions/rules/rule_set_state/meta'
+import { handler as ruleSetStateHandler } from '@shared/automation/nodes/actions/rules/rule_set_state/exec'
+// END GEN-ACTIONS server
 import { meta as uiPanelMeta } from '@shared/automation/nodes/ui/builder/ui_panel/meta'
 import { handler as uiPanelHandler } from '@shared/automation/nodes/ui/builder/ui_panel/exec'
 import { meta as aiAgentMeta } from '@shared/automation/nodes/ai/agent/ai_agent/meta'
@@ -103,6 +229,10 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: delayMeta, handler: delayHandler },
   { meta: setVarMeta, handler: setVarHandler },
   { meta: getPlayerMeta, handler: getPlayerHandler },
+  { meta: getServerInfoMeta, handler: getServerInfoHandler },
+  { meta: getInventoryMeta, handler: getInventoryHandler },
+  { meta: getBuffsMeta, handler: getBuffsHandler },
+  { meta: listAllPlayersMeta, handler: listAllPlayersHandler },
   { meta: findPlayerMeta, handler: findPlayerHandler },
   { meta: playerStateMeta, handler: playerStateHandler },
   { meta: callComponentMeta, handler: callComponentHandler },
@@ -133,6 +263,66 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: killMeta, handler: killHandler },
   { meta: respawnMeta, handler: respawnHandler },
   { meta: giveItemMeta, handler: giveItemHandler },
+  // BEGIN GEN-ACTIONS entries
+  { meta: announceMeta, handler: announceHandler },
+  { meta: privateMessageMeta, handler: privateMessageHandler },
+  { meta: chatSendMeta, handler: chatSendHandler },
+  { meta: feedMeta, handler: feedHandler },
+  { meta: restoreSanityMeta, handler: restoreSanityHandler },
+  { meta: godmodeMeta, handler: godmodeHandler },
+  { meta: teleportToPlayerMeta, handler: teleportToPlayerHandler },
+  { meta: setSeasonMeta, handler: setSeasonHandler },
+  { meta: setPhaseMeta, handler: setPhaseHandler },
+  { meta: skipDayMeta, handler: skipDayHandler },
+  { meta: setRainMeta, handler: setRainHandler },
+  { meta: stopRainMeta, handler: stopRainHandler },
+  { meta: pauseMeta, handler: pauseHandler },
+  { meta: unpauseMeta, handler: unpauseHandler },
+  { meta: setSpeedMeta, handler: setSpeedHandler },
+  { meta: rollbackMeta, handler: rollbackHandler },
+  { meta: executeMeta, handler: executeHandler },
+  { meta: banMeta, handler: banHandler },
+  { meta: lightningMeta, handler: lightningHandler },
+  { meta: regenerateMeta, handler: regenerateHandler },
+  { meta: setNextPhaseMeta, handler: setNextPhaseHandler },
+  { meta: setSnowMeta, handler: setSnowHandler },
+  { meta: setDayLengthMeta, handler: setDayLengthHandler },
+  { meta: setSeasonLengthMeta, handler: setSeasonLengthHandler },
+  { meta: removeInventoryMeta, handler: removeInventoryHandler },
+  { meta: removeItemMeta, handler: removeItemHandler },
+  { meta: countItemMeta, handler: countItemHandler },
+  { meta: hasItemMeta, handler: hasItemHandler },
+  { meta: equipItemMeta, handler: equipItemHandler },
+  { meta: unequipMeta, handler: unequipHandler },
+  { meta: dropItemMeta, handler: dropItemHandler },
+  { meta: clearInventoryMeta, handler: clearInventoryHandler },
+  { meta: transferItemMeta, handler: transferItemHandler },
+  { meta: dumpInventoryMeta, handler: dumpInventoryHandler },
+  { meta: uiTrackMeta, handler: uiTrackHandler },
+  { meta: spawnAtPlayerMeta, handler: spawnAtPlayerHandler },
+  { meta: spawnPrefabMeta, handler: spawnPrefabHandler },
+  { meta: removeNearPlayerMeta, handler: removeNearPlayerHandler },
+  { meta: removeNearMeta, handler: removeNearHandler },
+  { meta: destroyStructureMeta, handler: destroyStructureHandler },
+  { meta: getEntityMeta, handler: getEntityHandler },
+  { meta: entitySetHealthMeta, handler: entitySetHealthHandler },
+  { meta: entityKillMeta, handler: entityKillHandler },
+  { meta: killAreaMeta, handler: killAreaHandler },
+  { meta: entityExtinguishMeta, handler: entityExtinguishHandler },
+  { meta: entityIgniteMeta, handler: entityIgniteHandler },
+  { meta: entitySetFuelMeta, handler: entitySetFuelHandler },
+  { meta: entityFreezeMeta, handler: entityFreezeHandler },
+  { meta: entityUnfreezeMeta, handler: entityUnfreezeHandler },
+  { meta: uiNotificationMeta, handler: uiNotificationHandler },
+  { meta: uiLabelMeta, handler: uiLabelHandler },
+  { meta: uiProgressBarMeta, handler: uiProgressBarHandler },
+  { meta: uiSetMeta, handler: uiSetHandler },
+  { meta: uiDestroyMeta, handler: uiDestroyHandler },
+  { meta: uiClearMeta, handler: uiClearHandler },
+  { meta: ruleInstallMeta, handler: ruleInstallHandler },
+  { meta: ruleUninstallMeta, handler: ruleUninstallHandler },
+  { meta: ruleSetStateMeta, handler: ruleSetStateHandler },
+  // END GEN-ACTIONS entries
   { meta: uiPanelMeta, handler: uiPanelHandler },
   { meta: aiAgentMeta, handler: aiAgentHandler },
   { meta: uiMenuMeta, handler: uiMenuHandler },

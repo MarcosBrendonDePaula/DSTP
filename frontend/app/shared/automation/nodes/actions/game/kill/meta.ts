@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Mata um jogador.',
   aiDescription: 'Dedicated node for the kill game action. params: userid.',
   kind: 'action',
+
+  subgroup: 'Jogador',
   defaults: { action_type: 'kill', params: {"userid":"{{trigger.userid}}"} },
   outputSchema: {
     description: 'kill result',

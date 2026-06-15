@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Roteia o fluxo por valor (case 1, case 2, ... ou default).',
   aiDescription: 'Route the flow by matching a field against a list of exact-value cases; falls through to default if none match.',
   kind: 'logic',
+
+  subgroup: 'Ramificação',
   // cases: [{ value }] — each case index i has a source handle "case_<i>"; there
   // is always a "default" handle for the no-match path.
   defaults: { field: '', cases: [{ value: '' }] },

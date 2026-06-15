@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useStore } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
 import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
@@ -9,10 +10,22 @@ export const ui = function WaitNode({ id, data, selected }: any) {
     updateNodeData(id, { ...data, [key]: value })
   }, [id, data, updateNodeData])
 
+  // Dynamic input handles (n8n-style): always one FREE input beyond what's already
+  // connected, so the merge grows as you wire branches in — no manual count. The
+  // engine just counts arriving edges, so these are purely a visual affordance.
+  const connectedInputs = useStore((s) => {
+    const targets = new Set<string>()
+    for (const e of s.edges) if (e.target === id) targets.add(e.targetHandle || 'in1')
+    return targets.size
+  })
+  const inputCount = Math.max(2, connectedInputs + 1)
+  const inputLabels = Array.from({ length: inputCount }, (_, i) => ({ id: `in${i + 1}`, label: `Entrada ${i + 1}` }))
+
   return (
     <BaseNode type="wait" icon="🔀" label="Wait / Merge" selected={selected}
       executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError}
       hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}
+      inputLabels={inputLabels}
       outputLabels={data.timeoutAction === 'timeout_branch' ? [
         { id: 'continue', label: '✅ OK' },
         { id: 'timeout', label: '⏰ Timeout' },

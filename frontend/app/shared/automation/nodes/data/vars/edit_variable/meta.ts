@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     value: 'For set/append: the value. For inc/dec: the amount (default 1). Ignored by toggle/delete.',
   },
   kind: 'data',
+
+  subgroup: 'Variáveis',
   defaults: { params: { operation: 'set', key: '', value: '' } },
   outputSchema: {
     description: 'The variable after the operation',

@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Cria abas de UI.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { active: '0' } },
 }

@@ -17,6 +17,8 @@ export const meta: NodeMeta = {
     unit: 'For add/diff: ms | seconds | minutes | hours | days.',
   },
   kind: 'data',
+
+  subgroup: 'Transformar',
   defaults: { params: { operation: 'now', value: '', value2: '', amount: '0', unit: 'seconds' } },
   outputSchema: {
     description: 'Date/time result',

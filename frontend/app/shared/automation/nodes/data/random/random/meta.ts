@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     max: 'Upper bound (integer mode, when no list).',
   },
   kind: 'data',
+
+  subgroup: 'Aleatório',
   defaults: { params: { list: '', min: '', max: '' } },
   outputSchema: {
     description: 'Random pick',

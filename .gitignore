@@ -20,3 +20,6 @@ relay-dev/
 .audit/
 .gitmsg
 examples/flows/AI.json
+
+# AI session scratch (screenshots, temp scripts)
+.ai-notes/

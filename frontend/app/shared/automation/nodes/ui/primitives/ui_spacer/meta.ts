@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Espacamento fixo.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { height: '8' } },
 }

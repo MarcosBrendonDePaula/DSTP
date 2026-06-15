@@ -9,7 +9,8 @@ export const meta: NodeMeta = {
   category: 'IA',
   description: 'IA que usa nos conectados como ferramentas (porta tools).',
   aiDescription: 'An LLM agent whose tools are the nodes wired to its tools handle.',
-  kind: 'action',
+  kind: 'ai',
+  subgroup: 'Agente',
   defaults: { provider: 'anthropic', model: '', max_steps: '8', params: {} },
   outputSchema: {
     description: 'Agent run result',

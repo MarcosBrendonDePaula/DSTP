@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Abre menu interativo para jogador.',
   aiDescription: 'Open an interactive button menu for a player; each button click fires a ui_callback event.',
   kind: 'ui',
+
+  subgroup: 'Interativo',
   defaults: { action_type: 'ui_menu', buttons: [], params: { userid: '{{trigger.userid}}', id: 'menu', title: '', body: '', buttons: '[]' } },
   outputSchema: {
     description: 'Menu dispatched',

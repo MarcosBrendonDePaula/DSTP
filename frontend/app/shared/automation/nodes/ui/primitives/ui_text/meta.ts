@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Texto dinamico.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { text: 'Texto', size: '18' } },
 }

@@ -1,6 +1,45 @@
 // Catálogo de tipos de ação do Action node. Lista de dados (não componentes):
 // cada entrada é { value, label, params:[{key,label,placeholder}] }. Extraído do
 // ActionNode.tsx para manter o componente enxuto.
+
+// ─── Subgrupos das ações (para o catálogo filtrável) ───
+// As 65 ações são muitas para um único filtro "Ações". Cada uma pertence a um
+// grupo semântico (Jogador, Inventário, Mundo, Entidades, Comunicação, UI, Regras,
+// Admin). Mantido como mapa value→group (em vez de um campo por linha) para não
+// inflar as 65 entradas e ter a taxonomia visível num lugar só. Também serve de
+// dica de domínio para o ai_agent.
+export interface ActionGroupMeta { id: string; label: string; icon: string }
+export const ACTION_GROUPS: ActionGroupMeta[] = [
+  { id: 'player', label: 'Jogador', icon: 'LuUser' },
+  { id: 'inventory', label: 'Inventário', icon: 'LuBackpack' },
+  { id: 'world', label: 'Mundo & Clima', icon: 'LuCloudSun' },
+  { id: 'entity', label: 'Entidades & Spawn', icon: 'LuBox' },
+  { id: 'communication', label: 'Comunicação', icon: 'LuMessageSquare' },
+  { id: 'interface', label: 'Interface', icon: 'LuLayoutDashboard' },
+  { id: 'rules', label: 'Regras / Cliente', icon: 'LuMonitor' },
+  { id: 'admin', label: 'Admin / Poder', icon: 'LuShieldAlert' },
+]
+
+export const ACTION_GROUP_BY_VALUE: Record<string, string> = {
+  announce: 'communication', private_message: 'communication', chat_send: 'communication',
+  heal: 'player', feed: 'player', restore_sanity: 'player', kick: 'player', kill: 'player',
+  respawn: 'player', godmode: 'player', teleport: 'player', teleport_to_player: 'player', lightning: 'player',
+  give_item: 'inventory', remove_inventory: 'inventory', remove_item: 'inventory', count_item: 'inventory',
+  has_item: 'inventory', equip_item: 'inventory', unequip: 'inventory', drop_item: 'inventory',
+  clear_inventory: 'inventory', transfer_item: 'inventory', dump_inventory: 'inventory',
+  set_season: 'world', set_phase: 'world', set_next_phase: 'world', skip_day: 'world', set_rain: 'world',
+  stop_rain: 'world', set_snow: 'world', set_day_length: 'world', set_season_length: 'world',
+  set_speed: 'world', pause: 'world', unpause: 'world',
+  spawn_at_player: 'entity', spawn_prefab: 'entity', remove_near_player: 'entity', remove_near: 'entity',
+  destroy_structure: 'entity', get_entity: 'entity', entity_set_health: 'entity', entity_kill: 'entity',
+  kill_area: 'entity', entity_extinguish: 'entity', entity_ignite: 'entity', entity_set_fuel: 'entity',
+  entity_freeze: 'entity', entity_unfreeze: 'entity',
+  ui_track: 'interface', ui_notification: 'interface', ui_label: 'interface', ui_panel: 'interface',
+  ui_progress_bar: 'interface', ui_set: 'interface', ui_destroy: 'interface', ui_clear: 'interface',
+  rule_install: 'rules', rule_uninstall: 'rules', rule_set_state: 'rules',
+  execute: 'admin', ban: 'admin', regenerate: 'admin', rollback: 'admin',
+}
+
 export const ACTION_TYPES = [
   { value: 'announce', label: '📢 Announce', params: [{ key: 'message', label: 'Mensagem', placeholder: 'Texto do anúncio' }] },
   { value: 'private_message', label: '💬 Sussurro', params: [{ key: 'userid', label: 'User ID', placeholder: '{{trigger.userid}}' }, { key: 'message', label: 'Mensagem', placeholder: 'Mensagem privada' }] },
@@ -79,6 +118,16 @@ export const ACTION_TYPES = [
     { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },
     { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X', placeholder: '' }, { key: 'z', label: 'Z', placeholder: '' }, { key: 'radius', label: 'Raio', placeholder: '8' },
+  ] },
+  // Mata em ÁREA em volta de um player. filter: mobs (criaturas, padrão) | hostile
+  // (só quem agride) | prefab (só o prefab informado) | all (tudo com vida, exceto
+  // players). Sempre poupa o próprio player. limit evita lag num raio grande.
+  { value: 'kill_area', label: '☠ Matar em Área (volta do player)', params: [
+    { key: 'userid', label: 'Player (userid)', placeholder: '{{trigger.userid}}' },
+    { key: 'radius', label: 'Raio', placeholder: '15' },
+    { key: 'filter', label: 'Filtro: mobs / hostile / prefab / all', placeholder: 'mobs' },
+    { key: 'prefab', label: 'Prefab (se filter=prefab)', placeholder: 'spider' },
+    { key: 'limit', label: 'Limite', placeholder: '200' },
   ] },
   { value: 'entity_extinguish', label: '💧 Entidade: Apagar Fogo', params: [
     { key: 'guid', label: 'GUID', placeholder: '{{trigger.guid}}' },

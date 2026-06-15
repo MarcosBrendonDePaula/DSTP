@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Icone por prefab.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { prefab: 'log', size: '56' } },
 }

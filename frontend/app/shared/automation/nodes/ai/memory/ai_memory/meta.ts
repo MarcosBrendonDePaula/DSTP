@@ -15,5 +15,7 @@ export const meta: NodeMeta = {
     value: 'Value to store (save only).',
   },
   kind: 'ai',
+
+  subgroup: 'Memória da IA',
   defaults: { params: {} },
 }

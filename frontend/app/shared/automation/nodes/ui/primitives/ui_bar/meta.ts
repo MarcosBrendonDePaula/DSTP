@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Barra de progresso.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { value: '1', max: '1' } },
 }

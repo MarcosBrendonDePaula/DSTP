@@ -11,6 +11,8 @@ export const meta: NodeMeta = {
   aiDescription: 'Find a player by (partial) name, case-insensitive. Strips command prefixes like "#tp ". Returns the player data or { error }.',
   aiParamDescriptions: { name: 'Full or partial player name to search for.' },
   kind: 'data',
+
+  subgroup: 'Jogador',
   defaults: { params: { name: '' } },
   outputSchema: {
     description: 'Matched player data (same shape as get_player), or { error } if not found',

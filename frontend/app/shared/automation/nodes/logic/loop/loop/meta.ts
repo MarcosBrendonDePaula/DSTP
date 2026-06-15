@@ -13,6 +13,8 @@ export const meta: NodeMeta = {
     mode: 'while (loop while the condition is true) | until (loop until the condition becomes true)',
   },
   kind: 'logic',
+
+  subgroup: 'Repetição',
   defaults: { params: { mode: 'while' }, field: '', operator: '', value: '' },
   outputSchema: {
     description: 'Loop summary (available after the "done" handle)',

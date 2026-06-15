@@ -21,6 +21,10 @@ export interface NodeMeta {
   accent?: string
   /** Palette grouping, e.g. 'Acoes', 'Logica', 'Gatilhos'. */
   category: string
+  /** Sub-grouping WITHIN a kind, for the filterable catalog (e.g. 'Jogador',
+   *  'Inventário', 'Ramificação'). Lets the catalog show family → subgroup → cards
+   *  without a central map — each node declares where it belongs. */
+  subgroup?: string
   /** One-line description for the palette (human, in the editor). */
   description: string
   /** Description the AI agent shows the model when this node is wired as a tool.
@@ -31,6 +35,10 @@ export interface NodeMeta {
    *  Used to enrich the generated tool input schema instead of "Parameter X". */
   aiParamDescriptions?: Record<string, string>
   kind: NodeKind
+  /** Form fields rendered in the node body / detail modal. For dedicated action
+   *  nodes these were moved OUT of the central ACTION_TYPES catalog so each node
+   *  owns its own params (data lives inside the node). key/label/placeholder. */
+  params?: Array<{ key: string; label: string; placeholder?: string }>
   /** Initial node.data when created from the palette (replaces createNode defaults). */
   defaults?: Record<string, any>
   /** Output shape for {{node.field}} autocomplete (replaces nodeOutputSchemas). */

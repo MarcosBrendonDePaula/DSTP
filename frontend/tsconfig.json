@@ -46,6 +46,7 @@
     "**/*.test.ts",
     "**/__tests__/**/*",
     "run-env-tests.ts",
-    "plugins/**/scripts/**/*"
+    "plugins/**/scripts/**/*",
+    "scripts/**/*"
   ]
 }

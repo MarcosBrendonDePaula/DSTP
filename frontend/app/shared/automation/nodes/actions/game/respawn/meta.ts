@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Ressuscita um jogador (do estado fantasma).',
   aiDescription: 'Dedicated node for the respawn game action. params: userid.',
   kind: 'action',
+
+  subgroup: 'Jogador',
   defaults: { action_type: 'respawn', params: {"userid":"{{trigger.userid}}"} },
   outputSchema: {
     description: 'respawn result',

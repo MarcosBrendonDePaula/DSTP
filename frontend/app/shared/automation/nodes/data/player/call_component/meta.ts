@@ -16,6 +16,8 @@ export const meta: NodeMeta = {
     args: 'JSON array of arguments. Use "{{self}}" for the player entity where the method wants `inst`.',
   },
   kind: 'data',
+
+  subgroup: 'Jogador',
   defaults: { params: { userid: '{{trigger.userid}}', component: 'locomotor', method: '', args: '[]' } },
   outputSchema: {
     description: 'Component call queued',

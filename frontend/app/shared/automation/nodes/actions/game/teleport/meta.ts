@@ -15,7 +15,8 @@ export const meta: NodeMeta = {
     z: 'World Z coordinate (e.g. {{trigger.world_z}}).',
   },
   kind: 'action',
-  // action_type is FIXED — the generic action handler reads it; the dedicated ui
+
+  subgroup: 'Jogador',  // action_type is FIXED — the generic action handler reads it; the dedicated ui
   // renders the params without a type dropdown.
   defaults: { action_type: 'teleport', params: { userid: '{{trigger.userid}}', x: '', z: '' } },
   outputSchema: {

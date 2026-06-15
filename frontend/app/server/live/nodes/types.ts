@@ -43,6 +43,10 @@ export interface NodeRunContext {
   setContext: (value: any) => void
   /** Find a player in this server's shard group. */
   findPlayerInServer: (predicate: (p: any) => boolean) => any | null
+  /** This server's shard group (server info + all_players + shards), or null if
+   *  the server isn't currently known. Source for the read-only data nodes
+   *  (get_server_info, list_all_players, get_player_inventory/buffs). */
+  getServerGroup: () => { server_id: string; name: string; shards: any[]; all_players: any[]; online: boolean } | null
   /** Evaluate this node's condition config. */
   evaluateCondition: () => boolean
 

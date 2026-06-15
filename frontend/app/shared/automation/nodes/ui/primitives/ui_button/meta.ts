@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Botao com callback.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { text: 'Comprar', callback: 'click' } },
 }
