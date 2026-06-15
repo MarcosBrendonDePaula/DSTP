@@ -57,6 +57,10 @@ interface BaseNodeProps {
   children?: React.ReactNode
   hasInput?: boolean
   hasOutput?: boolean
+  /** Named INPUT handles stacked on the left edge (e.g. Wait/Merge: Entrada 1..N).
+   *  When set, replaces the single input handle. The engine still counts arriving
+   *  edges, so these are primarily a clearer affordance for "this joins paths". */
+  inputLabels?: { id: string; label: string }[]
   outputLabels?: { id: string; label: string }[]
   executionStatus?: 'running' | 'completed' | 'error' | null
   executionOutput?: any
@@ -96,7 +100,7 @@ function outputPreviewEntries(output: any): Array<[string, string]> {
   return entries
 }
 
-export function BaseNode({ type, icon, label, subtitle, description: descriptionProp, selected, children, hasInput = true, hasOutput = true, outputLabels, executionStatus, executionOutput, executionError, hasCaptureData, alias, onAliasChange }: BaseNodeProps) {
+export function BaseNode({ type, icon, label, subtitle, description: descriptionProp, selected, children, hasInput = true, hasOutput = true, inputLabels, outputLabels, executionStatus, executionOutput, executionError, hasCaptureData, alias, onAliasChange }: BaseNodeProps) {
   // Explicit prop wins; else fall back to the meta.description the registry injects.
   const ctxDescription = useContext(NodeDescriptionContext)
   const description = descriptionProp ?? ctxDescription
@@ -155,9 +159,26 @@ export function BaseNode({ type, icon, label, subtitle, description: description
       {/* Top accent line — the only place the type colour fills horizontally */}
       <div className="h-[3px] w-full rounded-t-xl" style={{ background: `linear-gradient(90deg, ${colors.accent}, ${colors.accent}33)` }} />
 
-      {/* Input handle — left side (data flows left → right) */}
-      {hasInput && (
+      {/* Input handle(s) — left side (data flows left → right). Named inputs
+          (Wait/Merge) stack vertically, each with a small label inside the card. */}
+      {hasInput && !inputLabels && (
         <Handle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': colors.accent } as React.CSSProperties} />
+      )}
+      {hasInput && inputLabels && (
+        <div className="flex flex-col items-start gap-1 px-3 pt-2.5 pb-1">
+          {inputLabels.map((inp) => (
+            <div key={inp.id} className="relative flex items-center gap-1.5 pl-1">
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={inp.id}
+                className="dstp-handle !relative !transform-none !top-0 !left-0"
+                style={{ '--h': colors.accent } as React.CSSProperties}
+              />
+              <span className="text-[9px] font-medium" style={{ color: `${colors.accent}cc` }}>{inp.label}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Header: colour icon-chip + title. The alias floats top-right and only

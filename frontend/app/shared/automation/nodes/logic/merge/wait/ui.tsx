@@ -9,15 +9,30 @@ export const ui = function WaitNode({ id, data, selected }: any) {
     updateNodeData(id, { ...data, [key]: value })
   }, [id, data, updateNodeData])
 
+  // N input handles (Entrada 1..N) so it visually joins several paths, n8n-style.
+  // The engine counts ARRIVING EDGES, so this is an affordance — connect any branch
+  // to any input. Default 2; configurable 2..5.
+  const inputCount = Math.min(5, Math.max(2, Number(data.inputs) || 2))
+  const inputLabels = Array.from({ length: inputCount }, (_, i) => ({ id: `in${i + 1}`, label: `Entrada ${i + 1}` }))
+
   return (
     <BaseNode type="wait" icon="🔀" label="Wait / Merge" selected={selected}
       executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError}
       hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}
+      inputLabels={inputLabels}
       outputLabels={data.timeoutAction === 'timeout_branch' ? [
         { id: 'continue', label: '✅ OK' },
         { id: 'timeout', label: '⏰ Timeout' },
       ] : undefined}
     >
+      <NodeField label="Número de entradas">
+        <NodeSelect value={String(inputCount)} onChange={v => update('inputs', v)} options={[
+          { value: '2', label: '2 entradas' },
+          { value: '3', label: '3 entradas' },
+          { value: '4', label: '4 entradas' },
+          { value: '5', label: '5 entradas' },
+        ]} />
+      </NodeField>
       <NodeField label="Modo">
         <NodeSelect value={data.mode || 'all'} onChange={v => update('mode', v)} options={[
           { value: 'all', label: 'Esperar todos' },

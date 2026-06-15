@@ -12,6 +12,7 @@ import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
 import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 import { nodeIcon } from '../nodes/nodeIcons'
+import { triggerShape } from '../nodes/eventSchemas'
 import { LuChevronDown, LuCheck, LuChevronRight, LuX, LuArrowRight, LuPanelLeftClose, LuPanelRightClose, LuPanelLeftOpen, LuPanelRightOpen } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 
@@ -149,10 +150,6 @@ function schemaExample(type: string | undefined): Record<string, any> | null {
   return ex
 }
 
-// Generic shape a trigger emits (no per-event schema exists); enough to reference
-// {{trigger.userid}} etc. before a capture has run.
-const TRIGGER_EXAMPLE = { userid: '<userid>', name: '<name>', _event_type: '<evento>' }
-
 // Best-effort: pull the top-level keys from a script node's `return { ... }` so
 // its output fields are discoverable WITHOUT running. The script return is
 // arbitrary JS, so this is a heuristic — it reads the keys of the LAST top-level
@@ -224,12 +221,21 @@ function getInputData(
       // run). Crucial for `script`: its return shape is unknown until executed —
       // after one test the real fields show, instead of the "<your return>" stub.
       const lastOutput = (upNode.data as any)?._executionOutput
-      if (traceEntry?.output) {
+      if (upNode.type === 'trigger') {
+        // A trigger's runtime output is `context.trigger`. Without a capture we
+        // show the REAL fields of its event (eventSchemas) — not a generic stub.
+        // With ONE upstream trigger it's the canonical `trigger`; with SEVERAL
+        // (e.g. two triggers into a Merge) each extra also gets its own key so
+        // none is lost.
+        const real = traceEntry?.output || (lastOutput && typeof lastOutput === 'object' ? lastOutput : null)
+        const shape = real || triggerShape((upNode.data as any)?.event_type)
+        if (real) anyReal = true
+        if (!input['trigger']) input['trigger'] = shape
+        else if (key !== 'trigger') input[key] = shape   // 2nd+ trigger → its own key
+      } else if (traceEntry?.output) {
         if (key !== 'trigger') { input[key] = traceEntry.output; anyReal = true }
       } else if (lastOutput && typeof lastOutput === 'object') {
         if (key !== 'trigger') { input[key] = lastOutput; anyReal = true }
-      } else if (upNode.type === 'trigger') {
-        if (!input['trigger']) input['trigger'] = TRIGGER_EXAMPLE
       } else if (upNode.type === 'script') {
         // Static parse of the script's `return { ... }`, else the generic stub.
         const shape = scriptReturnShape((upNode.data as any)?.params?.code) || schemaExample('script')
