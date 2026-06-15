@@ -533,13 +533,6 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             <span className={`w-1.5 h-1.5 rounded-full ${autoSaveStatus === 'saved' ? 'bg-green-400' : 'bg-gray-600'}`} />
             {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvando…'}
           </span>
-          <button
-            onClick={captureData?.active ? onStopCapture : onStartCapture}
-            className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border font-medium transition-colors ${captureData?.active ? 'bg-red-500/15 text-red-300 border-red-500/30 hover:bg-red-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25 hover:bg-amber-500/20'}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${captureData?.active ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} />
-            {captureData?.active ? 'Parar captura' : 'Testar'}
-          </button>
           <button onClick={() => setNodeDrawerOpen(true)} className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-white/5 text-gray-200 border border-white/10 hover:bg-white/10 hover:text-white font-medium transition-colors">
             <span className="text-sm leading-none">+</span> Adicionar etapa
           </button>
@@ -600,6 +593,36 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             className="absolute left-1/2 -translate-x-1/2 bottom-8 rounded-lg px-5 py-3 text-sm font-semibold shadow-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
           >
             Adicionar primeiro evento
+          </button>
+        )}
+
+        {/* n8n-style "Test workflow" pill — big, centered at the bottom of the canvas */}
+        {nodes.length > 0 && (
+          <button
+            onClick={captureData?.active ? onStopCapture : onStartCapture}
+            className={`absolute left-1/2 -translate-x-1/2 bottom-6 flex items-center gap-2 rounded-full pl-4 pr-5 py-2.5 text-sm font-semibold shadow-xl transition-all hover:scale-[1.03] active:scale-95 ${
+              captureData?.active
+                ? 'bg-red-500 text-white shadow-red-500/30 hover:bg-red-400'
+                : 'bg-orange-500 text-white shadow-orange-500/30 hover:bg-orange-400'
+            }`}
+            title={captureData?.active ? 'Parar a captura de execução' : 'Capturar a próxima execução do fluxo'}
+          >
+            {captureData?.active ? (
+              <>
+                <span className="grid place-items-center w-5 h-5 rounded-full bg-white/20">
+                  <span className="w-2 h-2 rounded-sm bg-white" />
+                </span>
+                Parar teste
+                <span className="ml-1 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              </>
+            ) : (
+              <>
+                <span className="grid place-items-center w-5 h-5 rounded-full bg-white/20">
+                  <svg viewBox="0 0 24 24" className="w-3 h-3 fill-white"><path d="M8 5v14l11-7z" /></svg>
+                </span>
+                Testar fluxo
+              </>
+            )}
           </button>
         )}
       </main>
