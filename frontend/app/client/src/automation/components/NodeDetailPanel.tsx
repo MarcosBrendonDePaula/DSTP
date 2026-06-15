@@ -690,6 +690,12 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
   const { input: inputData, isSchema: inputIsSchema } = getInputData(node, allNodes, allEdges, trace, context)
   const outputData = getOutputData(node, trace, context)
 
+  // Middle-column tabs. Most nodes only have "config"; ui_builder adds Árvore +
+  // Render (the visual tree editor) as sibling tabs in the SAME middle column.
+  const isUIBuilder = type === 'ui_builder'
+  const [midTab, setMidTab] = useState<'config' | 'tree' | 'render'>('config')
+  useEffect(() => { setMidTab('config') }, [node.id])
+
   // Which upstream source the Input column is showing (n8n's "Input from" select).
   const inputKeys = Object.keys(inputData)
   const [inputSource, setInputSource] = useState<string>('')
@@ -753,19 +759,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
           </button>
         </div>
 
-        {/* UI Builder: visual tree editor (replaces input/output body) */}
-        {type === 'ui_builder' ? (
-          <div className="flex min-h-0 flex-1">
-            <aside className="w-[360px] shrink-0 border-r border-white/10 bg-[#0f0f0f] p-4 overflow-y-auto">
-              <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Configuracao</h3>
-              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
-            </aside>
-            <div className="flex-1 overflow-y-auto p-4 min-h-0">
-              <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} />
-            </div>
-          </div>
-        ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px_1fr] flex-1 overflow-hidden min-h-0 bg-[#0a0a0a]">
+        <div className={`grid grid-cols-1 flex-1 overflow-hidden min-h-0 bg-[#0a0a0a] ${isUIBuilder ? 'lg:grid-cols-[1fr_560px_1fr]' : 'lg:grid-cols-[1fr_380px_1fr]'}`}>
           <section className="border-b lg:border-b-0 lg:border-r border-white/5 overflow-y-auto p-4 min-h-0">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Entrada</h3>
@@ -814,13 +808,30 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) lastFocusedRef.current = t
             }}
           >
+            {/* Middle-column tabs. ui_builder gets Config + Árvore + Render; other
+                nodes show just the config form. */}
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Configuracao</h3>
+              {isUIBuilder ? (
+                <div className="flex gap-1">
+                  {([['config', 'Config'], ['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
+                    <button key={k} onClick={() => setMidTab(k)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${midTab === k ? 'bg-indigo-500/20 text-indigo-300' : 'text-gray-500 hover:text-gray-300'}`}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Configuracao</h3>
+              )}
               <span className="text-[9px] text-gray-600">auto-save</span>
             </div>
-            <div className="space-y-3">
-              <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
-            </div>
+            {isUIBuilder && midTab !== 'config' ? (
+              <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} forceTab={midTab} />
+            ) : (
+              <div className="space-y-3">
+                <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
+              </div>
+            )}
           </section>
 
           <section className="overflow-y-auto p-4 min-h-0">
@@ -856,7 +867,6 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
             )}
           </section>
         </div>
-        )}
       </div>
     </div>
   )

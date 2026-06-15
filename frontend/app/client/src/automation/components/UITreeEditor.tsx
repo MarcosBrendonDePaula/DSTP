@@ -80,9 +80,12 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
   return clone
 }
 
-export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void }) {
+export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render' }) {
   const [selPath, setSelPath] = useState<Step[]>([])
-  const [tab, setTab] = useState<'tree' | 'render'>('tree')
+  const [tabState, setTab] = useState<'tree' | 'render'>('tree')
+  // When the host (detail modal) owns the tab switching, it passes forceTab and we
+  // hide our own tab bar. Otherwise we manage the tab ourselves.
+  const tab = forceTab ?? tabState
   // Drag-and-drop: which palette type is being dragged, and which container row is the
   // current drop target (for the highlight). pathKey = the dropPath serialized.
   const [dragType, setDragType] = useState<string | null>(null)
@@ -284,15 +287,17 @@ export function UITreeEditor({ nodeId, tree, onChange }: { nodeId: string; tree:
 
   return (
     <div className="text-xs" style={{ minHeight: 300 }}>
-      {/* Tabs */}
-      <div className="flex gap-1 mb-2">
-        {([['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-3 py-1 rounded-t text-[11px] border-b-2 ${tab === k ? 'border-indigo-400 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
-            {lbl}
-          </button>
-        ))}
-      </div>
+      {/* Tabs — hidden when the host (modal middle column) owns the switching. */}
+      {!forceTab && (
+        <div className="flex gap-1 mb-2">
+          {([['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className={`px-3 py-1 rounded-t text-[11px] border-b-2 ${tab === k ? 'border-indigo-400 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === 'tree' ? (
         <div className="flex gap-3">
