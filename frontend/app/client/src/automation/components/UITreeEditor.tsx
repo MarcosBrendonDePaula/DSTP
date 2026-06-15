@@ -46,9 +46,9 @@ function defaults(type: string): UINode {
 // any field — including booleans like draggable/closeable — can take a template
 // ({{...}}) instead of a fixed value.
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
-  col: [{ key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
-  row: [{ key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'mode', label: 'Layout: layout (empilha) ou canvas (x,y livre)', ph: 'layout' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
+  col: [{ key: 'mode', label: 'Layout: layout ou canvas', ph: 'layout' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
+  row: [{ key: 'mode', label: 'Layout: layout ou canvas', ph: 'layout' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
   text: [{ key: 'text', label: 'Texto', ph: '{{x}}' }, { key: 'size', label: 'Tamanho fonte', ph: '18' }, { key: 'color', label: 'Cor [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura caixa', ph: 'auto' }, { key: 'height', label: 'Altura caixa', ph: 'auto' }, { key: 'id', label: 'Node ID (p/ atualizar)' }, { key: 'callback', label: 'Callback (clicável)' }],
   text_input: [{ key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }, { key: 'id', label: 'Node ID' }],
@@ -57,6 +57,12 @@ const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
   button: [{ key: 'text', label: 'Texto', ph: 'Comprar' }, { key: 'callback', label: 'Callback', ph: 'buy_log' }, { key: 'width', label: 'Largura', ph: '120' }, { key: 'height', label: 'Altura', ph: '44' }, { key: 'size', label: 'Tamanho fonte', ph: '20' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
   bar: [{ key: 'value', label: 'Valor', ph: '{{p.health_current}}' }, { key: 'max', label: 'Max', ph: '{{p.health_max}}' }, { key: 'width', label: 'Largura', ph: '200' }, { key: 'height', label: 'Altura', ph: '16' }, { key: 'label', label: 'Rótulo (dentro)' }, { key: 'color', label: 'Cor [r,g,b,a]' }, { key: 'id', label: 'Node ID' }],
   spacer: [{ key: 'width', label: 'Largura', ph: '0' }, { key: 'height', label: 'Altura', ph: '8' }],
+}
+
+// Every component can be scaled (SetScale in the mod). Append `scale` to all field
+// lists so it shows in the inspector without editing each array above.
+for (const k of Object.keys(FIELDS)) {
+  FIELDS[k].push({ key: 'scale', label: 'Escala (1 = normal)', ph: '1' })
 }
 
 // ─── path helpers: a path is a list of steps into the tree ──────────────────
@@ -100,6 +106,10 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
   }, [onChange])
 
   const selected = getNode(root, selPath)
+  // Parent of the selected node — when it's a canvas container, the selected child gets
+  // absolute x,y fields in the inspector.
+  const selParent = selPath.length > 0 ? getNode(root, selPath.slice(0, -1)) : null
+  const parentIsCanvas = !!selParent && selParent.mode === 'canvas' && selPath[selPath.length - 1]?.kind === 'child'
 
   const setProp = (key: string, value: string) => {
     save(update(root, r => {
@@ -251,6 +261,15 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
     }))
   }
 
+  // Free-drag in a canvas container: set absolute x,y on the child at childPath.
+  const setChildPos = (childPath: Step[], x: number, y: number) => {
+    save(update(root, r => {
+      const t = getNode(r, childPath)
+      if (!t) return
+      t.x = x; t.y = y
+    }))
+  }
+
   // Shared inspector (used by both tabs).
   const inspector = (
     <div className="w-56 shrink-0 space-y-2">
@@ -262,6 +281,21 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
               <button onClick={() => removeAt(selPath)} className="text-red-400 hover:text-red-300 text-[10px]" title="Remover">✕ remover</button>
             )}
           </div>
+          {parentIsCanvas && (
+            <div className="grid grid-cols-2 gap-1 pb-1 border-b border-white/10">
+              {(['x', 'y'] as const).map(k => (
+                <div key={k}>
+                  <span className="text-[9px] text-emerald-400 block mb-0.5">{k === 'x' ? 'X (px)' : 'Y (px)'}</span>
+                  <input
+                    value={selected[k] ?? ''}
+                    onChange={e => setProp(k, e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-white/5 border border-emerald-400/20 rounded px-2 py-1 text-[10px] text-white focus:border-emerald-400/50 focus:outline-none placeholder:text-gray-600"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           {(FIELDS[selected.type] || []).map(f => (
             <div key={f.key}>
               <span className="text-[9px] text-gray-500 block mb-0.5">{f.label}</span>
@@ -335,7 +369,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
           {/* Interactive render: click to select, drag a widget to reorder within its container. */}
           <div className="flex-1 min-w-[240px]">
             <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Pré-visualização — clique para editar, arraste para reordenar</div>
-            <UIPreview tree={root} sel={selPath} onSelect={setSelPath} onReorder={reorderInParent} />
+            <UIPreview tree={root} sel={selPath} onSelect={setSelPath} onReorder={reorderInParent} onMove={setChildPos} />
           </div>
           {inspector}
         </div>

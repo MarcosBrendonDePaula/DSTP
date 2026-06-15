@@ -32,15 +32,19 @@ const samePath = (a: Step[], b: Step[]) =>
 // Reorder a child within its container by drag. Each rendered child is draggable;
 // dropping it onto a sibling swaps their order. onReorder(parentPath, from, to).
 type Reorder = (parentPath: Step[], from: number, to: number) => void
+// Move a child to an absolute x,y inside a canvas container (free drag). childPath is the
+// dragged child; x,y are game-space px relative to the container top-left corner.
+type Move = (childPath: Step[], x: number, y: number) => void
 
-function NodeView({ node, path, sel, onSelect, onReorder }: {
-  node: UINode; path: Step[]; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder
+function NodeView({ node, path, sel, onSelect, onReorder, onMove }: {
+  node: UINode; path: Step[]; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder; onMove?: Move
 }): React.ReactNode {
   if (!node || !node.type) return null
   const isSel = samePath(path, sel)
   const ring = isSel ? '0 0 0 2px #6366f1' : undefined
   const pick = (e: React.MouseEvent) => { e.stopPropagation(); onSelect(path) }
   const t = node.type
+  const isCanvas = node.mode === 'canvas' && (t === 'panel' || t === 'col' || t === 'row')
 
   // A child wrapped so it can be dragged to reorder within THIS container. The drag
   // payload is the source index; dropping on another child reorders. Only children
@@ -59,11 +63,50 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
           const from = Number(raw)
           if (Number.isFinite(from) && from !== i) onReorder(path, from, i)
         }) : undefined}
-        style={{ cursor: onReorder ? 'grab' : undefined }}
+        style={{
+          cursor: onReorder ? 'grab' : undefined,
+          // Per-component scale (mirrors SetScale in the mod). Origin top-left so it
+          // grows toward the layout flow.
+          transform: c?.scale && Number(c.scale) !== 1 ? `scale(${Number(c.scale)})` : undefined,
+          transformOrigin: 'top left',
+        }}
       >
-        <NodeView node={c} path={[...path, { kind: 'child', i }]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
+        <NodeView node={c} path={[...path, { kind: 'child', i }]} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
       </div>
     ))
+
+  // Canvas children: each absolutely positioned at its own x,y and free-draggable.
+  // Pointer drag in screen px ≈ game px (preview renders 1:1), updates x,y via onMove.
+  const canvasChildViews = (arr: UINode[] | undefined) =>
+    (arr || []).map((c, i) => {
+      const cx = Number(c?.x) || 0
+      const cy = Number(c?.y) || 0
+      const childPath: Step[] = [...path, { kind: 'child', i }]
+      const onDown = (e: React.PointerEvent) => {
+        if (!onMove) return
+        e.stopPropagation(); onSelect(childPath)
+        const startX = e.clientX, startY = e.clientY
+        const el = e.currentTarget as HTMLElement
+        el.setPointerCapture(e.pointerId)
+        const move = (ev: PointerEvent) => {
+          onMove(childPath, Math.round(cx + (ev.clientX - startX)), Math.round(cy + (ev.clientY - startY)))
+        }
+        const up = (ev: PointerEvent) => {
+          el.releasePointerCapture(e.pointerId)
+          el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up)
+        }
+        el.addEventListener('pointermove', move); el.addEventListener('pointerup', up)
+      }
+      return (
+        <div key={i} onPointerDown={onDown} style={{
+          position: 'absolute', left: cx, top: cy, cursor: onMove ? 'move' : undefined,
+          transform: c?.scale && Number(c.scale) !== 1 ? `scale(${Number(c.scale)})` : undefined,
+          transformOrigin: 'top left', touchAction: 'none',
+        }}>
+          <NodeView node={c} path={childPath} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
+        </div>
+      )
+    })
 
   if (t === 'panel') {
     // Fixed size when width/height are set (mirrors the renderer's fixed mode); else
@@ -74,13 +117,14 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
       <div onClick={pick} style={{
         position: 'relative', background: 'rgba(20,20,26,0.95)',
         border: '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
-        padding: '10px 12px', minWidth: 120, boxShadow: ring,
+        padding: isCanvas ? 0 : '10px 12px', minWidth: 120, boxShadow: ring,
         width: pw, height: ph,
-        display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
       }}>
-        {node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{node.title}</div>}
-        {node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{node.body}</div>}
-        {childViews(node.children)}
+        {!isCanvas && node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{node.title}</div>}
+        {!isCanvas && node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{node.body}</div>}
+        {isCanvas ? canvasChildViews(node.children) : childViews(node.children)}
+        {isCanvas && node.title && <div style={{ position: 'absolute', top: 4, left: 8, color: 'rgba(255,255,210,0.9)', fontWeight: 600, fontSize: 13, pointerEvents: 'none' }}>{node.title}</div>}
         {node.closeable !== false && (
           <div style={{ position: 'absolute', top: 4, right: 6, color: '#d88', fontSize: 12 }}>✕</div>
         )}
@@ -92,6 +136,17 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
   }
   if (t === 'col' || t === 'row') {
     const gap = Number(node.gap) || (t === 'col' ? 8 : 12)
+    if (isCanvas) {
+      return (
+        <div onClick={pick} style={{
+          position: 'relative', borderRadius: 4, boxShadow: ring,
+          width: Number(node.width) || 200, height: Number(node.height) || 120,
+          outline: '1px dashed rgba(80,230,150,0.25)',
+        }}>
+          {canvasChildViews(node.children)}
+        </div>
+      )
+    }
     return (
       <div onClick={pick} style={{
         display: 'flex', flexDirection: t === 'col' ? 'column' : 'row',
@@ -119,7 +174,7 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
           ))}
         </div>
         {tabs[active]?.child && (
-          <NodeView node={tabs[active].child} path={[...path, { kind: 'tab', i: active }]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
+          <NodeView node={tabs[active].child} path={[...path, { kind: 'tab', i: active }]} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
         )}
       </div>
     )
@@ -202,15 +257,17 @@ function NodeView({ node, path, sel, onSelect, onReorder }: {
   return <div onClick={pick} style={{ color: '#a55', fontSize: 10, boxShadow: ring }}>?{t}</div>
 }
 
-export function UIPreview({ tree, sel, onSelect, onReorder }: {
-  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder
+export function UIPreview({ tree, sel, onSelect, onReorder, onMove }: {
+  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder; onMove?: Move
 }) {
   const root = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
   return (
     <div className="border border-white/10 rounded-lg bg-black/40 overflow-auto flex items-center justify-center"
       style={{ minHeight: 300, maxHeight: 460, padding: 16,
         backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '12px 12px' }}>
-      <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} onReorder={onReorder} />
+      <div style={{ transform: root.scale && Number(root.scale) !== 1 ? `scale(${Number(root.scale)})` : undefined, transformOrigin: 'center center' }}>
+        <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
+      </div>
     </div>
   )
 }

@@ -241,7 +241,8 @@ local function ResolveItemAtlas(prefab)
     return "images/inventoryimages.xml", tex
 end
 
-local RenderNode  -- forward decl (recursive)
+local RenderNode      -- forward decl (recursive) — public wrapper (applies scale)
+local RenderNodeImpl  -- the per-type renderer
 
 -- Render every child, then stack them along one axis with `gap`. `axis` is
 -- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
@@ -291,6 +292,27 @@ local function LayoutChildren(node, container, ctx, axis)
         end
         return total, cross
     end
+end
+
+-- Canvas mode: place each child at its own absolute x,y (px in game space) relative to
+-- the container's TOP-LEFT corner ("the panel is the form"). The container needs a fixed
+-- width/height (the canvas area). DST widgets sit on a centered origin growing UP, while
+-- the editor x,y grow right/DOWN from the corner — so convert:
+--   px =  x - W/2        (left edge is -W/2)
+--   py =  H/2 - y        (top edge is +H/2; y grows down → subtract)
+-- Returns (W, H) so the parent reserves the canvas slot.
+local function CanvasChildren(node, container, ctx)
+    local W = tonumber(node.width) or 0
+    local H = tonumber(node.height) or 0
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
+        local cwidget = RenderNode(childdef, container, ctx)
+        if cwidget then
+            local x = tonumber(childdef.x) or 0
+            local y = tonumber(childdef.y) or 0
+            cwidget:SetPosition(x - W / 2, H / 2 - y, 0)
+        end
+    end
+    return W, H
 end
 
 -- Register an addressable node: ctx.byId[id] = { widget, patch }. `patch` is a
@@ -430,7 +452,7 @@ local function MakeDraggable(dragArea, target)
     end
 end
 
-RenderNode = function(node, parent, ctx)
+RenderNodeImpl = function(node, parent, ctx)
     if not node or not node.type then return nil, 0, 0 end
     local Widget      = _G.require("widgets/widget")
     local Text        = _G.require("widgets/text")
@@ -440,6 +462,11 @@ RenderNode = function(node, parent, ctx)
 
     if t == "col" or t == "row" then
         local c = parent:AddChild(Widget("col_row"))
+        -- Canvas mode: absolute x,y per child instead of stacking. Needs fixed width/height.
+        if node.mode == "canvas" then
+            local w, h = CanvasChildren(node, c, ctx)
+            return c, w, h
+        end
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
         -- Optional fixed size: when width/height are set, REPORT that size to the parent
         -- layout (overrides the measured content size). Content still lays out by gap; this
@@ -767,12 +794,15 @@ RenderNode = function(node, parent, ctx)
                 body_txt:EnableWordWrap(true)
                 body_txt:SetPosition(0, -10, 0)
             end
-            -- Render any children too (composed nodes), centered as a col.
+            -- Render any children too (composed nodes), centered as a col (or canvas).
             local content = holder:AddChild(Widget("content"))
-            LayoutChildren(node, content, ctx, "y")
+            if node.mode == "canvas" then CanvasChildren(node, content, ctx)
+            else LayoutChildren(node, content, ctx, "y") end
         else
             local content = holder:AddChild(Widget("content"))
-            local cw, ch = LayoutChildren(node, content, ctx, "y")
+            local cw, ch
+            if node.mode == "canvas" then cw, ch = CanvasChildren(node, content, ctx)
+            else cw, ch = LayoutChildren(node, content, ctx, "y") end
             local padX, padY = 28, 28
             pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
             ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2)
@@ -814,6 +844,28 @@ RenderNode = function(node, parent, ctx)
 
     -- Unknown type: empty placeholder
     return parent:AddChild(Widget("unknown")), 0, 0
+end
+
+-- Public wrapper: render the node, then apply per-component `scale` (SetScale).
+-- Some types (button/bar) already SetScale internally to size themselves; this
+-- COMPOSES with the user factor by reading the widget's current scale and
+-- multiplying, never overwriting. Reported (w,h) is multiplied so the parent
+-- layout reserves the scaled slot.
+RenderNode = function(node, parent, ctx)
+    local widget, w, h = RenderNodeImpl(node, parent, ctx)
+    local s = node and tonumber(node.scale)
+    if widget and s and s ~= 1 and widget.SetScale then
+        -- Compose with any existing self-scale instead of overwriting it.
+        local cx, cy = 1, 1
+        if widget.GetScale then
+            local cur = widget:GetScale()
+            if cur then cx, cy = cur.x or 1, cur.y or 1 end
+        end
+        widget:SetScale(cx * s, cy * s)
+        w = (w or 0) * s
+        h = (h or 0) * s
+    end
+    return widget, w, h
 end
 
 --- Create a UI from a tree definition. cmd = { id, group, tree, anchor, x, y }
