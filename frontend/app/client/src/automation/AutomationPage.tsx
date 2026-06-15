@@ -4,6 +4,7 @@ import { Live } from '@/core/client'
 import { LiveAutomation } from '@server/live/LiveAutomation'
 import { LiveDSTP } from '@server/live/LiveDSTP'
 import { FlowEditor } from './FlowEditor'
+import { migrateLegacyActionNodes } from './nodes/migrateLegacyNodes'
 import type { Node, Edge } from '@xyflow/react'
 import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
@@ -104,7 +105,7 @@ export function AutomationPage() {
   const editFlow = (flow: any) => {
     setEditingFlow(flow.id)
     setFlowName(flow.name)
-    setEditorNodes(flow.nodes || [])
+    setEditorNodes(migrateLegacyActionNodes(flow.nodes || []))
     setEditorEdges(flow.edges || [])
     setOriginalCreatedAt(flow.created_at || null)
     setFlowEnabled(flow.enabled ?? true)
@@ -119,7 +120,7 @@ export function AutomationPage() {
     const flow = flows.find((f: any) => f.id === editingFlow)
     if (flow) {
       setFlowName(flow.name)
-      setEditorNodes(flow.nodes || [])
+      setEditorNodes(migrateLegacyActionNodes(flow.nodes || []))
       setEditorEdges(flow.edges || [])
       setOriginalCreatedAt(flow.created_at || null)
       setFlowEnabled(flow.enabled ?? true)
