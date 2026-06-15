@@ -20,6 +20,7 @@ import { nodeTypes, TRIGGER_EVENTS } from './nodes'
 import { registryDefaults, registryCatalog, registryMetaByType } from './nodes/registry'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 import { nodeIcon } from './nodes/nodeIcons'
+import { autoLayout } from './autoLayout'
 import { LuZap, LuGitFork, LuDatabase, LuTarget, LuBot, LuPalette, LuShapes } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 
@@ -460,7 +461,12 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data } : n))
   }, [setNodes])
 
-  const handleSave = () => onSave(nodes, edges, true)
+  // "Organizar": auto-arrange nodes into left-to-right hierarchical lanes, then
+  // fit the view so the whole tidied flow is visible.
+  const tidyUp = useCallback(() => {
+    setNodes(nds => autoLayout(nds, edges))
+    requestAnimationFrame(() => reactFlowRef.current?.fitView({ padding: 0.2, duration: 300 }))
+  }, [edges, setNodes])
 
   // Auto-save: debounce 500ms to let editors (Monaco) commit their changes
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saved'>('idle')
@@ -533,10 +539,17 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             <span className={`w-1.5 h-1.5 rounded-full ${autoSaveStatus === 'saved' ? 'bg-green-400' : 'bg-gray-600'}`} />
             {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvando…'}
           </span>
-          <button onClick={() => setNodeDrawerOpen(true)} className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-white/5 text-gray-200 border border-white/10 hover:bg-white/10 hover:text-white font-medium transition-colors">
-            <span className="text-sm leading-none">+</span> Adicionar etapa
+          {/* Auto-arrange. Adding steps is done via the floating + / drop-to-create;
+              saving is automatic — so those two buttons were dropped from the bar. */}
+          <button
+            onClick={tidyUp}
+            disabled={nodes.length === 0}
+            title="Organizar os nós automaticamente"
+            className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-white/5 text-gray-200 border border-white/10 hover:bg-white/10 hover:text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="6" rx="1"/><rect x="14" y="4" width="7" height="6" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/></svg>
+            Organizar
           </button>
-          <button onClick={handleSave} className="text-xs px-4 py-2 rounded-lg bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/20 hover:bg-blue-400 transition-colors">Salvar</button>
         </div>
       </header>
 

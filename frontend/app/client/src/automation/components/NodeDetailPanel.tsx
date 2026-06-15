@@ -8,7 +8,7 @@ import {
   type NodeOutputSchema,
 } from '../nodeOutputSchemas'
 import { ACTION_TYPES } from '../nodes/actions/actionTypes'
-import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
+import { registryMetaByType, registryNodeTypes, registryOutputSchemas } from '../nodes/registry'
 import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 import { nodeIcon } from '../nodes/nodeIcons'
@@ -688,7 +688,9 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
     schema = eventType ? triggerOutputSchemas[eventType] || null : null
     contextKey = alias || 'trigger'
   } else {
-    schema = nodeOutputSchemas[type] || null
+    // Prefer the registry's schema (covers EVERY migrated node, incl. new ones
+    // like list_all_players); fall back to the legacy map for anything missing.
+    schema = registryOutputSchemas[type] || nodeOutputSchemas[type] || null
   }
 
   // Get trace data

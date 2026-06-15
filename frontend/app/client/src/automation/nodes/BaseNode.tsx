@@ -198,8 +198,11 @@ export function BaseNode({ type, icon, label, subtitle, description: description
           <input
             value={alias || ''}
             onChange={e => onAliasChange(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+            onMouseDown={e => e.stopPropagation()}
             placeholder="alias"
-            className={`absolute top-2 right-2.5 w-16 bg-black/40 rounded border border-white/10 text-[9px] text-gray-300 focus:border-white/30 focus:outline-none focus:text-white px-1 py-0.5 text-right placeholder:text-gray-600 transition-opacity ${alias ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+            // `nodrag` tells React Flow to NOT drag the node when interacting here,
+            // so you can click/select text in the alias field normally.
+            className={`nodrag absolute top-2 right-2.5 w-16 bg-black/40 rounded border border-white/10 text-[9px] text-gray-300 focus:border-white/30 focus:outline-none focus:text-white px-1 py-0.5 text-right placeholder:text-gray-600 transition-opacity ${alias ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
             title="Apelido para referenciar: {{alias.campo}}"
           />
         )}
