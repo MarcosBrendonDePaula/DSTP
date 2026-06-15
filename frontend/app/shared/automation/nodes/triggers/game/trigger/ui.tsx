@@ -183,13 +183,19 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
 
   return (
     <BaseNode type="trigger" icon="⚡" label={nodeLabel} selected={selected} hasInput={false} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
-      <NodeField label="Quando acontecer">
-        <NodeSelect
-          value={data.event_type || ''}
-          onChange={onChange}
-          options={TRIGGER_EVENTS}
-        />
-      </NodeField>
+      {/* The event is fixed when the trigger is added from the catalog — show it
+          as read-only text. The dropdown only appears for a bare trigger with no
+          event yet (legacy / hand-created). */}
+      {data.event_type ? (
+        <div className="rounded-md bg-white/[0.04] border border-white/[0.06] px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wider text-gray-500">Quando acontecer</div>
+          <div className="text-[11px] text-white font-medium mt-0.5">{selectedEvent?.label || data.event_type}</div>
+        </div>
+      ) : (
+        <NodeField label="Quando acontecer">
+          <NodeSelect value={data.event_type || ''} onChange={onChange} options={TRIGGER_EVENTS} />
+        </NodeField>
+      )}
       {data.event_type === 'key_pressed' && (
         <NodeField label="Tecla">
           <NodeSelect
