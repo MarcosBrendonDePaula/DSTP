@@ -27,6 +27,16 @@ export function AutomationPage() {
   const [flowEnabled, setFlowEnabled] = useState(true)
   const [flowFolder, setFlowFolder] = useState('')
   const [showEnvironments, setShowEnvironments] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  // The flow editor (React Flow drag/connect) is desktop-only — track a small
+  // viewport so we can show a friendly notice instead of a broken canvas.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const on = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const [flowSearch, setFlowSearch] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
   const [folderWarning, setFolderWarning] = useState<{ path: string; count: number } | null>(null)
@@ -440,6 +450,27 @@ export function AutomationPage() {
       }
     }
 
+    // The visual flow editor needs drag-to-connect on a large canvas — not usable
+    // on a phone. Show a clear notice instead of a broken, unusable editor.
+    if (isMobile) {
+      return (
+        <div className="h-screen flex items-center justify-center bg-[#0a0a0a] p-6">
+          <div className="max-w-sm text-center">
+            <div className="text-4xl mb-4">🖥️</div>
+            <h2 className="text-lg font-bold text-white mb-2">Editor disponível só no desktop</h2>
+            <p className="text-sm text-gray-400 leading-relaxed">
+              O editor visual de fluxos usa arrastar-e-conectar num canvas grande, que não
+              funciona bem em telas pequenas. Abra esta página num computador para editar.
+            </p>
+            <button
+              onClick={() => setEditingFlow(null)}
+              className="mt-5 text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
+            >← Voltar à lista</button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="h-screen bg-[#0a0a0a]">
         <FlowEditor
@@ -469,31 +500,17 @@ export function AutomationPage() {
   // List mode
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-4">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/5">
-        <Link to={`/?server=${urlServer}`} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">← Painel</Link>
-        <div className="h-4 w-px bg-white/10" />
-        <h1 className="text-lg font-bold text-white">⚡ Automações</h1>
-        <span className="text-[10px] text-gray-600">{urlServer}</span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full ${auto.$connected ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+      {/* Header — responsive: wraps on small screens, secondary actions collapse
+          into a "⋯" menu on mobile so it never overflows. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 pb-3 border-b border-white/5">
+        <Link to={`/?server=${urlServer}`} className="text-xs text-gray-500 hover:text-gray-300 transition-colors shrink-0">← Painel</Link>
+        <div className="h-4 w-px bg-white/10 hidden sm:block" />
+        <h1 className="text-base sm:text-lg font-bold text-white shrink-0">⚡ Automações</h1>
+        <span className="text-[10px] text-gray-600 hidden sm:inline">{urlServer}</span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${auto.$connected ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
           {auto.$connected ? '● Connected' : '○ Offline'}
         </span>
-        <div className="flex-1" />
-        <button
-          onClick={() => auto.loadFlows({ server_id: urlServer })}
-          className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition-colors"
-          title="Recarregar"
-        >↻</button>
-        <button
-          onClick={exportAllFlows}
-          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
-          title="Exporta todos os fluxos deste servidor em um arquivo"
-        >↓ Exportar tudo</button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
-          title="Importar fluxo único ou bundle com vários"
-        >↑ Importar</button>
+        <div className="flex-1 min-w-0" />
         <input
           ref={fileInputRef}
           type="file"
@@ -505,15 +522,43 @@ export function AutomationPage() {
             e.target.value = ''
           }}
         />
-        <button
-          onClick={() => setShowEnvironments(true)}
-          className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors"
-          title="Variáveis de ambiente criptografadas (API keys, tokens)"
-        >🔑 Environments</button>
+
+        {/* Primary action — always visible */}
         <button
           onClick={() => createNewFlow()}
-          className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors"
+          className="text-xs px-3 sm:px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors shrink-0"
         >+ Novo Fluxo</button>
+
+        {/* Secondary actions — inline on >=md, collapsed into a menu on mobile */}
+        <div className="hidden md:flex items-center gap-3">
+          <button onClick={() => auto.loadFlows({ server_id: urlServer })} className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition-colors" title="Recarregar">↻</button>
+          <button onClick={exportAllFlows} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Exporta todos os fluxos">↓ Exportar tudo</button>
+          <button onClick={() => fileInputRef.current?.click()} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Importar fluxo">↑ Importar</button>
+          <button onClick={() => setShowEnvironments(true)} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Variáveis de ambiente criptografadas">🔑 Environments</button>
+        </div>
+
+        {/* Mobile overflow menu */}
+        <div className="relative md:hidden shrink-0">
+          <button onClick={() => setShowMobileMenu(v => !v)} className="text-base px-2.5 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors" title="Mais ações" aria-label="Mais ações">⋯</button>
+          {showMobileMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMobileMenu(false)} />
+              {/* Anchor to the viewport's right edge (not the button) so it never
+                  spills off-screen on narrow phones. */}
+              <div className="fixed right-2 mt-1 z-50 w-48 py-1 bg-[#16181d] border border-white/10 rounded-lg shadow-2xl">
+                {[
+                  { label: '↻ Recarregar', fn: () => auto.loadFlows({ server_id: urlServer }) },
+                  { label: '↓ Exportar tudo', fn: exportAllFlows },
+                  { label: '↑ Importar', fn: () => fileInputRef.current?.click() },
+                  { label: '🔑 Environments', fn: () => setShowEnvironments(true) },
+                ].map(item => (
+                  <button key={item.label} onClick={() => { item.fn(); setShowMobileMenu(false) }} className="w-full text-left text-xs px-3 py-2 text-gray-300 hover:bg-white/[0.06] transition-colors">{item.label}</button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         {urlServer && <AccountMenu serverId={urlServer} />}
       </div>
       {showEnvironments && urlServer && (

@@ -501,6 +501,15 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             </>
           )}
           <span className="text-gray-300 text-xs">DSTP</span>
+          {/* Folder is shown ONLY when this flow already belongs to one (read-only
+              breadcrumb crumb). Organizing into folders is done from the flow list,
+              not here — so there's no "+ pasta" cluttering the editor bar. */}
+          {(folderPath ?? '') !== '' && (
+            <>
+              <span className="text-gray-500">/</span>
+              <span className="text-xs text-gray-400">📁 {folderPath}</span>
+            </>
+          )}
           <span className="text-gray-500">/</span>
           <input
             className="bg-transparent text-sm font-semibold text-white w-[260px] focus:outline-none border-b border-transparent focus:border-white/20"
@@ -508,37 +517,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             value={flowName}
             onChange={e => onNameChange(e.target.value)}
           />
-          {onFolderChange && (
-            <>
-              <span className="text-gray-500">/</span>
-              <span className="text-xs">📁</span>
-              <input
-                list="dstp-folder-list"
-                className="bg-transparent text-xs text-gray-300 w-[160px] focus:outline-none border-b border-transparent focus:border-white/20 placeholder:text-gray-600"
-                placeholder="pasta (ex: Loja/Eventos)"
-                value={folderPath ?? ''}
-                onChange={e => onFolderChange(e.target.value)}
-              />
-              <datalist id="dstp-folder-list">
-                {folderSuggestions.map(f => <option key={f} value={f} />)}
-              </datalist>
-            </>
-          )}
-          <span className="text-[11px] text-gray-500">automação do servidor</span>
         </div>
 
         <div className="flex-1" />
         <div className="flex items-center gap-3">
-          <span className="hidden sm:flex items-center gap-2 text-[11px] text-gray-500 mr-1">
-            <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-600" />{nodes.length} nodes</span>
-            <span className="text-gray-700">·</span>
-            <span>{edges.length} conexões</span>
-          </span>
-          {/* Auto-save status pill */}
-          <span className={`flex items-center gap-1.5 text-[11px] transition-colors ${autoSaveStatus === 'saved' ? 'text-green-400' : 'text-gray-500'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${autoSaveStatus === 'saved' ? 'bg-green-400' : 'bg-gray-600'}`} />
-            {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvando…'}
-          </span>
           {/* Auto-arrange. Adding steps is done via the floating + / drop-to-create;
               saving is automatic — so those two buttons were dropped from the bar. */}
           <button
@@ -640,10 +622,21 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         )}
       </main>
 
-      {/* Bottom logs bar */}
-      <footer className="absolute left-0 right-0 bottom-0 z-20 h-9 bg-[#0a0a0a] border-t border-white/5 flex items-center px-4">
-        <button className="text-xs font-semibold text-white">Eventos e logs</button>
-        <span className="ml-3 text-[10px] text-gray-500">{edges.length} conexoes · {nodes.length} nodes</span>
+      {/* Bottom status bar — flow stats + auto-save status (moved here from the
+          top bar to keep the header clean). */}
+      <footer className="absolute left-0 right-0 bottom-0 z-20 h-9 bg-[#0a0a0a] border-t border-white/5 flex items-center gap-3 px-4 text-[11px] text-gray-500">
+        <button className="font-semibold text-gray-300 hover:text-white transition-colors">Eventos e logs</button>
+        <span className="text-gray-700">·</span>
+        <span className="hidden sm:inline">automação do servidor</span>
+        <div className="flex-1" />
+        <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-600" />{nodes.length} nodes</span>
+        <span className="text-gray-700">·</span>
+        <span>{edges.length} conexões</span>
+        <span className="text-gray-700">·</span>
+        <span className={`inline-flex items-center gap-1.5 transition-colors ${autoSaveStatus === 'saved' ? 'text-green-400' : 'text-gray-500'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${autoSaveStatus === 'saved' ? 'bg-green-400' : 'bg-gray-600'}`} />
+          {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvando…'}
+        </span>
       </footer>
 
       {/* Node drawer */}
