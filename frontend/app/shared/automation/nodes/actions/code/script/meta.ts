@@ -11,7 +11,8 @@ export const meta: NodeMeta = {
   aiDescription: 'Run a custom JavaScript run(context) function (admin-only). Its return value becomes the node output.',
   aiParamDescriptions: { code: 'JS source defining `async function run(context) { ... }`.' },
   kind: 'action',
-  defaults: {
+
+  subgroup: 'Código',  defaults: {
     action_type: 'script',
     params: { code: 'async function run(context) {\n  // context.trigger tem os dados do evento\n  // Retorne um objeto com os resultados\n  return {\n    result: "ok"\n  }\n}' },
   },

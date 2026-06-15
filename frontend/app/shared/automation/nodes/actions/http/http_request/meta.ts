@@ -16,7 +16,8 @@ export const meta: NodeMeta = {
     body: 'Optional request body (string or JSON) for non-GET methods.',
   },
   kind: 'action',
-  defaults: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
+
+  subgroup: 'Externo',  defaults: { action_type: 'http_request', params: { url: '', method: 'GET', headers: '', body: '' } },
   outputSchema: {
     description: 'HTTP response',
     fields: [

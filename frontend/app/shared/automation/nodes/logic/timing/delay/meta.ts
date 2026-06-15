@@ -11,6 +11,8 @@ export const meta: NodeMeta = {
   aiDescription: 'Pause the flow for a number of milliseconds before continuing.',
   aiParamDescriptions: { delay_ms: 'How long to wait, in milliseconds (max 1h).' },
   kind: 'logic',
+
+  subgroup: 'Temporização',
   defaults: { params: { delay_ms: '1000' } },
   outputSchema: {
     description: 'Delay completed',

@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Executa o branch "try"; se algum node falhar, segue o branch "catch" com o erro, em vez de quebrar o fluxo.',
   aiDescription: 'Run the "try" branch; if any node in it throws, catch the error and follow the "catch" branch instead of aborting the whole flow. The error message is exposed as {{<node>.error}}. Use to make HTTP/script/component calls recoverable.',
   kind: 'logic',
+
+  subgroup: 'Ramificação',
   defaults: { params: {} },
   outputSchema: {
     description: 'Try/catch result',

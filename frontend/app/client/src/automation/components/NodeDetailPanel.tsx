@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import { ReactFlowProvider } from '@xyflow/react'
 import {
@@ -11,6 +11,9 @@ import { ACTION_TYPES } from '../nodes/actions/actionTypes'
 import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
 import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
+import { nodeIcon } from '../nodes/nodeIcons'
+import { LuChevronDown, LuCheck, LuChevronRight, LuX, LuArrowRight } from 'react-icons/lu'
+import type { IconType } from 'react-icons'
 
 // ─── JSON Viewer ──────────────────────────────────────
 
@@ -57,9 +60,9 @@ function CollapsibleJson({ label, children, depth }: { label: string; children: 
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="text-gray-500 hover:text-gray-300 transition-colors text-[10px]"
+        className="inline-flex items-center gap-1 text-gray-500 hover:text-gray-300 transition-colors text-[10px]"
       >
-        {open ? '▾' : '▸'} {label}
+        <LuChevronRight size={10} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} /> {label}
       </button>
       {open && <div className="border-l border-white/5 ml-1">{children}</div>}
     </div>
@@ -130,44 +133,118 @@ function getUpstreamNodeIds(nodeId: string, allNodes: Node[], allEdges: Array<{ 
   return upstream
 }
 
+// Build a placeholder example object from a node's outputSchema, so the Input
+// column can show the SHAPE of upstream data even when no capture has run yet.
+// Each field becomes a typed placeholder (e.g. health → "object", userid → "string").
+function schemaExample(type: string | undefined): Record<string, any> | null {
+  const schema = type ? registryMetaByType[type]?.outputSchema : undefined
+  if (!schema?.fields?.length) return null
+  const ex: Record<string, any> = {}
+  for (const f of schema.fields) {
+    ex[f.name] = f.type === 'number' ? 0
+      : f.type === 'boolean' ? false
+      : f.type === 'object' ? { '…': `(${f.description || 'objeto'})` }
+      : `<${f.name}>`
+  }
+  return ex
+}
+
+// Generic shape a trigger emits (no per-event schema exists); enough to reference
+// {{trigger.userid}} etc. before a capture has run.
+const TRIGGER_EXAMPLE = { userid: '<userid>', name: '<name>', _event_type: '<evento>' }
+
+// Best-effort: pull the top-level keys from a script node's `return { ... }` so
+// its output fields are discoverable WITHOUT running. The script return is
+// arbitrary JS, so this is a heuristic — it reads the keys of the LAST top-level
+// object literal returned. Returns null if it can't tell (then we fall back to
+// the generic "<your return>" stub).
+function scriptReturnShape(code: string | undefined): Record<string, any> | null {
+  if (!code || typeof code !== 'string') return null
+  // Find a `return {` and capture to the matching brace (shallow — good enough).
+  const m = code.match(/return\s*\{/g)
+  if (!m) return null
+  const idx = code.lastIndexOf('return')
+  const braceStart = code.indexOf('{', idx)
+  if (braceStart < 0) return null
+  let depth = 0, end = -1
+  for (let i = braceStart; i < code.length; i++) {
+    if (code[i] === '{') depth++
+    else if (code[i] === '}') { depth--; if (depth === 0) { end = i; break } }
+  }
+  if (end < 0) return null
+  const body = code.slice(braceStart + 1, end)
+  // Grab top-level `key:` at depth 0 inside the object.
+  const keys: string[] = []
+  let d = 0
+  for (const part of body.split('\n')) {
+    const km = part.match(/^\s*['"]?([a-zA-Z_$][\w$]*)['"]?\s*:/)
+    // Only count keys when not nested inside a sub-object/array on a prior line.
+    if (d === 0 && km) keys.push(km[1])
+    for (const ch of part) { if (ch === '{' || ch === '[') d++; else if (ch === '}' || ch === ']') d-- }
+  }
+  if (!keys.length) return null
+  const shape: Record<string, any> = {}
+  for (const k of keys) shape[k] = '<valor>'
+  return shape
+}
+
 function getInputData(
   node: Node,
   allNodes: Node[],
   allEdges: Array<{ source: string; target: string }>,
   trace: CaptureTraceEntry[],
   context: Record<string, any> | null
-): Record<string, any> {
+): { input: Record<string, any>; isSchema: boolean } {
   const input: Record<string, any> = {}
   const nodeData = node.data as Record<string, any>
   const triggerMatchesNode = node.type !== 'trigger'
     || !nodeData?.event_type
     || context?.trigger?._event_type === nodeData.event_type
 
-  // Always include trigger data if available
-  if (context?.trigger && triggerMatchesNode) {
-    input['trigger'] = context.trigger
+  let anyReal = false
+
+  // Trigger data: real capture if present, else a generic placeholder shape.
+  if (node.type !== 'trigger') {
+    if (context?.trigger && triggerMatchesNode) {
+      input['trigger'] = context.trigger
+      anyReal = true
+    }
   }
 
-  // For non-trigger nodes, include upstream outputs
+  // For non-trigger nodes, include upstream outputs (real capture OR schema shape).
   if (node.type !== 'trigger') {
     const upstreamIds = getUpstreamNodeIds(node.id, allNodes, allEdges)
     for (const upId of upstreamIds) {
       const upNode = allNodes.find(n => n.id === upId)
       if (!upNode) continue
-      // Find trace entry for this upstream node
+      const alias = (upNode.data as any)?.alias
+      const key = alias || upId
       const traceEntry = [...trace].reverse().find(t => t.nodeId === upId && t.status === 'completed')
+      // Last real output captured for this node (persisted on node.data during a
+      // run). Crucial for `script`: its return shape is unknown until executed —
+      // after one test the real fields show, instead of the "<your return>" stub.
+      const lastOutput = (upNode.data as any)?._executionOutput
       if (traceEntry?.output) {
-        const alias = (upNode.data as any)?.alias
-        const key = alias || upId
-        // Don't duplicate trigger
-        if (key !== 'trigger') {
-          input[key] = traceEntry.output
-        }
+        if (key !== 'trigger') { input[key] = traceEntry.output; anyReal = true }
+      } else if (lastOutput && typeof lastOutput === 'object') {
+        if (key !== 'trigger') { input[key] = lastOutput; anyReal = true }
+      } else if (upNode.type === 'trigger') {
+        if (!input['trigger']) input['trigger'] = TRIGGER_EXAMPLE
+      } else if (upNode.type === 'script') {
+        // Static parse of the script's `return { ... }`, else the generic stub.
+        const shape = scriptReturnShape((upNode.data as any)?.params?.code) || schemaExample('script')
+        if (shape && key !== 'trigger') input[key] = shape
+      } else {
+        const ex = schemaExample(upNode.type)
+        if (ex && key !== 'trigger') input[key] = ex
       }
     }
+    // No upstream trigger reached but this node still references {{trigger}} —
+    // offer the generic trigger shape so the field is discoverable.
+    if (!input['trigger']) input['trigger'] = TRIGGER_EXAMPLE
   }
 
-  return input
+  return { input, isSchema: !anyReal }
 }
 
 function getOutputData(
@@ -610,8 +687,36 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
   // Get trace data
   const trace = captureTrace || []
   const context = captureContext || null
-  const inputData = getInputData(node, allNodes, allEdges, trace, context)
+  const { input: inputData, isSchema: inputIsSchema } = getInputData(node, allNodes, allEdges, trace, context)
   const outputData = getOutputData(node, trace, context)
+
+  // Which upstream source the Input column is showing (n8n's "Input from" select).
+  const inputKeys = Object.keys(inputData)
+  const [inputSource, setInputSource] = useState<string>('')
+  // Default to the first source; reset when the node (and thus its inputs) changes.
+  useEffect(() => { setInputSource(inputKeys[0] ?? '') }, [node.id])
+  const activeSource = inputKeys.includes(inputSource) ? inputSource : inputKeys[0]
+
+  // Clicking a field in the Input column inserts {{ref}} into the last-focused
+  // param input (n8n-style). We track focus on the config column's inputs.
+  const lastFocusedRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const insertExpressionRef = useCallback((ref: string) => {
+    const el = lastFocusedRef.current
+    if (el && document.contains(el)) {
+      const start = el.selectionStart ?? el.value.length
+      const end = el.selectionEnd ?? el.value.length
+      const next = el.value.slice(0, start) + ref + el.value.slice(end)
+      // Set value via the native setter so React's onChange fires.
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+      setter?.call(el, next)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      requestAnimationFrame(() => { el.focus(); const c = start + ref.length; el.setSelectionRange(c, c) })
+    } else {
+      // No focused field — copy to clipboard as a fallback.
+      navigator.clipboard?.writeText(ref).catch(() => {})
+    }
+  }, [])
 
   const hasInput = Object.keys(inputData).length > 0
   const hasOutput = outputData !== null
@@ -641,9 +746,10 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white text-sm px-2 py-1 rounded hover:bg-white/5 transition-colors"
+            className="grid place-items-center text-gray-500 hover:text-white w-7 h-7 rounded hover:bg-white/5 transition-colors"
+            aria-label="Fechar"
           >
-            ✕
+            <LuX size={16} />
           </button>
         </div>
 
@@ -661,19 +767,38 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
         ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px_1fr] flex-1 overflow-hidden min-h-0 bg-[#0a0a0a]">
           <section className="border-b lg:border-b-0 lg:border-r border-white/5 overflow-y-auto p-4 min-h-0">
-            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Entrada</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Entrada</h3>
+              {hasInput && inputIsSchema && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/90 border border-amber-500/20" title="Sem captura — mostrando os campos esperados, não valores reais">
+                  padrão esperado
+                </span>
+              )}
+            </div>
 
             {hasInput ? (
-              <div className="space-y-3">
-                {Object.entries(inputData).map(([key, value]) => (
-                  <div key={key}>
-                    <div className="text-[10px] text-purple-400 font-mono mb-1">{key}:</div>
-                    <div className="font-mono text-[10px] leading-relaxed pl-2 border-l border-white/5">
-                      <JsonValue value={value} depth={0} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <>
+                {/* "Input from" selector — pick which upstream source to inspect. */}
+                {inputKeys.length > 1 && (
+                  <InputSourceSelect
+                    keys={inputKeys}
+                    value={activeSource}
+                    onChange={setInputSource}
+                    allNodes={allNodes}
+                  />
+                )}
+                <p className="text-[9px] text-gray-500 mb-3 leading-relaxed">
+                  {inputIsSchema
+                    ? 'Campos esperados (o teste ainda não rodou).'
+                    : 'Dados capturados.'}{' '}
+                  Clique ou arraste para inserir <code className="text-purple-400">{'{{…}}'}</code>.
+                </p>
+                <div className="space-y-2.5">
+                  {activeSource && (
+                    <InputGroup contextKey={activeSource} value={inputData[activeSource]} onPick={insertExpressionRef} defaultOpen hideHeader={inputKeys.length > 1} />
+                  )}
+                </div>
+              </>
             ) : (
               <p className="text-[10px] text-gray-500 italic">
                 Nenhum dado de entrada disponivel.
@@ -682,7 +807,13 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
             )}
           </section>
 
-          <section className="border-b lg:border-b-0 lg:border-r border-white/10 bg-[#0f0f0f] overflow-y-auto p-4 min-h-0">
+          <section
+            className="border-b lg:border-b-0 lg:border-r border-white/10 bg-[#0f0f0f] overflow-y-auto p-4 min-h-0"
+            onFocusCapture={e => {
+              const t = e.target as HTMLElement
+              if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) lastFocusedRef.current = t
+            }}
+          >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Configuracao</h3>
               <span className="text-[9px] text-gray-600">auto-save</span>
@@ -741,6 +872,140 @@ const typeColors: Record<string, string> = {
   any: 'text-gray-400',
 }
 
+// Resolve a friendly { Icon, label, sublabel } for an input source key. Icon is a
+// vector (Lucide) component — never an ASCII/emoji glyph.
+function describeSource(key: string, allNodes: Node[]): { Icon: IconType; label: string; sub: string } {
+  if (key === 'trigger') return { Icon: nodeIcon('trigger'), label: 'Gatilho', sub: 'trigger' }
+  const upNode = allNodes.find(n => n.id === key || (n.data as any)?.alias === key)
+  const meta = upNode ? registryMetaByType[upNode.type || ''] : undefined
+  return { Icon: nodeIcon(upNode?.type, `${meta?.icon || ''} ${meta?.label || ''}`), label: meta?.label || upNode?.type || key, sub: key }
+}
+
+// A pretty custom dropdown for "Input from: <node>" (replaces the native <select>).
+function InputSourceSelect({ keys, value, onChange, allNodes }: { keys: string[]; value: string; onChange: (k: string) => void; allNodes: Node[] }) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as globalThis.Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+  const cur = describeSource(value, allNodes)
+  return (
+    <div ref={boxRef} className="relative mb-3">
+      <div className="text-[8px] uppercase tracking-wider text-gray-500 mb-1">Ver entrada de</div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 hover:bg-white/[0.07] hover:border-white/20 transition-colors"
+      >
+        <span className="grid place-items-center w-6 h-6 rounded-md bg-white/5 text-gray-300 shrink-0"><cur.Icon size={13} strokeWidth={2.2} /></span>
+        <div className="min-w-0 flex-1 text-left">
+          <div className="text-[11px] font-semibold text-white truncate leading-tight">{cur.label}</div>
+          <div className="text-[8px] font-mono text-gray-500 truncate leading-tight">{cur.sub}</div>
+        </div>
+        <LuChevronDown size={12} className={`text-gray-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 left-0 right-0 mt-1 py-1 bg-[#16181d] border border-white/15 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
+          {keys.map(k => {
+            const d = describeSource(k, allNodes)
+            const active = k === value
+            return (
+              <button
+                key={k}
+                onClick={() => { onChange(k); setOpen(false) }}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors ${active ? 'bg-blue-500/15' : 'hover:bg-white/[0.06]'}`}
+              >
+                <span className="grid place-items-center w-6 h-6 rounded-md bg-white/5 text-gray-300 shrink-0"><d.Icon size={13} strokeWidth={2.2} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-[11px] font-medium truncate leading-tight ${active ? 'text-blue-300' : 'text-gray-200'}`}>{d.label}</div>
+                  <div className="text-[8px] font-mono text-gray-500 truncate leading-tight">{d.sub}</div>
+                </div>
+                {active && <LuCheck size={12} className="text-blue-400 shrink-0" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// A collapsible group of clickable/draggable fields for one upstream source
+// (trigger or a node id/alias). Mirrors n8n's Input panel: each leaf field is a
+// pill that inserts {{contextKey.path}} when clicked or dragged.
+function InputGroup({ contextKey, value, onPick, defaultOpen = true, hideHeader = false }: { contextKey: string; value: any; onPick: (ref: string) => void; defaultOpen?: boolean; hideHeader?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const entries = (value && typeof value === 'object' && !Array.isArray(value)) ? Object.entries(value) : []
+  const count = entries.length
+  // When the source is already shown by the select, drop the redundant header
+  // and render the fields flush.
+  if (hideHeader) {
+    return (
+      <div className="space-y-1">
+        {entries.length === 0 && <div className="text-[9px] text-gray-600 px-1.5 py-1">(sem campos)</div>}
+        {entries.map(([k, v]) => (
+          <InputLeaf key={k} path={k} value={v} contextKey={contextKey} onPick={onPick} />
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-1.5 px-2 py-1.5 hover:bg-white/[0.03] transition-colors">
+        <LuChevronRight size={11} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="text-[11px] font-mono font-semibold text-purple-300 truncate">{contextKey}</span>
+        <span className="ml-auto text-[9px] text-gray-600">{count} {count === 1 ? 'campo' : 'campos'}</span>
+      </button>
+      {open && (
+        <div className="px-1.5 pb-1.5 space-y-1">
+          {entries.length === 0 && <div className="text-[9px] text-gray-600 px-1.5 py-1">(sem campos)</div>}
+          {entries.map(([k, v]) => (
+            <InputLeaf key={k} path={k} value={v} contextKey={contextKey} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// One field row. Nested objects expand into dotted paths (health → health.current).
+function InputLeaf({ path, value, contextKey, onPick, depth = 0 }: { path: string; value: any; contextKey: string; onPick: (ref: string) => void; depth?: number }) {
+  const [open, setOpen] = useState(false)
+  const isObj = value && typeof value === 'object' && !Array.isArray(value)
+  const ref = `{{${contextKey}.${path}}}`
+  const preview = isObj ? `{${Object.keys(value).length}}`
+    : Array.isArray(value) ? `[${value.length}]`
+    : typeof value === 'string' ? value
+    : JSON.stringify(value)
+  return (
+    <div style={{ marginLeft: depth * 10 }}>
+      <div
+        className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-blue-500/10 cursor-pointer transition-colors"
+        draggable
+        onDragStart={e => { e.dataTransfer.setData('application/dstp-expression', ref); e.dataTransfer.setData('text/plain', ref); e.dataTransfer.effectAllowed = 'copy' }}
+        onClick={() => { if (isObj) setOpen(o => !o); else onPick(ref) }}
+        title={isObj ? 'Abrir' : `Inserir ${ref}`}
+      >
+        {isObj
+          ? <LuChevronRight size={10} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+          : <span className="w-2.5 h-2.5 shrink-0 grid place-items-center"><span className="w-1 h-1 rounded-full bg-gray-700" /></span>}
+        <span className="text-[10px] font-mono text-gray-200">{path}</span>
+        <span className="text-[9px] text-gray-500 font-mono truncate flex-1">{preview}</span>
+        {!isObj && <span className="text-[8px] text-blue-400/0 group-hover:text-blue-400/80 font-mono shrink-0">+ inserir</span>}
+      </div>
+      {isObj && open && (
+        <div className="space-y-0.5 mt-0.5">
+          {Object.entries(value).map(([k, v]) => (
+            <InputLeaf key={k} path={`${path}.${k}`} value={v} contextKey={contextKey} onPick={onPick} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SchemaField({ field, contextKey }: { field: OutputField; contextKey: string }) {
   const ref = `{{${contextKey}.${field.name}}}`
   return (
@@ -760,7 +1025,7 @@ function SchemaField({ field, contextKey }: { field: OutputField; contextKey: st
       </div>
       <div className="text-[9px] text-gray-500 mt-0.5">{field.description}</div>
       <div className="text-[9px] text-blue-400/70 font-mono mt-0.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <span>→</span>
+        <LuArrowRight size={9} className="shrink-0" />
         <code className="select-all">{ref}</code>
       </div>
     </div>

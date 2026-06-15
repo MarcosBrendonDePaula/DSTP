@@ -6,7 +6,8 @@
 //
 // During migration this only holds MIGRATED nodes; the legacy index.ts / catalog
 // arrays fill the rest. Once all nodes are migrated, the legacy lists are removed.
-import type { ComponentType } from 'react'
+import { createElement, type ComponentType } from 'react'
+import { NodeDescriptionContext } from './BaseNode'
 import type { NodeMeta } from '@shared/automation/nodeMeta'
 import type { NodeOutputSchema } from '@shared/automation/outputSchema'
 
@@ -16,6 +17,14 @@ import { meta as setVarMeta } from '@shared/automation/nodes/data/vars/set_varia
 import { ui as setVarUi } from '@shared/automation/nodes/data/vars/set_variable/ui'
 import { meta as getPlayerMeta } from '@shared/automation/nodes/data/player/get_player/meta'
 import { ui as getPlayerUi } from '@shared/automation/nodes/data/player/get_player/ui'
+import { meta as getServerInfoMeta } from '@shared/automation/nodes/data/server/get_server_info/meta'
+import { ui as getServerInfoUi } from '@shared/automation/nodes/data/server/get_server_info/ui'
+import { meta as getInventoryMeta } from '@shared/automation/nodes/data/player/get_player_inventory/meta'
+import { ui as getInventoryUi } from '@shared/automation/nodes/data/player/get_player_inventory/ui'
+import { meta as getBuffsMeta } from '@shared/automation/nodes/data/player/get_player_buffs/meta'
+import { ui as getBuffsUi } from '@shared/automation/nodes/data/player/get_player_buffs/ui'
+import { meta as listAllPlayersMeta } from '@shared/automation/nodes/data/player/list_all_players/meta'
+import { ui as listAllPlayersUi } from '@shared/automation/nodes/data/player/list_all_players/ui'
 import { meta as findPlayerMeta } from '@shared/automation/nodes/data/player/find_player/meta'
 import { ui as findPlayerUi } from '@shared/automation/nodes/data/player/find_player/ui'
 import { meta as playerStateMeta } from '@shared/automation/nodes/data/player/player_state/meta'
@@ -111,6 +120,125 @@ import { ui as webhookUi } from '@shared/automation/nodes/triggers/net/webhook/u
 import { meta as waitMeta } from '@shared/automation/nodes/logic/merge/wait/meta'
 import { ui as waitUi } from '@shared/automation/nodes/logic/merge/wait/ui'
 
+// BEGIN GEN-ACTIONS client
+import { meta as announceMeta } from '@shared/automation/nodes/actions/communication/announce/meta'
+import { ui as announceUi } from '@shared/automation/nodes/actions/communication/announce/ui'
+import { meta as privateMessageMeta } from '@shared/automation/nodes/actions/communication/private_message/meta'
+import { ui as privateMessageUi } from '@shared/automation/nodes/actions/communication/private_message/ui'
+import { meta as chatSendMeta } from '@shared/automation/nodes/actions/communication/chat_send/meta'
+import { ui as chatSendUi } from '@shared/automation/nodes/actions/communication/chat_send/ui'
+import { meta as feedMeta } from '@shared/automation/nodes/actions/player/feed/meta'
+import { ui as feedUi } from '@shared/automation/nodes/actions/player/feed/ui'
+import { meta as restoreSanityMeta } from '@shared/automation/nodes/actions/player/restore_sanity/meta'
+import { ui as restoreSanityUi } from '@shared/automation/nodes/actions/player/restore_sanity/ui'
+import { meta as godmodeMeta } from '@shared/automation/nodes/actions/player/godmode/meta'
+import { ui as godmodeUi } from '@shared/automation/nodes/actions/player/godmode/ui'
+import { meta as teleportToPlayerMeta } from '@shared/automation/nodes/actions/player/teleport_to_player/meta'
+import { ui as teleportToPlayerUi } from '@shared/automation/nodes/actions/player/teleport_to_player/ui'
+import { meta as setSeasonMeta } from '@shared/automation/nodes/actions/world/set_season/meta'
+import { ui as setSeasonUi } from '@shared/automation/nodes/actions/world/set_season/ui'
+import { meta as setPhaseMeta } from '@shared/automation/nodes/actions/world/set_phase/meta'
+import { ui as setPhaseUi } from '@shared/automation/nodes/actions/world/set_phase/ui'
+import { meta as skipDayMeta } from '@shared/automation/nodes/actions/world/skip_day/meta'
+import { ui as skipDayUi } from '@shared/automation/nodes/actions/world/skip_day/ui'
+import { meta as setRainMeta } from '@shared/automation/nodes/actions/world/set_rain/meta'
+import { ui as setRainUi } from '@shared/automation/nodes/actions/world/set_rain/ui'
+import { meta as stopRainMeta } from '@shared/automation/nodes/actions/world/stop_rain/meta'
+import { ui as stopRainUi } from '@shared/automation/nodes/actions/world/stop_rain/ui'
+import { meta as pauseMeta } from '@shared/automation/nodes/actions/world/pause/meta'
+import { ui as pauseUi } from '@shared/automation/nodes/actions/world/pause/ui'
+import { meta as unpauseMeta } from '@shared/automation/nodes/actions/world/unpause/meta'
+import { ui as unpauseUi } from '@shared/automation/nodes/actions/world/unpause/ui'
+import { meta as setSpeedMeta } from '@shared/automation/nodes/actions/world/set_speed/meta'
+import { ui as setSpeedUi } from '@shared/automation/nodes/actions/world/set_speed/ui'
+import { meta as rollbackMeta } from '@shared/automation/nodes/actions/admin/rollback/meta'
+import { ui as rollbackUi } from '@shared/automation/nodes/actions/admin/rollback/ui'
+import { meta as executeMeta } from '@shared/automation/nodes/actions/admin/execute/meta'
+import { ui as executeUi } from '@shared/automation/nodes/actions/admin/execute/ui'
+import { meta as banMeta } from '@shared/automation/nodes/actions/admin/ban/meta'
+import { ui as banUi } from '@shared/automation/nodes/actions/admin/ban/ui'
+import { meta as lightningMeta } from '@shared/automation/nodes/actions/player/lightning/meta'
+import { ui as lightningUi } from '@shared/automation/nodes/actions/player/lightning/ui'
+import { meta as regenerateMeta } from '@shared/automation/nodes/actions/admin/regenerate/meta'
+import { ui as regenerateUi } from '@shared/automation/nodes/actions/admin/regenerate/ui'
+import { meta as setNextPhaseMeta } from '@shared/automation/nodes/actions/world/set_next_phase/meta'
+import { ui as setNextPhaseUi } from '@shared/automation/nodes/actions/world/set_next_phase/ui'
+import { meta as setSnowMeta } from '@shared/automation/nodes/actions/world/set_snow/meta'
+import { ui as setSnowUi } from '@shared/automation/nodes/actions/world/set_snow/ui'
+import { meta as setDayLengthMeta } from '@shared/automation/nodes/actions/world/set_day_length/meta'
+import { ui as setDayLengthUi } from '@shared/automation/nodes/actions/world/set_day_length/ui'
+import { meta as setSeasonLengthMeta } from '@shared/automation/nodes/actions/world/set_season_length/meta'
+import { ui as setSeasonLengthUi } from '@shared/automation/nodes/actions/world/set_season_length/ui'
+import { meta as removeInventoryMeta } from '@shared/automation/nodes/actions/inventory/remove_inventory/meta'
+import { ui as removeInventoryUi } from '@shared/automation/nodes/actions/inventory/remove_inventory/ui'
+import { meta as removeItemMeta } from '@shared/automation/nodes/actions/inventory/remove_item/meta'
+import { ui as removeItemUi } from '@shared/automation/nodes/actions/inventory/remove_item/ui'
+import { meta as countItemMeta } from '@shared/automation/nodes/actions/inventory/count_item/meta'
+import { ui as countItemUi } from '@shared/automation/nodes/actions/inventory/count_item/ui'
+import { meta as hasItemMeta } from '@shared/automation/nodes/actions/inventory/has_item/meta'
+import { ui as hasItemUi } from '@shared/automation/nodes/actions/inventory/has_item/ui'
+import { meta as equipItemMeta } from '@shared/automation/nodes/actions/inventory/equip_item/meta'
+import { ui as equipItemUi } from '@shared/automation/nodes/actions/inventory/equip_item/ui'
+import { meta as unequipMeta } from '@shared/automation/nodes/actions/inventory/unequip/meta'
+import { ui as unequipUi } from '@shared/automation/nodes/actions/inventory/unequip/ui'
+import { meta as dropItemMeta } from '@shared/automation/nodes/actions/inventory/drop_item/meta'
+import { ui as dropItemUi } from '@shared/automation/nodes/actions/inventory/drop_item/ui'
+import { meta as clearInventoryMeta } from '@shared/automation/nodes/actions/inventory/clear_inventory/meta'
+import { ui as clearInventoryUi } from '@shared/automation/nodes/actions/inventory/clear_inventory/ui'
+import { meta as transferItemMeta } from '@shared/automation/nodes/actions/inventory/transfer_item/meta'
+import { ui as transferItemUi } from '@shared/automation/nodes/actions/inventory/transfer_item/ui'
+import { meta as dumpInventoryMeta } from '@shared/automation/nodes/actions/inventory/dump_inventory/meta'
+import { ui as dumpInventoryUi } from '@shared/automation/nodes/actions/inventory/dump_inventory/ui'
+import { meta as uiTrackMeta } from '@shared/automation/nodes/actions/interface/ui_track/meta'
+import { ui as uiTrackUi } from '@shared/automation/nodes/actions/interface/ui_track/ui'
+import { meta as spawnAtPlayerMeta } from '@shared/automation/nodes/actions/entity/spawn_at_player/meta'
+import { ui as spawnAtPlayerUi } from '@shared/automation/nodes/actions/entity/spawn_at_player/ui'
+import { meta as spawnPrefabMeta } from '@shared/automation/nodes/actions/entity/spawn_prefab/meta'
+import { ui as spawnPrefabUi } from '@shared/automation/nodes/actions/entity/spawn_prefab/ui'
+import { meta as removeNearPlayerMeta } from '@shared/automation/nodes/actions/entity/remove_near_player/meta'
+import { ui as removeNearPlayerUi } from '@shared/automation/nodes/actions/entity/remove_near_player/ui'
+import { meta as removeNearMeta } from '@shared/automation/nodes/actions/entity/remove_near/meta'
+import { ui as removeNearUi } from '@shared/automation/nodes/actions/entity/remove_near/ui'
+import { meta as destroyStructureMeta } from '@shared/automation/nodes/actions/entity/destroy_structure/meta'
+import { ui as destroyStructureUi } from '@shared/automation/nodes/actions/entity/destroy_structure/ui'
+import { meta as getEntityMeta } from '@shared/automation/nodes/actions/entity/get_entity/meta'
+import { ui as getEntityUi } from '@shared/automation/nodes/actions/entity/get_entity/ui'
+import { meta as entitySetHealthMeta } from '@shared/automation/nodes/actions/entity/entity_set_health/meta'
+import { ui as entitySetHealthUi } from '@shared/automation/nodes/actions/entity/entity_set_health/ui'
+import { meta as entityKillMeta } from '@shared/automation/nodes/actions/entity/entity_kill/meta'
+import { ui as entityKillUi } from '@shared/automation/nodes/actions/entity/entity_kill/ui'
+import { meta as killAreaMeta } from '@shared/automation/nodes/actions/entity/kill_area/meta'
+import { ui as killAreaUi } from '@shared/automation/nodes/actions/entity/kill_area/ui'
+import { meta as entityExtinguishMeta } from '@shared/automation/nodes/actions/entity/entity_extinguish/meta'
+import { ui as entityExtinguishUi } from '@shared/automation/nodes/actions/entity/entity_extinguish/ui'
+import { meta as entityIgniteMeta } from '@shared/automation/nodes/actions/entity/entity_ignite/meta'
+import { ui as entityIgniteUi } from '@shared/automation/nodes/actions/entity/entity_ignite/ui'
+import { meta as entitySetFuelMeta } from '@shared/automation/nodes/actions/entity/entity_set_fuel/meta'
+import { ui as entitySetFuelUi } from '@shared/automation/nodes/actions/entity/entity_set_fuel/ui'
+import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entity/entity_freeze/meta'
+import { ui as entityFreezeUi } from '@shared/automation/nodes/actions/entity/entity_freeze/ui'
+import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
+import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
+import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
+import { ui as uiNotificationUi } from '@shared/automation/nodes/actions/interface/ui_notification/ui'
+import { meta as uiLabelMeta } from '@shared/automation/nodes/actions/interface/ui_label/meta'
+import { ui as uiLabelUi } from '@shared/automation/nodes/actions/interface/ui_label/ui'
+import { meta as uiProgressBarMeta } from '@shared/automation/nodes/actions/interface/ui_progress_bar/meta'
+import { ui as uiProgressBarUi } from '@shared/automation/nodes/actions/interface/ui_progress_bar/ui'
+import { meta as uiSetMeta } from '@shared/automation/nodes/actions/interface/ui_set/meta'
+import { ui as uiSetUi } from '@shared/automation/nodes/actions/interface/ui_set/ui'
+import { meta as uiDestroyMeta } from '@shared/automation/nodes/actions/interface/ui_destroy/meta'
+import { ui as uiDestroyUi } from '@shared/automation/nodes/actions/interface/ui_destroy/ui'
+import { meta as uiClearMeta } from '@shared/automation/nodes/actions/interface/ui_clear/meta'
+import { ui as uiClearUi } from '@shared/automation/nodes/actions/interface/ui_clear/ui'
+import { meta as ruleInstallMeta } from '@shared/automation/nodes/actions/rules/rule_install/meta'
+import { ui as ruleInstallUi } from '@shared/automation/nodes/actions/rules/rule_install/ui'
+import { meta as ruleUninstallMeta } from '@shared/automation/nodes/actions/rules/rule_uninstall/meta'
+import { ui as ruleUninstallUi } from '@shared/automation/nodes/actions/rules/rule_uninstall/ui'
+import { meta as ruleSetStateMeta } from '@shared/automation/nodes/actions/rules/rule_set_state/meta'
+import { ui as ruleSetStateUi } from '@shared/automation/nodes/actions/rules/rule_set_state/ui'
+// END GEN-ACTIONS client
+
 interface FrontendNodeEntry {
   meta: NodeMeta
   ui: ComponentType<any>
@@ -121,6 +249,10 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: delayMeta, ui: delayUi },
   { meta: setVarMeta, ui: setVarUi },
   { meta: getPlayerMeta, ui: getPlayerUi },
+  { meta: getServerInfoMeta, ui: getServerInfoUi },
+  { meta: getInventoryMeta, ui: getInventoryUi },
+  { meta: getBuffsMeta, ui: getBuffsUi },
+  { meta: listAllPlayersMeta, ui: listAllPlayersUi },
   { meta: findPlayerMeta, ui: findPlayerUi },
   { meta: playerStateMeta, ui: playerStateUi },
   { meta: callComponentMeta, ui: callComponentUi },
@@ -151,6 +283,66 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: killMeta, ui: killUi },
   { meta: respawnMeta, ui: respawnUi },
   { meta: giveItemMeta, ui: giveItemUi },
+  // BEGIN GEN-ACTIONS entries
+  { meta: announceMeta, ui: announceUi },
+  { meta: privateMessageMeta, ui: privateMessageUi },
+  { meta: chatSendMeta, ui: chatSendUi },
+  { meta: feedMeta, ui: feedUi },
+  { meta: restoreSanityMeta, ui: restoreSanityUi },
+  { meta: godmodeMeta, ui: godmodeUi },
+  { meta: teleportToPlayerMeta, ui: teleportToPlayerUi },
+  { meta: setSeasonMeta, ui: setSeasonUi },
+  { meta: setPhaseMeta, ui: setPhaseUi },
+  { meta: skipDayMeta, ui: skipDayUi },
+  { meta: setRainMeta, ui: setRainUi },
+  { meta: stopRainMeta, ui: stopRainUi },
+  { meta: pauseMeta, ui: pauseUi },
+  { meta: unpauseMeta, ui: unpauseUi },
+  { meta: setSpeedMeta, ui: setSpeedUi },
+  { meta: rollbackMeta, ui: rollbackUi },
+  { meta: executeMeta, ui: executeUi },
+  { meta: banMeta, ui: banUi },
+  { meta: lightningMeta, ui: lightningUi },
+  { meta: regenerateMeta, ui: regenerateUi },
+  { meta: setNextPhaseMeta, ui: setNextPhaseUi },
+  { meta: setSnowMeta, ui: setSnowUi },
+  { meta: setDayLengthMeta, ui: setDayLengthUi },
+  { meta: setSeasonLengthMeta, ui: setSeasonLengthUi },
+  { meta: removeInventoryMeta, ui: removeInventoryUi },
+  { meta: removeItemMeta, ui: removeItemUi },
+  { meta: countItemMeta, ui: countItemUi },
+  { meta: hasItemMeta, ui: hasItemUi },
+  { meta: equipItemMeta, ui: equipItemUi },
+  { meta: unequipMeta, ui: unequipUi },
+  { meta: dropItemMeta, ui: dropItemUi },
+  { meta: clearInventoryMeta, ui: clearInventoryUi },
+  { meta: transferItemMeta, ui: transferItemUi },
+  { meta: dumpInventoryMeta, ui: dumpInventoryUi },
+  { meta: uiTrackMeta, ui: uiTrackUi },
+  { meta: spawnAtPlayerMeta, ui: spawnAtPlayerUi },
+  { meta: spawnPrefabMeta, ui: spawnPrefabUi },
+  { meta: removeNearPlayerMeta, ui: removeNearPlayerUi },
+  { meta: removeNearMeta, ui: removeNearUi },
+  { meta: destroyStructureMeta, ui: destroyStructureUi },
+  { meta: getEntityMeta, ui: getEntityUi },
+  { meta: entitySetHealthMeta, ui: entitySetHealthUi },
+  { meta: entityKillMeta, ui: entityKillUi },
+  { meta: killAreaMeta, ui: killAreaUi },
+  { meta: entityExtinguishMeta, ui: entityExtinguishUi },
+  { meta: entityIgniteMeta, ui: entityIgniteUi },
+  { meta: entitySetFuelMeta, ui: entitySetFuelUi },
+  { meta: entityFreezeMeta, ui: entityFreezeUi },
+  { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
+  { meta: uiNotificationMeta, ui: uiNotificationUi },
+  { meta: uiLabelMeta, ui: uiLabelUi },
+  { meta: uiProgressBarMeta, ui: uiProgressBarUi },
+  { meta: uiSetMeta, ui: uiSetUi },
+  { meta: uiDestroyMeta, ui: uiDestroyUi },
+  { meta: uiClearMeta, ui: uiClearUi },
+  { meta: ruleInstallMeta, ui: ruleInstallUi },
+  { meta: ruleUninstallMeta, ui: ruleUninstallUi },
+  { meta: ruleSetStateMeta, ui: ruleSetStateUi },
+  // END GEN-ACTIONS entries
   { meta: uiPanelMeta, ui: uiPanelUi },
   { meta: aiAgentMeta, ui: aiAgentUi },
   { meta: uiColMeta, ui: uiColUi },
@@ -172,9 +364,17 @@ const ENTRIES: FrontendNodeEntry[] = [
 
 // ── Derived maps (consumed by FlowEditor / NodeDetailPanel / nodes/index) ──
 
-/** type → canvas component (merged into ReactFlow nodeTypes). */
+/** type → canvas component (merged into ReactFlow nodeTypes). Each ui is wrapped
+ *  so BaseNode can read the node's meta.description from context and show it on
+ *  the card — without every ui.tsx passing it. */
 export const registryNodeTypes: Record<string, ComponentType<any>> =
-  Object.fromEntries(ENTRIES.map(e => [e.meta.type, e.ui]))
+  Object.fromEntries(ENTRIES.map(e => {
+    const Ui = e.ui
+    const desc = e.meta.description
+    const Wrapped = (props: any) =>
+      createElement(NodeDescriptionContext.Provider, { value: desc }, createElement(Ui, props))
+    return [e.meta.type, Wrapped]
+  }))
 
 /** type → meta (icon/label/color/category…). */
 export const registryMetaByType: Record<string, NodeMeta> =
@@ -197,6 +397,7 @@ export const registryCatalog = ENTRIES
     label: e.meta.label,
     description: e.meta.description,
     category: e.meta.category,
+    subgroup: e.meta.subgroup,
     family: e.meta.kind,
     icon: e.meta.icon,
     accent: e.meta.accent ?? 'text-gray-400',

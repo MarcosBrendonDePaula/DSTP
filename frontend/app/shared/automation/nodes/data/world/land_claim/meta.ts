@@ -23,6 +23,8 @@ export const meta: NodeMeta = {
     on: 'For trust: true to add, false to remove the trusted friend.',
   },
   kind: 'data',
+
+  subgroup: 'Mundo',
   defaults: { params: { operation: 'add', userid: '{{trigger.userid}}', owner: '', radius: '20', friend: '', on: 'true' } },
   outputSchema: {
     description: 'Land-claim command queued',

@@ -11,6 +11,8 @@ export const meta: NodeMeta = {
   aiDescription: 'Look up a player by their userid and return their stats (health, hunger, sanity, position, inventory, admin...).',
   aiParamDescriptions: { userid: 'The Klei user id (KU_xxx) of the player to fetch.' },
   kind: 'data',
+
+  subgroup: 'Jogador',
   defaults: { params: { userid: '' } },
   outputSchema: {
     description: 'Player data, or { error } if not found',

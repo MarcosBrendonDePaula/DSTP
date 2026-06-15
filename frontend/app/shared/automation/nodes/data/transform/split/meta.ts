@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     trim: 'true to trim each part and drop empty ones (default true).',
   },
   kind: 'data',
+
+  subgroup: 'Transformar',
   defaults: { params: { value: '{{chat.message}}', separator: '', trim: 'true' } },
   outputSchema: {
     description: 'Split result',

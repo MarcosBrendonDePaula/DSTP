@@ -16,6 +16,8 @@ export const meta: NodeMeta = {
     value: 'The value to apply (number; for vitals depends on mode).',
   },
   kind: 'data',
+
+  subgroup: 'Jogador',
   defaults: { params: { userid: '{{trigger.userid}}', attribute: 'temperature', mode: 'set', value: '' } },
   outputSchema: {
     description: 'Player state applied',

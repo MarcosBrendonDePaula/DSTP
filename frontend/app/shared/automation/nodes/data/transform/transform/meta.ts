@@ -16,6 +16,8 @@ export const meta: NodeMeta = {
     replacement: 'For the replace op: the text to substitute each occurrence of operand with. Empty = remove (delete the occurrences).',
   },
   kind: 'data',
+
+  subgroup: 'Transformar',
   defaults: { params: { value: '', operation: 'uppercase', operand: '', replacement: '' } },
   outputSchema: {
     description: 'Transform result',

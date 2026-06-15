@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Divide o fluxo em verdadeiro/falso.',
   aiDescription: 'Branch the flow: evaluate field <op> value and follow the true or false path.',
   kind: 'logic',
+
+  subgroup: 'Ramificação',
   defaults: {},
   outputSchema: {
     description: 'Condition result',

@@ -11,6 +11,8 @@ export const meta: NodeMeta = {
   aiDescription: 'Write a debug message to the server log and to this node output. Does not affect the flow.',
   aiParamDescriptions: { message: 'Text to log (templates allowed, e.g. "spawned {{loop.item}}").' },
   kind: 'data',
+
+  subgroup: 'Depuração',
   defaults: { params: { message: '' } },
   outputSchema: {
     description: 'Logged message',

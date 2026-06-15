@@ -10,6 +10,7 @@ export const ui = function AIMemoryNode({ id, data, selected }: any) {
   return (
     <BaseNode
       type="ai_agent"
+      subtitle="AI Memory"
       icon="🧠"
       label="AI Memory"
       selected={selected}

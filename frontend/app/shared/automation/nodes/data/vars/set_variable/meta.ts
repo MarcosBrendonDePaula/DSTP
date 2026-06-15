@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Grava valor no contexto do fluxo.',
   aiDescription: 'Store one or more key/value pairs in the flow context for later steps to read.',
   kind: 'data',
+
+  subgroup: 'Variáveis',
   defaults: { action_type: 'set_variable', params: {} },
   outputSchema: {
     description: 'The stored variables (one field per key you set)',

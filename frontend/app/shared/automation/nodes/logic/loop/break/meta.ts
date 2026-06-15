@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Interrompe o loop mais próximo. Opcionalmente só quando uma condição é verdadeira.',
   aiDescription: 'Stop the nearest enclosing Loop node. Optionally only when a condition holds (set conditional + field/operator/value); otherwise it always breaks.',
   kind: 'logic',
+
+  subgroup: 'Repetição',
   defaults: { params: { conditional: false }, field: '', operator: '', value: '' },
   outputSchema: {
     description: 'Break signal',

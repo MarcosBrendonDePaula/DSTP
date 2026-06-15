@@ -1,14 +1,18 @@
-import { useCallback } from 'react'
+import { useCallback, useContext } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { useNodeDataUpdater } from '../BaseNode'
+import { useNodeDataUpdater, NodeDescriptionContext, ConfigOnlyContext } from '../BaseNode'
+import { nodeIcon } from '../nodeIcons'
 
 // Shared bits for the UI composition nodes. UI nodes describe STRUCTURE (a tree
 // the backend renders), not sequential actions. Each stores its props under
 // data.params. Containers (panel/col/row/tabs) expose a child output handle.
+//
+// Visuals mirror BaseNode (same neutral surface + accent chip + big handles) so
+// UI nodes feel like first-class citizens on the canvas; the accent is indigo to
+// signal "this is presentation, not logic".
 
 export const ACCENT = '#818cf8' // indigo-400
-const BORDER = '#818cf830'
-const BG = '#10101e'
+const NODE_BG = '#16181d'
 
 export function UIBox({
   id, data, selected, icon, label, isContainer, hasInput = true, children,
@@ -16,22 +20,51 @@ export function UIBox({
   id: string; data: any; selected?: boolean; icon: string; label: string
   isContainer?: boolean; hasInput?: boolean; children?: React.ReactNode
 }) {
+  const Icon = nodeIcon(undefined, `${icon || ''} ${label || ''}`)
+  const description = useContext(NodeDescriptionContext)
+  const configOnly = useContext(ConfigOnlyContext)
+  // In the detail modal, render ONLY the config fields (like BaseNode). On the
+  // canvas we drop the fields and keep the card compact (icon + name + description).
+  if (configOnly) {
+    return <div className="dstp-config space-y-3">{children}</div>
+  }
   return (
-    <div className="relative">
+    <div className="dstp-node group relative">
       <div
-        className="rounded-xl min-w-[170px] text-xs"
-        style={{ background: BG, border: `1px solid ${selected ? ACCENT : BORDER}`, boxShadow: selected ? `0 0 16px ${ACCENT}20` : 'none' }}
+        className="relative rounded-xl min-w-[180px] text-xs"
+        style={{
+          background: NODE_BG,
+          border: `1px solid ${selected ? ACCENT : 'rgba(255,255,255,0.08)'}`,
+          boxShadow: selected
+            ? `0 0 0 1px ${ACCENT}, 0 8px 28px -6px ${ACCENT}55`
+            : '0 6px 18px -8px rgba(0,0,0,0.7)',
+          transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        }}
       >
+        <div className="h-[3px] w-full rounded-t-xl" style={{ background: `linear-gradient(90deg, ${ACCENT}, ${ACCENT}33)` }} />
         {hasInput && (
-          <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} />
+          <Handle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} />
         )}
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b" style={{ borderColor: BORDER }}>
-          <span>{icon}</span>
-          <span className="font-semibold text-[11px]" style={{ color: ACCENT }}>{label}</span>
+        <div className="flex items-center gap-2.5 px-3 py-2.5">
+          <span
+            className="grid place-items-center w-7 h-7 rounded-lg shrink-0"
+            style={{ background: `${ACCENT}1f`, color: ACCENT, boxShadow: `inset 0 0 0 1px ${ACCENT}33` }}
+          >
+            <Icon size={15} strokeWidth={2.2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="dstp-node-title font-semibold text-[12px] text-white leading-tight truncate">{label}</div>
+            <div className="text-[9px] uppercase tracking-wider text-gray-500 leading-tight">{isContainer ? 'container' : 'interface'}</div>
+          </div>
         </div>
-        {children && <div className="px-3 py-2 space-y-1.5">{children}</div>}
+        {/* Card stays compact on the canvas: description only, never the form
+            fields (those live in the detail modal via configOnly above). A bit of
+            bottom padding keeps the rounded corner clean when there's no text. */}
+        {description
+          ? <p className="px-3 pb-2.5 -mt-0.5 text-[10px] text-gray-400 leading-snug line-clamp-2">{description}</p>
+          : <div className="pb-1" />}
         {isContainer && (
-          <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !border-2" style={{ background: '#2a2a2a', borderColor: ACCENT }} title="conectar filhos" />
+          <Handle type="source" position={Position.Right} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} title="conectar filhos" />
         )}
       </div>
     </div>

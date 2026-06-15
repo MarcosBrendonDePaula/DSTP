@@ -1,4 +1,14 @@
+/* Display font for node titles / editor headers (Space Grotesk) + mono for data.
+   MUST come before @import "tailwindcss" — CSS requires all @import at the very
+   top, and Tailwind expands into thousands of lines that would push this down.
+   Falls back to the system stack if the network is unavailable (in-game CEF). */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+
+:root {
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
 
 /* Base styles */
 * {
@@ -59,17 +69,62 @@ html {
 }
 
 .react-flow__edge-path {
-  stroke: #555 !important;
+  stroke: #3f4654 !important;
+  stroke-width: 2 !important;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #6b7689 !important;
+  stroke-width: 2.5 !important;
 }
 
 .react-flow__connection-line {
   stroke: #60a5fa !important;
-  stroke-width: 2 !important;
+  stroke-width: 2.5 !important;
+  stroke-dasharray: 6 4;
 }
 
-.react-flow__handle:hover {
-  background: #444 !important;
+/* ─── Node font + handles (n8n/Zapier-style) ─── */
+
+.dstp-node-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
+
+/* Big, OBVIOUS connection handles. --h carries the node's accent colour (inline).
+   The dot is filled with the accent so it's clearly visible against the dark node
+   as a "port"; a dark ring separates it from the border. Grows + glows on hover. */
+.dstp-handle {
+  width: 14px !important;
+  height: 14px !important;
+  background: var(--h, #3b82f6) !important;
+  border: 2px solid #0d0e11 !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 0 0 2px var(--h, #3b82f6) !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+}
+
+/* Invisible larger hit area around the dot so it's easy to grab without
+   pixel-hunting (the visible dot stays 14px). */
+.dstp-handle::before {
+  content: '';
+  position: absolute;
+  top: -10px; left: -10px; right: -10px; bottom: -10px;
+  border-radius: 9999px;
+}
+
+.react-flow__handle.dstp-handle:hover,
+.react-flow__handle.dstp-handle.connectingfrom,
+.react-flow__handle.dstp-handle.connectingto {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 2px var(--h, #3b82f6), 0 0 14px 2px var(--h, #3b82f6) !important;
+}
+
+/* Left input handle sits slightly off the left edge; right output off the right.
+   React Flow positions them centered on the edge — nudge for the bigger size. */
+.dstp-handle.react-flow__handle-left { left: -7px !important; }
+.dstp-handle.react-flow__handle-right { right: -7px !important; }
 
 .react-flow__minimap {
   background: #111 !important;

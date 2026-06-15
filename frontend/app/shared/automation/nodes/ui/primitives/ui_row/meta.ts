@@ -9,5 +9,7 @@ export const meta: NodeMeta = {
   category: 'UI Primitivos',
   description: 'Agrupa filhos na horizontal.',
   kind: 'ui-primitive',
+
+  subgroup: 'Primitivos',
   defaults: { params: { gap: '8' } },
 }

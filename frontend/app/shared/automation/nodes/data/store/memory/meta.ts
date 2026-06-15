@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     flow: 'Optional namespace override to share memory across flows.',
   },
   kind: 'data',
+
+  subgroup: 'Armazenamento',
   defaults: { action: 'read', params: { key: '' } },
   outputSchema: {
     description: 'Result of the memory operation',

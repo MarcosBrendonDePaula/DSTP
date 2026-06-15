@@ -54,6 +54,7 @@ export function makeRc(opts: {
     param,
     setContext: (v) => { out = v; context[node.id] = v; if (data.alias) context[data.alias] = v },
     findPlayerInServer: (pred) => (opts.players ?? []).find(pred) ?? null,
+    getServerGroup: () => (opts as any).serverGroup ?? { server_id: 'test', name: 'test', shards: [], all_players: opts.players ?? [], online: true },
     evaluateCondition: () => evalCond({ field: param('field'), operator: param('operator'), value: param('value') }, context),
     followOutEdges: async () => null,
     resetVisits: () => {},

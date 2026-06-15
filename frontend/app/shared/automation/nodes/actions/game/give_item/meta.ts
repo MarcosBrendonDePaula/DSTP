@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Dá um item a um jogador.',
   aiDescription: 'Dedicated node for the give_item game action. params: userid, prefab, count.',
   kind: 'action',
+
+  subgroup: 'Inventário',
   defaults: { action_type: 'give_item', params: {"userid":"{{trigger.userid}}","prefab":"log","count":"1"} },
   outputSchema: {
     description: 'give_item result',

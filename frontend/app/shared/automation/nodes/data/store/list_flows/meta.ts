@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
     startsWith: 'Only flows whose name starts with this (e.g. "!" for commands).',
   },
   kind: 'data',
+
+  subgroup: 'Armazenamento',
   defaults: { params: { onlyEnabled: 'true', folder: '', startsWith: '' } },
   outputSchema: {
     description: 'Flow list',

@@ -17,9 +17,17 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { nodeTypes, TRIGGER_EVENTS } from './nodes'
-import { ACTION_TYPES } from './nodes/actions/actionTypes'
 import { registryDefaults, registryCatalog, registryMetaByType } from './nodes/registry'
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
+import { nodeIcon } from './nodes/nodeIcons'
+import { LuZap, LuGitFork, LuDatabase, LuTarget, LuBot, LuPalette, LuShapes } from 'react-icons/lu'
+import type { IconType } from 'react-icons'
+
+// Vector icon per catalog family (replaces the old emoji in the family rail).
+const FAMILY_ICON: Record<string, IconType> = {
+  triggers: LuZap, logic: LuGitFork, data: LuDatabase,
+  actions: LuTarget, ai: LuBot, ui: LuPalette, other: LuShapes,
+}
 
 export interface CaptureData {
   active: boolean
@@ -47,12 +55,30 @@ interface FlowEditorProps {
 let nodeIdCounter = 0
 const genId = () => `node_${Date.now()}_${nodeIdCounter++}`
 
+// Single source of truth for a node's accent colour (used by minimap + edges).
+function nodeAccent(type?: string): string {
+  const regColor = type ? registryMetaByType[type]?.color : undefined
+  if (regColor) return regColor
+  switch (type) {
+    case 'trigger': return '#22c55e'
+    case 'condition': return '#eab308'
+    case 'http_request': return '#06b6d4'
+    case 'set_variable': return '#a855f7'
+    case 'script': return '#f97316'
+    case 'wait': return '#ec4899'
+    case 'delay': return '#a855f7'
+    case 'ai_agent': return '#d946ef'
+    default: return '#3b82f6'
+  }
+}
+
 type NodeCatalogItem = {
   type: string
   label: string
   description: string
   category: string
   family?: string   // node.meta.kind — the node declares its own menu family
+  subgroup?: string // sub-grouping within the family (e.g. 'Jogador', 'Players')
   icon: string
   accent: string
   data?: Record<string, any>
@@ -82,29 +108,15 @@ const TRIGGER_CATALOG: NodeCatalogItem[] = TRIGGER_EVENTS.map(event => ({
   label: event.label,
   description: `Evento de ${event.category}`,
   category: 'Eventos do jogo',
+  subgroup: event.category,   // players / world / combat / ... → catalog sub-filter
   icon: '⚡',
   accent: 'text-green-400',
   data: { event_type: event.value },
 }))
 
-const ACTION_NODE_CATALOG: NodeCatalogItem[] = ACTION_TYPES.map(action => ({
-  type: 'action',
-  label: action.label,
-  description: action.params.length > 0
-    ? `${action.params.length} parametro(s)`
-    : 'Sem parametros',
-  category: 'Acoes DSTP',
-  icon: '◎',
-  accent: 'text-blue-400',
-  data: {
-    action_type: action.value,
-    params: Object.fromEntries(action.params.map(param => [param.key, param.placeholder || ''])),
-  },
-}))
-
-// All node-type palette entries now come from the registry (one per module).
-// TRIGGER_CATALOG (game events) and ACTION_NODE_CATALOG (action subtypes) are
-// separate — those are not node modules.
+// All node-type palette entries come from the registry (one per module) — every
+// action is now its own node with its own `subgroup`, so the old central
+// ACTION_NODE_CATALOG (derived from ACTION_TYPES) is gone.
 const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
 export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, folderPath, onFolderChange, folderSuggestions = [], onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
@@ -112,16 +124,19 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
   const [nodeSearch, setNodeSearch] = useState('')
-  const [catalogFilter, setCatalogFilter] = useState<'all' | 'events' | 'nodes'>('all')
+  // Catalog navigation: a family is selected in the left rail; a subgroup chip
+  // filters within it. '' subgroup = show all of the family. Search flattens both.
+  const [activeFamily, setActiveFamily] = useState<string>('triggers')
+  const [activeSubgroup, setActiveSubgroup] = useState<string>('')
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
-  const [inspectorOpen, setInspectorOpen] = useState(false)
   // Live preview of the node being dragged from the library, following the cursor
   // over the canvas. {type, data} + screen position; null when not dragging.
   const [dragPreview, setDragPreview] = useState<{ item: NodeCatalogItem; x: number; y: number } | null>(null)
-  // Catalog families start collapsed; click a header to expand. A search query
-  // auto-expands all (so results are visible).
-  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set())
   const draggingItemRef = useRef<NodeCatalogItem | null>(null)
+  // "Drop to create": when a connection is dragged from a handle and released on
+  // empty canvas, we stash the source node/handle + the drop position, open the
+  // drawer, and auto-connect the chosen node. Cleared after use or on cancel.
+  const pendingConnectRef = useRef<{ source: string; sourceHandle: string | null; position: XYPosition } | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
 
   // Undo/Redo history
@@ -211,43 +226,54 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     return nodes.find(n => n.id === detailNodeId) || null
   }, [nodes, detailNodeId])
 
-  const selectedNode = useMemo(() => nodes.find(n => n.selected) || null, [nodes])
 
-  // Open the inspector when the SELECTION changes (by id), not on every nodes
-  // mutation — depending on the node object reopened it on any drag/edit and
-  // made it impossible to close while a node stayed selected.
-  const selectedNodeId = selectedNode?.id ?? null
-  useEffect(() => {
-    if (selectedNodeId) setInspectorOpen(true)
-  }, [selectedNodeId])
+  // The full catalog (triggers + every registry node), each tagged with family.
+  const allCatalogItems = useMemo<(NodeCatalogItem & { familyId: string })[]>(() => {
+    const all = [...TRIGGER_CATALOG, ...NODE_CATALOG_MERGED]
+    return all.map(item => ({ ...item, familyId: familyFor(item).id }))
+  }, [])
 
-  const catalogGroups = useMemo(() => {
+  // Mega-grid model: families (left rail, with counts), the active family's
+  // subgroups (chips), and the visible cards. A search query flattens everything
+  // (ignores family/subgroup) and shows all matches as one grid.
+  const catalogModel = useMemo(() => {
     const query = nodeSearch.trim().toLowerCase()
-    const contextItems = catalogFilter === 'events'
-      ? TRIGGER_CATALOG
-      : catalogFilter === 'nodes'
-        ? [...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
-        : [...TRIGGER_CATALOG, ...ACTION_NODE_CATALOG, ...NODE_CATALOG_MERGED]
-    const visible = contextItems.filter(item => {
-      if (!query) return true
-      return `${item.label} ${item.description} ${item.category} ${item.type}`.toLowerCase().includes(query)
-    })
-    // Group by canonical family, then return families in the defined order.
-    const byFamily = visible.reduce<Record<string, NodeCatalogItem[]>>((acc, item) => {
-      const fam = familyFor(item)
-      ;(acc[fam.id] ||= []).push(item)
-      return acc
-    }, {})
+    const matches = (item: NodeCatalogItem) =>
+      !query || `${item.label} ${item.description} ${item.category} ${item.type} ${item.subgroup || ''}`.toLowerCase().includes(query)
+
+    // Families present, in canonical order, with total counts.
     const order = [...CATEGORY_FAMILIES.map(f => f.id), 'other']
-    return order
-      .filter(id => byFamily[id]?.length)
+    const families = order
       .map(id => {
-        const meta = id === 'other'
-          ? { id, label: 'Outros', icon: '▢' }
-          : CATEGORY_FAMILIES.find(f => f.id === id)!
-        return { ...meta, items: byFamily[id] }
+        const meta = id === 'other' ? { id, label: 'Outros', icon: '▢' } : CATEGORY_FAMILIES.find(f => f.id === id)!
+        const count = allCatalogItems.filter(i => i.familyId === id).length
+        return { ...meta, count }
       })
-  }, [nodeSearch, catalogFilter])
+      .filter(f => f.count > 0)
+
+    if (query) {
+      // Search mode: ignore family/subgroup, show all matches as a flat grid.
+      return { families, searchMode: true as const, subgroups: [], items: allCatalogItems.filter(matches) }
+    }
+
+    const inFamily = allCatalogItems.filter(i => i.familyId === activeFamily)
+    // Subgroups within the active family (preserve first-seen order), with counts.
+    const subOrder: string[] = []
+    const subCount: Record<string, number> = {}
+    for (const i of inFamily) {
+      const s = i.subgroup || 'Geral'
+      if (!(s in subCount)) { subOrder.push(s); subCount[s] = 0 }
+      subCount[s]++
+    }
+    const subgroups = subOrder.map(s => ({ id: s, count: subCount[s] }))
+    const items = activeSubgroup
+      ? inFamily.filter(i => (i.subgroup || 'Geral') === activeSubgroup)
+      : inFamily
+    return { families, searchMode: false as const, subgroups, items }
+  }, [nodeSearch, activeFamily, activeSubgroup, allCatalogItems])
+
+  // Reset the subgroup chip whenever the family changes.
+  useEffect(() => { setActiveSubgroup('') }, [activeFamily])
 
   // Inject execution status + capture indicator into node data
   const nodesWithExecution = useMemo(() => {
@@ -282,6 +308,23 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     })
   }, [nodes, nodeStatuses, captureData?.trace, captureData?.context])
 
+  // Colour each edge by its SOURCE node's accent — so the eye can trace where a
+  // connection comes from (n8n/Zapier do this). A subtle gradient is overkill;
+  // a solid type-tinted stroke at ~55% alpha reads clean against the dark canvas.
+  const edgesColored = useMemo(() => {
+    if (edges.length === 0) return edges
+    const colorByNode = new Map(nodes.map(n => [n.id, nodeAccent(n.type)]))
+    return edges.map(e => {
+      const c = colorByNode.get(e.source) || '#3b82f6'
+      return {
+        ...e,
+        type: e.type || 'smoothstep',
+        style: { ...e.style, stroke: e.selected ? c : `${c}99`, strokeWidth: e.selected ? 3 : 2 },
+        markerEnd: e.markerEnd,
+      }
+    })
+  }, [edges, nodes])
+
   // Double-click opens the detail modal
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
     setDetailNodeId(node.id)
@@ -291,14 +334,41 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
     // Pane click deselects nodes (default React Flow behavior) but does not close modal
   }, [])
 
+  // Close the drawer AND cancel any pending drop-to-create connection (user
+  // dismissed without picking a node).
+  const closeDrawer = useCallback(() => {
+    pendingConnectRef.current = null
+    setNodeDrawerOpen(false)
+  }, [])
+
   const onConnect = useCallback((params: Connection) => {
+    // A real connection landed on a handle — don't trigger drop-to-create.
+    pendingConnectRef.current = null
     setEdges(eds => addEdge({
       ...params,
       id: `edge_${Date.now()}`,
-      style: { stroke: '#555', strokeWidth: 2 },
-      animated: true,
+      type: 'smoothstep',
+      style: { strokeWidth: 2 },
     }, eds))
   }, [setEdges])
+
+  // Drop-to-create: when a connection drag ends on EMPTY canvas (no target node),
+  // open the drawer and remember the source handle + drop point so the chosen node
+  // gets created there and auto-connected. `connectionState` is React Flow's own
+  // end state — more reliable than sniffing the DOM event target.
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, connectionState: any) => {
+    if (connectionState?.toNode) return            // landed on a node → normal connect
+    const from = connectionState?.fromNode
+    const fromHandle = connectionState?.fromHandle
+    // Only outgoing (source) drags spawn a downstream node.
+    if (!from?.id || fromHandle?.type !== 'source' || !reactFlowRef.current) return
+    const pt = 'changedTouches' in event ? event.changedTouches[0] : (event as MouseEvent)
+    const position = reactFlowRef.current.screenToFlowPosition({ x: pt.clientX, y: pt.clientY })
+    pendingConnectRef.current = { source: from.id, sourceHandle: fromHandle?.id ?? null, position }
+    // Coming from a node's output → a trigger never fits next. Land on Ações.
+    setActiveFamily('actions')
+    setNodeDrawerOpen(true)
+  }, [])
 
   const createNode = useCallback((type: string, position?: XYPosition, dataOverride?: Record<string, any>): Node => {
     // Initial node.data comes from the node's registry meta.defaults.
@@ -311,10 +381,24 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   }, [nodes.length])
 
   const addCatalogItem = useCallback((item: NodeCatalogItem) => {
-    const newNode = createNode(item.type, undefined, item.data)
+    const pending = pendingConnectRef.current
+    // Drop-to-create: place the node where the connection was released and wire it.
+    const newNode = createNode(item.type, pending?.position, item.data)
     setNodes(nds => [...nds, newNode])
+    if (pending) {
+      pendingConnectRef.current = null
+      setEdges(eds => addEdge({
+        source: pending.source,
+        sourceHandle: pending.sourceHandle,
+        target: newNode.id,
+        targetHandle: null,
+        id: `edge_${Date.now()}`,
+        type: 'smoothstep',
+        style: { strokeWidth: 2 },
+      }, eds))
+    }
     setNodeDrawerOpen(false)
-  }, [createNode, setNodes])
+  }, [createNode, setNodes, setEdges])
 
   const addCatalogItemAt = useCallback((item: NodeCatalogItem, position: XYPosition) => {
     const newNode = createNode(item.type, position, item.data)
@@ -438,19 +522,28 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
         </div>
 
         <div className="flex-1" />
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-400">{nodes.length} nodes · {edges.length} conexões</span>
-          <button onClick={() => setNodeDrawerOpen(true)} className="text-xs px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors">Adicionar etapa</button>
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:flex items-center gap-2 text-[11px] text-gray-500 mr-1">
+            <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-600" />{nodes.length} nodes</span>
+            <span className="text-gray-700">·</span>
+            <span>{edges.length} conexões</span>
+          </span>
+          {/* Auto-save status pill */}
+          <span className={`flex items-center gap-1.5 text-[11px] transition-colors ${autoSaveStatus === 'saved' ? 'text-green-400' : 'text-gray-500'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${autoSaveStatus === 'saved' ? 'bg-green-400' : 'bg-gray-600'}`} />
+            {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvando…'}
+          </span>
           <button
             onClick={captureData?.active ? onStopCapture : onStartCapture}
-            className={`text-xs px-4 py-2 rounded-lg border transition-colors ${captureData?.active ? 'bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/25 hover:bg-amber-500/25'}`}
+            className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border font-medium transition-colors ${captureData?.active ? 'bg-red-500/15 text-red-300 border-red-500/30 hover:bg-red-500/25' : 'bg-amber-500/10 text-amber-300 border-amber-500/25 hover:bg-amber-500/20'}`}
           >
+            <span className={`w-1.5 h-1.5 rounded-full ${captureData?.active ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} />
             {captureData?.active ? 'Parar captura' : 'Testar'}
           </button>
-          <span className={`text-xs transition-opacity ${autoSaveStatus === 'saved' ? 'text-green-300 opacity-100' : 'text-gray-300 opacity-100'}`}>
-            {autoSaveStatus === 'saved' ? 'Salvo' : 'Salvo'}
-          </span>
-          <button onClick={handleSave} className="text-xs px-3 py-2 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30 transition-colors">Salvar</button>
+          <button onClick={() => setNodeDrawerOpen(true)} className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-white/5 text-gray-200 border border-white/10 hover:bg-white/10 hover:text-white font-medium transition-colors">
+            <span className="text-sm leading-none">+</span> Adicionar etapa
+          </button>
+          <button onClick={handleSave} className="text-xs px-4 py-2 rounded-lg bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/20 hover:bg-blue-400 transition-colors">Salvar</button>
         </div>
       </header>
 
@@ -458,10 +551,11 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
       <main className="absolute left-0 right-0 top-[68px] bottom-9" onDragOver={onCanvasDragOver} onDrop={onCanvasDrop}>
         <ReactFlow
           nodes={nodesWithExecution}
-          edges={edges}
+          edges={edgesColored}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
           // Drop handlers on ReactFlow itself — it fills the <main> and consumes
@@ -472,37 +566,30 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={detailNode ? null : ['Backspace', 'Delete']}
-          defaultEdgeOptions={{ style: { stroke: '#555', strokeWidth: 2 }, animated: true }}
-          style={{ background: '#0a0a0a' }}
+          defaultEdgeOptions={{ type: 'smoothstep', style: { strokeWidth: 2 } }}
+          connectionLineType={'smoothstep' as any}
+          proOptions={{ hideAttribution: true }}
+          style={{ background: '#0a0b0d' }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#252525" />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#20242c" />
           <Controls
             showInteractive={false}
             position="bottom-left"
             className="!bg-[#111] !border-white/10 !rounded-lg !shadow-none [&>button]:!bg-transparent [&>button]:!border-white/5 [&>button]:!text-gray-400 [&>button:hover]:!bg-white/5"
           />
           <MiniMap
-            nodeColor={n => {
-              // Migrated nodes carry their color in the registry meta.
-              const regColor = n.type ? registryMetaByType[n.type]?.color : undefined
-              if (regColor) return regColor
-              if (n.type === 'trigger') return '#22c55e'
-              if (n.type === 'condition') return '#eab308'
-              if (n.type === 'http_request') return '#06b6d4'
-              if (n.type === 'set_variable') return '#a855f7'
-              if (n.type === 'script') return '#f97316'
-              if (n.type === 'wait') return '#ec4899'
-              return '#3b82f6'
-            }}
-            className="!bg-[#111] !border-white/10 !rounded-lg"
-            maskColor="#0a0a0a90"
+            nodeColor={n => nodeAccent(n.type)}
+            nodeStrokeWidth={0}
+            nodeBorderRadius={4}
+            className="!bg-[#0f1115] !border !border-white/10 !rounded-xl overflow-hidden"
+            maskColor="#0a0b0db0"
           />
         </ReactFlow>
 
         <button
           onClick={() => setNodeDrawerOpen(true)}
-          className="absolute right-4 top-5 w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-2xl text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
-          title="Adicionar node"
+          className="absolute right-4 top-4 grid place-items-center w-11 h-11 rounded-xl bg-blue-500 text-white text-2xl shadow-lg shadow-blue-500/30 hover:bg-blue-400 hover:scale-105 active:scale-95 transition-all"
+          title="Adicionar node (N)"
         >
           +
         </button>
@@ -533,118 +620,118 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             role="button"
             tabIndex={0}
             className="absolute inset-0 bg-black/10 pointer-events-auto"
-            onClick={() => setNodeDrawerOpen(false)}
-            onKeyDown={e => { if (e.key === 'Escape') setNodeDrawerOpen(false) }}
+            onClick={closeDrawer}
+            onKeyDown={e => { if (e.key === 'Escape') closeDrawer() }}
             onDragOver={onCanvasDragOver}
             onDrop={onCanvasDrop}
             aria-label="Fechar biblioteca de nodes"
           />
-          <aside className="absolute right-0 top-[68px] bottom-9 w-[396px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
-            <div className="px-4 py-4 border-b border-white/5">
-              <div className="flex items-center justify-between mb-4">
+          <aside className="absolute right-0 top-[68px] bottom-9 w-[480px] bg-[#0d0e11] border-l border-white/10 shadow-2xl pointer-events-auto flex flex-col">
+            {/* Header */}
+            <div className="px-4 pt-4 pb-3 border-b border-white/5">
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Adicionar etapa</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Nodes agrupados por categoria. Use a busca ou os filtros para achar rápido.
-                  </p>
+                  <h2 className="dstp-node-title text-base font-bold text-white">Adicionar etapa</h2>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Arraste para o canvas ou clique para inserir.</p>
                 </div>
-                <button onClick={() => setNodeDrawerOpen(false)} className="text-gray-400 hover:text-white text-lg">×</button>
+                <button onClick={closeDrawer} className="grid place-items-center w-7 h-7 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 text-lg transition-colors">×</button>
               </div>
-              <div className="grid grid-cols-3 gap-1 mb-3 rounded-lg bg-white/[0.03] p-1 border border-white/5">
-                {([
-                  ['all', 'Todos'],
-                  ['events', 'Eventos'],
-                  ['nodes', 'Nodes'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => setCatalogFilter(value)}
-                    className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${catalogFilter === value ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-gray-500 hover:text-gray-300'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">⌕</span>
+                <input
+                  value={nodeSearch}
+                  onChange={e => setNodeSearch(e.target.value)}
+                  placeholder="Buscar em todos os nós..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:border-blue-500/40 focus:outline-none placeholder:text-gray-500"
+                  autoFocus
+                />
               </div>
-              <input
-                value={nodeSearch}
-                onChange={e => setNodeSearch(e.target.value)}
-                placeholder={catalogFilter === 'events' ? 'Buscar evento...' : catalogFilter === 'nodes' ? 'Buscar node...' : 'Buscar evento ou node...'}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500/40 focus:outline-none placeholder:text-gray-500"
-                autoFocus
-              />
             </div>
-            <div className="flex-1 overflow-y-auto py-2">
-              {catalogGroups.map(group => {
-                const open = nodeSearch.trim() !== '' || expandedFamilies.has(group.id)
-                return (
-                <div key={group.id} className="mb-1">
-                  <button
-                    onClick={() => setExpandedFamilies(prev => {
-                      const next = new Set(prev)
-                      next.has(group.id) ? next.delete(group.id) : next.add(group.id)
-                      return next
-                    })}
-                    className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-2.5 bg-[#0f0f0f]/95 backdrop-blur border-b border-white/5 hover:bg-white/[0.03] transition-colors"
-                  >
-                    <span className={`text-gray-500 text-[10px] transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
-                    <span className="text-sm">{group.icon}</span>
-                    <span className="text-[11px] uppercase tracking-wide font-semibold text-gray-300">{group.label}</span>
-                    <span className="ml-auto text-[10px] text-gray-600">{group.items.length}</span>
-                  </button>
-                  {open && group.items.map(item => (
-                    // A real <div> (not <button>) — `draggable` on a button is
-                    // unreliable across browsers (Firefox ignores it), which broke
-                    // drag-to-canvas. Keep click-to-add via onClick + keyboard.
-                    <div
-                      key={`${item.type}:${item.data?.event_type || item.label}`}
-                      role="button"
-                      tabIndex={0}
-                      draggable
-                      onDragStart={event => onNodeDragStart(event, item)}
-                      onDragEnd={onNodeDragEnd}
-                      onClick={() => addCatalogItem(item)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCatalogItem(item) } }}
-                      className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors group border-l-2 border-transparent hover:border-blue-500/60 cursor-grab active:cursor-grabbing"
-                      title="Arraste para o canvas ou clique para adicionar"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-8 h-8 flex items-center justify-center text-base ${item.accent}`}>{item.icon}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-white">{item.label}</div>
-                          <div className="text-xs text-gray-300 leading-snug">{item.description}</div>
-                        </div>
-                        <span className="text-gray-500 group-hover:text-white">›</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                )
-              })}
-              {catalogGroups.length === 0 && (
-                <div className="text-sm text-gray-400 text-center py-10">Nenhum node encontrado.</div>
+
+            {/* Body: family rail + grid */}
+            <div className="flex-1 flex min-h-0">
+              {/* Left rail — families (hidden while searching) */}
+              {!catalogModel.searchMode && (
+                <nav className="w-[148px] shrink-0 border-r border-white/5 overflow-y-auto py-2 bg-black/20">
+                  {catalogModel.families.map(fam => {
+                    const active = fam.id === activeFamily
+                    const FamIcon = FAMILY_ICON[fam.id] || LuShapes
+                    return (
+                      <button
+                        key={fam.id}
+                        onClick={() => setActiveFamily(fam.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors border-l-2 ${active ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-white/[0.03]'}`}
+                      >
+                        <FamIcon size={15} strokeWidth={2.2} className="shrink-0" />
+                        <span className="text-[12px] font-medium flex-1 truncate">{fam.label}</span>
+                        <span className={`text-[9px] font-mono rounded px-1 py-0.5 ${active ? 'bg-blue-500/20 text-blue-300' : 'bg-white/5 text-gray-600'}`}>{fam.count}</span>
+                      </button>
+                    )
+                  })}
+                </nav>
               )}
+
+              {/* Right — subgroup chips + card grid */}
+              <div className="flex-1 flex flex-col min-w-0">
+                {!catalogModel.searchMode && catalogModel.subgroups.length > 1 && (
+                  <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-white/5">
+                    <button
+                      onClick={() => setActiveSubgroup('')}
+                      className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${activeSubgroup === '' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                    >Todos</button>
+                    {catalogModel.subgroups.map(sg => (
+                      <button
+                        key={sg.id}
+                        onClick={() => setActiveSubgroup(sg.id)}
+                        className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${activeSubgroup === sg.id ? 'bg-blue-500/20 text-blue-300' : 'text-gray-500 hover:text-gray-300'}`}
+                      >{sg.id} <span className="opacity-50">{sg.count}</span></button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto p-2">
+                  {catalogModel.items.length === 0 && (
+                    <div className="text-sm text-gray-500 text-center py-10">Nenhum nó encontrado.</div>
+                  )}
+                  <div className="space-y-1">
+                    {catalogModel.items.map(item => {
+                      const ItemIcon = nodeIcon(item.type, `${item.icon || ''} ${item.label || ''} ${item.data?.action_type || ''} ${item.data?.event_type || ''}`)
+                      const accent = nodeAccent(item.type)
+                      // Strip a leading emoji from trigger labels for a clean card title.
+                      const cleanLabel = item.label.replace(/^[^\w(]+\s*/u, '') || item.label
+                      return (
+                        // A real <div> (not <button>) — `draggable` on a button is
+                        // unreliable across browsers (Firefox ignores it).
+                        <div
+                          key={`${item.type}:${item.data?.event_type || item.label}`}
+                          role="button"
+                          tabIndex={0}
+                          draggable
+                          onDragStart={event => onNodeDragStart(event, item)}
+                          onDragEnd={onNodeDragEnd}
+                          onClick={() => addCatalogItem(item)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCatalogItem(item) } }}
+                          className="group/card flex items-start gap-2.5 px-2.5 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/15 transition-colors cursor-grab active:cursor-grabbing"
+                        >
+                          <span
+                            className="grid place-items-center w-8 h-8 rounded-md shrink-0 mt-0.5"
+                            style={{ background: `${accent}1a`, color: accent, boxShadow: `inset 0 0 0 1px ${accent}30` }}
+                          >
+                            <ItemIcon size={16} strokeWidth={2.2} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12px] font-semibold text-gray-100 group-hover/card:text-white leading-tight truncate">{cleanLabel}</div>
+                            <div className="text-[10px] text-gray-500 leading-snug mt-0.5 line-clamp-2">{item.description}</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
           </aside>
         </div>
-      )}
-
-      {/* Compact inspector */}
-      {inspectorOpen && selectedNode && !detailNode && (
-        <aside className="absolute right-4 top-[84px] z-20 w-[320px] rounded-xl bg-[#111] border border-white/10 shadow-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10">
-            <div className="flex-1 min-w-0">
-              <div className="text-xs uppercase tracking-wide text-gray-400">Node selecionado</div>
-              <div className="text-sm font-semibold text-white truncate">{selectedNode.type}</div>
-            </div>
-            <button onClick={() => setDetailNodeId(selectedNode.id)} className="text-xs px-3 py-1.5 rounded bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30">
-              Abrir
-            </button>
-            <button onClick={() => setInspectorOpen(false)} className="text-gray-400 hover:text-white">×</button>
-          </div>
-          <pre className="m-0 p-3 text-[10px] text-gray-300 whitespace-pre-wrap break-all max-h-[260px] overflow-auto bg-black/20">
-            {JSON.stringify(selectedNode.data || {}, null, 2)}
-          </pre>
-        </aside>
       )}
 
       {/* Node Detail Modal (overlay) */}
@@ -665,18 +752,21 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           onto the canvas. A light card (icon + label) so we don't run the node's
           ReactFlow hooks outside the provider. */}
       {dragPreview && (() => {
-        const color = registryMetaByType[dragPreview.item.type]?.color ?? '#3b82f6'
+        const color = nodeAccent(dragPreview.item.type)
+        const GhostIcon = nodeIcon(dragPreview.item.type, `${dragPreview.item.icon || ''} ${dragPreview.item.label || ''} ${dragPreview.item.data?.action_type || ''}`)
         return (
           <div
-            className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 opacity-80"
+            className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 opacity-90 rotate-1"
             style={{ left: dragPreview.x, top: dragPreview.y }}
           >
             <div
-              className="flex items-center gap-2 rounded-xl px-3 py-2 min-w-[160px] text-xs shadow-2xl"
-              style={{ background: '#141414', border: `1px solid ${color}66`, boxShadow: `0 0 24px ${color}40` }}
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 min-w-[170px] text-xs shadow-2xl"
+              style={{ background: '#16181d', border: `1px solid ${color}66`, boxShadow: `0 0 28px ${color}55, 0 8px 20px rgba(0,0,0,0.6)` }}
             >
-              <span className="text-base">{dragPreview.item.icon}</span>
-              <span className="font-semibold text-[11px]" style={{ color }}>{dragPreview.item.label}</span>
+              <span className="grid place-items-center w-7 h-7 rounded-lg shrink-0" style={{ background: `${color}1f`, color, boxShadow: `inset 0 0 0 1px ${color}33` }}>
+                <GhostIcon size={15} strokeWidth={2.2} />
+              </span>
+              <span className="dstp-node-title font-semibold text-[12px] text-white">{dragPreview.item.label}</span>
             </div>
           </div>
         )

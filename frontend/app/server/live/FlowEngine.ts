@@ -297,6 +297,12 @@ export class FlowEngine {
     return null
   }
 
+  // This server's shard group, or null if not currently known. Source for the
+  // read-only data nodes (get_server_info / list_all_players / inventory / buffs).
+  private getServerGroup(serverId: string): any | null {
+    return this.host.getServerGroups().find(g => g.server_id === serverId) || null
+  }
+
   // Build the capability bag a migrated node handler (exec.ts) runs against. All
   // the engine internals a handler might need are bound here so the handler never
   // reaches into FlowEngine directly. Heavy helpers (runFlowAction, buildUITree,
@@ -318,6 +324,7 @@ export class FlowEngine {
       param: (key, def) => this.param(node, key, def),
       setContext: (value) => setContext(node.id, value),
       findPlayerInServer: (predicate) => this.findPlayerInServer(serverId, predicate),
+      getServerGroup: () => this.getServerGroup(serverId),
       evaluateCondition: () => this.evaluateCondition(node, context),
       followOutEdges,
       resetVisits: (nodeIds) => {

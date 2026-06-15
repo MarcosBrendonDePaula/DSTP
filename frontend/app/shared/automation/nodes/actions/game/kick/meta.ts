@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Expulsa um jogador do servidor.',
   aiDescription: 'Dedicated node for the kick game action. params: userid.',
   kind: 'action',
+
+  subgroup: 'Jogador',
   defaults: { action_type: 'kick', params: {"userid":"{{trigger.userid}}"} },
   outputSchema: {
     description: 'kick result',

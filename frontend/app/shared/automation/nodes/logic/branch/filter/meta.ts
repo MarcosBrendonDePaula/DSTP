@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Para o fluxo se a condição não passar (sem ramificar).',
   aiDescription: 'Stop the flow unless a condition passes. Unlike condition (which branches), filter has a single output and simply halts when the check fails.',
   kind: 'logic',
+
+  subgroup: 'Ramificação',
   // Same shape as condition: field / operator / value.
   defaults: { field: '', operator: 'equals', value: '' },
   outputSchema: {

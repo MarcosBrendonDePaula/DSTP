@@ -13,6 +13,8 @@ export const meta: NodeMeta = {
     list: 'The array to iterate (e.g. {{getPlayers.players}} or a {{node.field}} that resolves to an array).',
   },
   kind: 'logic',
+
+  subgroup: 'Repetição',
   defaults: { params: { list: '' } },
   outputSchema: {
     description: 'Loop summary (available after "done")',

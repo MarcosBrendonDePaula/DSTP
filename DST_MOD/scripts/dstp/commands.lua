@@ -1073,6 +1073,53 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- kill_area: ForceKill every matching entity in a radius around a player (the
+    -- "smite everything around me" button). Single command so the area sweep runs
+    -- in-frame; the FLOW decides who may fire it (gate on admin). Filters:
+    --   filter="prefab" → only data.prefab           (surgical)
+    --   filter="hostile" → tag "hostile" (monsters that aggro)
+    --   filter="mobs"   → has combat+health, not a player   (DEFAULT)
+    --   filter="all"    → anything with health, not a player (incl. structures/plants)
+    -- Always spares the caster and (unless filter="all") players & structures. Capped
+    -- by limit (default 200) so a huge radius can't lag the server out.
+    DSTP.RegisterCommand("kill_area", function(data)
+        local player = FindPlayer(data.userid)
+        if not player then return end
+        local x, _, z = player.Transform:GetWorldPosition()
+        local radius = tonumber(data.radius) or 15
+        local limit = tonumber(data.limit) or 200
+        local filter = data.filter or "mobs"
+
+        -- Native tag pre-filter narrows the candidate set cheaply where possible.
+        local must_tags = nil
+        if filter == "hostile" then must_tags = { "hostile" } end
+        local ents = _G.TheSim:FindEntities(x, 0, z, radius, must_tags, nil, nil)
+
+        local killed = 0
+        for _, ent in ipairs(ents) do
+            if ent ~= player and ent:IsValid() then
+                local c = ent.components
+                local ok = false
+                if filter == "prefab" then
+                    ok = (data.prefab ~= nil and ent.prefab == data.prefab) and c and c.health ~= nil
+                elseif filter == "hostile" then
+                    ok = c and c.health ~= nil  -- already tag-filtered to "hostile"
+                elseif filter == "all" then
+                    ok = c and c.health ~= nil and not ent:HasTag("player")
+                else -- "mobs": real creatures only (combat+health), never players/structures
+                    ok = c and c.health ~= nil and c.combat ~= nil
+                        and not ent:HasTag("player") and not ent:HasTag("structure")
+                end
+                if ok then
+                    if c.health.ForceKill then c.health:ForceKill() else c.health:Kill() end
+                    killed = killed + 1
+                    if killed >= limit then break end
+                end
+            end
+        end
+        if DSTP._DEBUG then Log("kill_area: " .. killed .. " killed (filter=" .. filter .. ", r=" .. radius .. ") near " .. player.name) end
+    end)
+
     -- Destroy/hammer a structure at coordinates
     DSTP.RegisterCommand("destroy_structure", function(data)
         if data.x and data.z then

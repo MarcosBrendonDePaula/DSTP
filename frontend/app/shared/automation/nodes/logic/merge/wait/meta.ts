@@ -13,6 +13,8 @@ export const meta: NodeMeta = {
   category: 'Logica',
   description: 'Espera outros eventos ou junta caminhos.',
   kind: 'logic',
+
+  subgroup: 'Mesclagem',
   defaults: { mode: 'all', correlation: 'broadcast', timeoutMs: '300000', timeoutAction: 'discard' },
   flow: { pausable: true },
 }

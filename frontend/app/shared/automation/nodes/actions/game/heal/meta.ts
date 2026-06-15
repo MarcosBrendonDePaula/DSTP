@@ -10,6 +10,8 @@ export const meta: NodeMeta = {
   description: 'Cura um jogador (amount ou "max").',
   aiDescription: 'Dedicated node for the heal game action. params: userid, amount.',
   kind: 'action',
+
+  subgroup: 'Jogador',
   defaults: { action_type: 'heal', params: {"userid":"{{trigger.userid}}","amount":"max"} },
   outputSchema: {
     description: 'heal result',
