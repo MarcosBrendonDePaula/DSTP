@@ -2,13 +2,31 @@ import { Handle, Position, useReactFlow, useNodeConnections, type HandleProps } 
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getPrefabs, subscribePrefabs } from '../prefabCache'
 
+// Node rotation (degrees) shared with the handles, so a rotated node's edges
+// leave in the right direction. Provided by RotatableNode (see registry wrapper).
+export const RotationContext = createContext<number>(0)
+
+// Rotate a declared handle Position by N degrees to the nearest 90° quadrant, so
+// the edge curve follows the visually-rotated card (React Flow draws the edge from
+// the handle's Position, not its physical spot).
+const ORDER = [Position.Right, Position.Bottom, Position.Left, Position.Top]
+function rotatePosition(pos: Position, deg: number): Position {
+  const i = ORDER.indexOf(pos)
+  if (i < 0) return pos
+  const steps = Math.round(((deg % 360) + 360) % 360 / 90)
+  return ORDER[(i + steps) % 4]
+}
+
 // A handle that knows whether it's wired: adds `connected` (→ a black centre dot
 // via CSS) when at least one edge attaches to it. Lets you tell a plugged port
-// from a free one at a glance — especially on the dynamic Merge inputs.
-export function DstpHandle({ type, id, className, ...rest }: HandleProps & { className?: string }) {
+// from a free one at a glance — especially on the dynamic Merge inputs. It also
+// rotates its `position` with the node so rotated nodes keep clean cables.
+export function DstpHandle({ type, id, className, position, ...rest }: HandleProps & { className?: string }) {
   const connections = useNodeConnections({ handleType: type as any, handleId: id ?? undefined })
+  const rotation = useContext(RotationContext)
   const cls = `${className || ''}${connections.length ? ' connected' : ''}`
-  return <Handle type={type} id={id} className={cls} {...rest} />
+  const pos = rotation && position ? rotatePosition(position, rotation) : position
+  return <Handle type={type} id={id} position={pos} className={cls} {...rest} />
 }
 
 // Config-only mode: when the detail modal renders a node's ui.tsx as its config
