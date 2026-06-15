@@ -1,6 +1,15 @@
-import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { Handle, Position, useReactFlow, useNodeConnections, type HandleProps } from '@xyflow/react'
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getPrefabs, subscribePrefabs } from '../prefabCache'
+
+// A handle that knows whether it's wired: adds `connected` (→ a black centre dot
+// via CSS) when at least one edge attaches to it. Lets you tell a plugged port
+// from a free one at a glance — especially on the dynamic Merge inputs.
+export function DstpHandle({ type, id, className, ...rest }: HandleProps & { className?: string }) {
+  const connections = useNodeConnections({ handleType: type as any, handleId: id ?? undefined })
+  const cls = `${className || ''}${connections.length ? ' connected' : ''}`
+  return <Handle type={type} id={id} className={cls} {...rest} />
+}
 
 // Config-only mode: when the detail modal renders a node's ui.tsx as its config
 // editor, it provides this context. `configOnly` makes BaseNode emit ONLY the
@@ -162,13 +171,13 @@ export function BaseNode({ type, icon, label, subtitle, description: description
       {/* Input handle(s) — left side (data flows left → right). Named inputs
           (Wait/Merge) stack vertically, each with a small label inside the card. */}
       {hasInput && !inputLabels && (
-        <Handle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': colors.accent } as React.CSSProperties} />
+        <DstpHandle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': colors.accent } as React.CSSProperties} />
       )}
       {hasInput && inputLabels && (
         <div className="flex flex-col items-start gap-1 px-3 pt-2.5 pb-1">
           {inputLabels.map((inp) => (
             <div key={inp.id} className="relative flex items-center gap-1.5 pl-1">
-              <Handle
+              <DstpHandle
                 type="target"
                 position={Position.Left}
                 id={inp.id}
@@ -239,7 +248,7 @@ export function BaseNode({ type, icon, label, subtitle, description: description
 
       {/* Output handle — right side */}
       {hasOutput && !outputLabels && (
-        <Handle type="source" position={Position.Right} className="dstp-handle" style={{ '--h': colors.accent } as React.CSSProperties} />
+        <DstpHandle type="source" position={Position.Right} className="dstp-handle" style={{ '--h': colors.accent } as React.CSSProperties} />
       )}
 
       {/* Named output handles (condition true/false, switch cases, foreach
@@ -251,7 +260,7 @@ export function BaseNode({ type, icon, label, subtitle, description: description
             return (
               <div key={out.id} className="relative flex items-center gap-1.5 pr-1.5">
                 <span className="text-[9px] font-medium" style={{ color: `${c}cc` }}>{out.label}</span>
-                <Handle
+                <DstpHandle
                   type="source"
                   position={Position.Right}
                   id={out.id}

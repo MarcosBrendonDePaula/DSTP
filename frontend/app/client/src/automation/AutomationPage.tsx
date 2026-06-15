@@ -88,6 +88,27 @@ export function AutomationPage() {
     }
   }, [urlServer, (auto as any).$status, (auto as any).$componentId])
 
+  // Re-fetch the flows when the tab regains focus/visibility — on a fresh load or
+  // after the tab was backgrounded, this keeps the editor in sync. We only call
+  // loadFlows when the component is fully SYNCED (not just $connected, which can be
+  // true before RPC is ready), and wrap it so a stray "Not connected" never throws
+  // unhandled.
+  const refetchFlows = () => {
+    const status = (auto as any).$status
+    const componentId = (auto as any).$componentId
+    if (!urlServer || status !== 'synced' || !componentId) return
+    try { auto.loadFlows({ server_id: urlServer }) } catch (e) { console.warn('[DSTP] loadFlows skipped:', e) }
+  }
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refetchFlows() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [urlServer])
+
   const justCreatedRef = useRef<string | null>(null)
 
   const createNewFlow = (folder = '') => {
@@ -112,11 +133,16 @@ export function AutomationPage() {
     setFlowFolder(flow.folderPath ?? flow.folder_path ?? '')
   }
 
-  // When URL has ?flow=ID and flows list loads, hydrate the editor with that flow's data
+  // When URL has ?flow=ID (e.g. a page reload straight into the editor), the flows
+  // list may not be loaded yet — so we must (a) request it once synced, and (b)
+  // hydrate the editor as soon as the matching flow arrives. Opening via the list's
+  // Edit button already has the flow data, so it never hits this path.
   const [hydrated, setHydrated] = useState<string | null>(null)
   useEffect(() => {
-    if (!editingFlow || flows.length === 0) return
-    if (hydrated === editingFlow) return
+    if (!editingFlow || hydrated === editingFlow) return
+    // Brand-new flow (just created locally) — nothing to load from the server.
+    if (justCreatedRef.current === editingFlow) { setHydrated(editingFlow); return }
+
     const flow = flows.find((f: any) => f.id === editingFlow)
     if (flow) {
       setFlowName(flow.name)
@@ -126,11 +152,31 @@ export function AutomationPage() {
       setFlowEnabled(flow.enabled ?? true)
       setFlowFolder(flow.folderPath ?? flow.folder_path ?? '')
       setHydrated(editingFlow) // triggers re-render AFTER state updates are applied
+    } else if (flows.length === 0) {
+      // We want this flow but the list isn't here yet — pull it (once synced).
+      const status = (auto as any).$status
+      const componentId = (auto as any).$componentId
+      if (urlServer && status === 'synced' && componentId) {
+        try { auto.loadFlows({ server_id: urlServer }) } catch { /* not ready yet */ }
+      }
     }
-  }, [editingFlow, flows, hydrated])
+  }, [editingFlow, flows, hydrated, (auto as any).$status, (auto as any).$componentId])
 
   const saveFlow = async (nodes: Node[], edges: Edge[], closeAfter = false) => {
     if (!editingFlow || !urlServer) return
+    // Don't save until the flow has been hydrated from the server — otherwise an
+    // auto-save fired during the empty mount (URL deep-link) would OVERWRITE the
+    // real flow with an empty graph. New flows are "hydrated" immediately.
+    if (hydrated !== editingFlow) {
+      console.warn('[DSTP] saveFlow skipped — flow not hydrated yet')
+      return
+    }
+    // Don't attempt a save while the Live Component isn't connected — on page load
+    // the auto-save can fire before the WS is up, which threw "Not connected".
+    if (!(auto as any).$connected) {
+      console.warn('[DSTP] saveFlow skipped — not connected yet')
+      return
+    }
     try {
       // Use the flow's current enabled state from the live list when available,
       // so an autosave can't silently re-enable a flow that was disabled
@@ -153,8 +199,9 @@ export function AutomationPage() {
       console.log('[DSTP] Flow saved:', editingFlow, result)
       if (closeAfter) setEditingFlow(null)
     } catch (err) {
+      // A transient disconnect mid-save shouldn't pop a blocking alert — the next
+      // edit / reconnect will retry. Just log it.
       console.error('[DSTP] saveFlow error:', err)
-      alert('Erro ao salvar: ' + (err as Error).message)
     }
   }
 
@@ -396,7 +443,11 @@ export function AutomationPage() {
     return (
       <div className="h-screen bg-[#0a0a0a]">
         <FlowEditor
-          key={editingFlow || 'new'}
+          // Include `hydrated` in the key so the editor REMOUNTS once the flow's
+          // real data arrives (URL deep-link path). Otherwise it mounts with empty
+          // initialNodes, never picks up the hydrated nodes, and the auto-save
+          // would overwrite the flow with an empty graph.
+          key={`${editingFlow || 'new'}:${hydrated === editingFlow ? 'ready' : 'loading'}`}
           initialNodes={editorNodes}
           initialEdges={editorEdges}
           onSave={saveFlow}

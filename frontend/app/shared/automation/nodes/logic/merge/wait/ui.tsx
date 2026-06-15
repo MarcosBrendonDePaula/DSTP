@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useStore } from '@xyflow/react'
 import { BaseNode, NodeField, NodeSelect, NodeInput } from '@client/src/automation/nodes/BaseNode'
 import { useNodeDataUpdater } from '@client/src/automation/nodes/BaseNode'
 
@@ -9,10 +10,15 @@ export const ui = function WaitNode({ id, data, selected }: any) {
     updateNodeData(id, { ...data, [key]: value })
   }, [id, data, updateNodeData])
 
-  // N input handles (Entrada 1..N) so it visually joins several paths, n8n-style.
-  // The engine counts ARRIVING EDGES, so this is an affordance — connect any branch
-  // to any input. Default 2; configurable 2..5.
-  const inputCount = Math.min(5, Math.max(2, Number(data.inputs) || 2))
+  // Dynamic input handles (n8n-style): always one FREE input beyond what's already
+  // connected, so the merge grows as you wire branches in — no manual count. The
+  // engine just counts arriving edges, so these are purely a visual affordance.
+  const connectedInputs = useStore((s) => {
+    const targets = new Set<string>()
+    for (const e of s.edges) if (e.target === id) targets.add(e.targetHandle || 'in1')
+    return targets.size
+  })
+  const inputCount = Math.max(2, connectedInputs + 1)
   const inputLabels = Array.from({ length: inputCount }, (_, i) => ({ id: `in${i + 1}`, label: `Entrada ${i + 1}` }))
 
   return (
@@ -25,14 +31,6 @@ export const ui = function WaitNode({ id, data, selected }: any) {
         { id: 'timeout', label: '⏰ Timeout' },
       ] : undefined}
     >
-      <NodeField label="Número de entradas">
-        <NodeSelect value={String(inputCount)} onChange={v => update('inputs', v)} options={[
-          { value: '2', label: '2 entradas' },
-          { value: '3', label: '3 entradas' },
-          { value: '4', label: '4 entradas' },
-          { value: '5', label: '5 entradas' },
-        ]} />
-      </NodeField>
       <NodeField label="Modo">
         <NodeSelect value={data.mode || 'all'} onChange={v => update('mode', v)} options={[
           { value: 'all', label: 'Esperar todos' },

@@ -114,6 +114,18 @@ html {
   border-radius: 9999px;
 }
 
+/* Black centre dot when the handle has a connection — distinguishes a wired port
+   from a free one at a glance (React Flow adds .connected to connected handles). */
+.dstp-handle.connected::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 5px; height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: #0d0e11;
+}
+
 .react-flow__handle.dstp-handle:hover,
 .react-flow__handle.dstp-handle.connectingfrom,
 .react-flow__handle.dstp-handle.connectingto {

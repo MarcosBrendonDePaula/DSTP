@@ -1,6 +1,6 @@
 import { useCallback, useContext } from 'react'
-import { Handle, Position } from '@xyflow/react'
-import { useNodeDataUpdater, NodeDescriptionContext, ConfigOnlyContext } from '../BaseNode'
+import { Position } from '@xyflow/react'
+import { useNodeDataUpdater, NodeDescriptionContext, ConfigOnlyContext, DstpHandle } from '../BaseNode'
 import { nodeIcon } from '../nodeIcons'
 
 // Shared bits for the UI composition nodes. UI nodes describe STRUCTURE (a tree
@@ -43,7 +43,7 @@ export function UIBox({
       >
         <div className="h-[3px] w-full rounded-t-xl" style={{ background: `linear-gradient(90deg, ${ACCENT}, ${ACCENT}33)` }} />
         {hasInput && (
-          <Handle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} />
+          <DstpHandle type="target" position={Position.Left} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} />
         )}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <span
@@ -64,7 +64,7 @@ export function UIBox({
           ? <p className="px-3 pb-2.5 -mt-0.5 text-[10px] text-gray-400 leading-snug line-clamp-2">{description}</p>
           : <div className="pb-1" />}
         {isContainer && (
-          <Handle type="source" position={Position.Right} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} title="conectar filhos" />
+          <DstpHandle type="source" position={Position.Right} className="dstp-handle" style={{ '--h': ACCENT } as React.CSSProperties} title="conectar filhos" />
         )}
       </div>
     </div>
