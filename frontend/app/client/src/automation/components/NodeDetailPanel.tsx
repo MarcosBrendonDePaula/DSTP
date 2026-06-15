@@ -239,9 +239,10 @@ function getInputData(
         if (ex && key !== 'trigger') input[key] = ex
       }
     }
-    // No upstream trigger reached but this node still references {{trigger}} —
-    // offer the generic trigger shape so the field is discoverable.
-    if (!input['trigger']) input['trigger'] = TRIGGER_EXAMPLE
+    // NOTE: we intentionally do NOT inject a fallback `trigger` here. A node with
+    // no incoming connection has no upstream data — showing a phantom trigger was
+    // confusing. The trigger only appears when it's actually reachable upstream
+    // (added in the loop above) or present in the capture context.
   }
 
   return { input, isSchema: !anyReal }
