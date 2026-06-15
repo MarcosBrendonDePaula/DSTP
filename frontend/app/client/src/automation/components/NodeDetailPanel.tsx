@@ -12,7 +12,7 @@ import { registryMetaByType, registryNodeTypes } from '../nodes/registry'
 import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
 import { nodeIcon } from '../nodes/nodeIcons'
-import { LuChevronDown, LuCheck, LuChevronRight, LuX, LuArrowRight } from 'react-icons/lu'
+import { LuChevronDown, LuCheck, LuChevronRight, LuX, LuArrowRight, LuPanelLeftClose, LuPanelRightClose, LuPanelLeftOpen, LuPanelRightOpen } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 
 // ─── JSON Viewer ──────────────────────────────────────
@@ -696,6 +696,11 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
   const isUIBuilder = type === 'ui_builder'
   const [midTab, setMidTab] = useState<'config' | 'tree' | 'render'>('config')
   useEffect(() => { setMidTab('config') }, [node.id])
+  // Collapse the Input/Output side columns to give the middle column more room.
+  // Output starts collapsed — without a capture it's just the schema, rarely the
+  // focus when you open a node; expand it when you want to inspect the result.
+  const [inCollapsed, setInCollapsed] = useState(false)
+  const [outCollapsed, setOutCollapsed] = useState(true)
 
   // Which upstream source the Input column is showing (n8n's "Input from" select).
   const inputKeys = Object.keys(inputData)
@@ -760,10 +765,26 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
           </button>
         </div>
 
-        <div className={`grid grid-cols-1 flex-1 overflow-hidden min-h-0 bg-[#0a0a0a] ${isUIBuilder ? 'lg:grid-cols-[1fr_560px_1fr]' : 'lg:grid-cols-[1fr_380px_1fr]'}`}>
+        <div
+          className="grid grid-cols-1 flex-1 overflow-hidden min-h-0 bg-[#0a0a0a]"
+          style={{
+            // Middle column is the star: it takes ALL remaining space (1fr). The
+            // side columns have a sensible fixed width when open, and shrink to a
+            // 40px rail when collapsed — so the middle grows to fill the gap.
+            gridTemplateColumns: `${inCollapsed ? '40px' : 'minmax(260px, 340px)'} 1fr ${outCollapsed ? '40px' : 'minmax(260px, 340px)'}`,
+          }}
+        >
+          {inCollapsed ? (
+            <CollapsedRail label="Entrada" side="left" onExpand={() => setInCollapsed(false)} />
+          ) : (
           <section className="border-b lg:border-b-0 lg:border-r border-white/5 overflow-y-auto p-4 min-h-0">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Entrada</h3>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => setInCollapsed(true)} title="Recolher" className="grid place-items-center w-5 h-5 rounded text-gray-500 hover:text-white hover:bg-white/5 transition-colors">
+                  <LuPanelLeftClose size={13} />
+                </button>
+                <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Entrada</h3>
+              </div>
               {hasInput && inputIsSchema && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/90 border border-amber-500/20" title="Sem captura — mostrando os campos esperados, não valores reais">
                   padrão esperado
@@ -801,6 +822,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               </p>
             )}
           </section>
+          )}
 
           <section
             className="border-b lg:border-b-0 lg:border-r border-white/10 bg-[#0f0f0f] overflow-y-auto p-4 min-h-0"
@@ -835,8 +857,16 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
             )}
           </section>
 
+          {outCollapsed ? (
+            <CollapsedRail label="Saída" side="right" onExpand={() => setOutCollapsed(false)} />
+          ) : (
           <section className="overflow-y-auto p-4 min-h-0">
-            <h3 className="text-[11px] font-semibold text-gray-300 mb-3 uppercase tracking-wider">Saida</h3>
+            <div className="flex items-center gap-1.5 mb-3">
+              <button onClick={() => setOutCollapsed(true)} title="Recolher" className="grid place-items-center w-5 h-5 rounded text-gray-500 hover:text-white hover:bg-white/5 transition-colors">
+                <LuPanelRightClose size={13} />
+              </button>
+              <h3 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Saida</h3>
+            </div>
 
             {hasOutput ? (
               <div className="font-mono text-[10px] leading-relaxed">
@@ -867,6 +897,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               </div>
             )}
           </section>
+          )}
         </div>
       </div>
     </div>
@@ -881,6 +912,22 @@ const typeColors: Record<string, string> = {
   boolean: 'text-red-400',
   object: 'text-purple-400',
   any: 'text-gray-400',
+}
+
+// A thin vertical rail shown in place of a collapsed Input/Output column. Click
+// (or the open icon) expands it back. The label reads bottom-to-top.
+function CollapsedRail({ label, side, onExpand }: { label: string; side: 'left' | 'right'; onExpand: () => void }) {
+  const OpenIcon = side === 'left' ? LuPanelLeftOpen : LuPanelRightOpen
+  return (
+    <button
+      onClick={onExpand}
+      title={`Expandir ${label}`}
+      className={`group flex flex-col items-center gap-2 py-3 min-h-0 hover:bg-white/[0.03] transition-colors ${side === 'left' ? 'border-r' : 'border-l'} border-white/5`}
+    >
+      <OpenIcon size={14} className="text-gray-500 group-hover:text-white shrink-0" />
+      <span className="text-[10px] uppercase tracking-wider text-gray-500 group-hover:text-gray-300" style={{ writingMode: 'vertical-rl' }}>{label}</span>
+    </button>
+  )
 }
 
 // Resolve a friendly { Icon, label, sublabel } for an input source key. Icon is a
