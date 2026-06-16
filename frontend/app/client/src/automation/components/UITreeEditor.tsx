@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { UIPreview } from './UIPreview'
+import { UICanvas } from './UICanvas'
 
 // Visual tree editor for a ui_builder node. Builds node.data.tree — the same
 // {type, ...props, children} the backend renders. No canvas spam, no JSON: pick
@@ -27,7 +27,7 @@ const ICON: Record<string, string> = Object.fromEntries(TYPES.map(t => [t.value,
 // Default props per type when adding a new node.
 function defaults(type: string): UINode {
   switch (type) {
-    case 'panel': return { type, title: 'Painel', children: [] }
+    case 'panel': return { type, title: 'Painel', mode: 'canvas', width: 400, height: 300, children: [] }
     case 'col': return { type, gap: 8, children: [] }
     case 'row': return { type, gap: 12, children: [] }
     case 'tabs': return { type, active: 0, tabs: [{ label: 'Aba 1', child: { type: 'col', gap: 6, children: [] } }] }
@@ -46,9 +46,9 @@ function defaults(type: string): UINode {
 // any field — including booleans like draggable/closeable — can take a template
 // ({{...}}) instead of a fixed value.
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'mode', label: 'Layout: layout (empilha) ou canvas (x,y livre)', ph: 'layout' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
-  col: [{ key: 'mode', label: 'Layout: layout ou canvas', ph: 'layout' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
-  row: [{ key: 'mode', label: 'Layout: layout ou canvas', ph: 'layout' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
+  col: [{ key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
+  row: [{ key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
   text: [{ key: 'text', label: 'Texto', ph: '{{x}}' }, { key: 'size', label: 'Tamanho fonte', ph: '18' }, { key: 'color', label: 'Cor [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura caixa', ph: 'auto' }, { key: 'height', label: 'Altura caixa', ph: 'auto' }, { key: 'id', label: 'Node ID (p/ atualizar)' }, { key: 'callback', label: 'Callback (clicável)' }],
   text_input: [{ key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }, { key: 'id', label: 'Node ID' }],
@@ -248,26 +248,28 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
 
   const selIsContainer = selected && CONTAINER.has(selected.type)
 
-  // Reorder a child within its container (used by drag-in-render). Moves the node at
-  // `from` to index `to` in the SAME parent (only meaningful for children, not tabs).
-  const reorderInParent = (parentPath: Step[], from: number, to: number) => {
-    if (from === to) return
+  // ─── Canvas designer handlers (operate on the ROOT's direct children) ───
+  const canvasMoveChild = (i: number, x: number, y: number) => {
+    save(update(root, r => { const c = (r.children || [])[i]; if (c) { c.x = x; c.y = y } }))
+  }
+  const canvasResizeChild = (i: number, w: number, h: number) => {
     save(update(root, r => {
-      const parent = getNode(r, parentPath) || r
-      const arr = parent.children
-      if (!arr || from < 0 || from >= arr.length || to < 0 || to >= arr.length) return
-      const [moved] = arr.splice(from, 1)
-      arr.splice(to, 0, moved)
+      const c = (r.children || [])[i]
+      if (!c) return
+      // icon uses `size` (square); others use width/height. Strip the per-component scale so
+      // resize sets the real box, not box×scale.
+      const s = Number(c.scale) || 1
+      if (c.type === 'icon') c.size = Math.round(w / s)
+      else { c.width = Math.round(w / s); c.height = Math.round(h / s) }
     }))
   }
-
-  // Free-drag in a canvas container: set absolute x,y on the child at childPath.
-  const setChildPos = (childPath: Step[], x: number, y: number) => {
+  // Drop a new block from the palette onto the form at x,y.
+  const canvasAddChild = (type: string, x: number, y: number) => {
     save(update(root, r => {
-      const t = getNode(r, childPath)
-      if (!t) return
-      t.x = x; t.y = y
+      r.children = r.children || []
+      r.children.push({ ...defaults(type), x, y })
     }))
+    setSelPath([{ kind: 'child', i: (root.children?.length || 0) }])
   }
 
   // Shared inspector (used by both tabs).
@@ -366,10 +368,26 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
         </div>
       ) : (
         <div className="flex gap-3">
-          {/* Interactive render: click to select, drag a widget to reorder within its container. */}
-          <div className="flex-1 min-w-[240px]">
-            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Pré-visualização — clique para editar, arraste para reordenar</div>
-            <UIPreview tree={root} sel={selPath} onSelect={setSelPath} onReorder={reorderInParent} onMove={setChildPos} />
+          {/* Palette — drag a block onto the form to create it at the drop point. */}
+          <div className="w-28 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20 self-start">
+            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
+            <div className="space-y-1">
+              {TYPES.filter(t => !t.container).map(t => (
+                <div key={t.value} draggable
+                  onDragStart={e => { e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
+                  className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-emerald-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
+                  title="Arraste para o formulário">
+                  {t.label}
+                </div>
+              ))}
+            </div>
+            <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste para o formulário. Arraste o componente para mover, alça do canto para redimensionar.</div>
+          </div>
+          {/* Form designer (VB-style canvas) */}
+          <div className="flex-1 min-w-[280px]">
+            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Formulário — arraste da paleta, mova e redimensione</div>
+            <UICanvas root={root} sel={selPath} onSelect={setSelPath}
+              onMoveChild={canvasMoveChild} onResizeChild={canvasResizeChild} onAddChild={canvasAddChild} />
           </div>
           {inspector}
         </div>
