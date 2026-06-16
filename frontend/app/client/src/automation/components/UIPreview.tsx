@@ -82,6 +82,14 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
   const pick = (e: React.MouseEvent) => { e.stopPropagation(); onSelect(path) }
   const t = node.type
   const isCanvas = node.mode === 'canvas' && (t === 'panel' || t === 'col' || t === 'row')
+  // A container with `repeat` is a LIST (loop): mark it with a distinct dashed purple
+  // border + a 🔁 badge so it's obvious the first child is a per-item template.
+  const isList = !!node.repeat && (t === 'panel' || t === 'col' || t === 'row')
+  const listOutline = isList ? '2px dashed #a855f7' : undefined
+  const listBadge = isList ? (
+    <span style={{ position: 'absolute', top: -8, left: 6, fontSize: 9, padding: '0 4px', borderRadius: 4,
+      background: '#a855f7', color: '#fff', fontWeight: 600, zIndex: 2, pointerEvents: 'none' }}>🔁 lista</span>
+  ) : null
 
   // A child wrapped so it can be dragged to reorder within THIS container. The drag
   // payload is the source index; dropping on another child reorders. Only children
@@ -153,11 +161,12 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
     return (
       <div onClick={pick} style={{
         position: 'relative', background: 'rgba(20,20,26,0.95)',
-        border: '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
+        border: listOutline || '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
         padding: isCanvas ? 0 : '10px 12px', minWidth: 120, boxShadow: ring,
         width: pw, height: ph,
         display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
       }}>
+        {listBadge}
         {!isCanvas && node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{tmpl(node.title)}</div>}
         {!isCanvas && node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{tmpl(node.body)}</div>}
         {isCanvas ? canvasChildViews(node.children) : childViews(node.children)}
@@ -274,13 +283,15 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
     }
     return (
       <div onClick={pick} style={{
+        position: 'relative',
         display: 'flex', flexDirection: t === 'col' ? 'column' : 'row',
         gap, alignItems: 'center', justifyContent: 'center',
-        padding: 2, borderRadius: 4, boxShadow: ring,
+        padding: isList ? '8px 4px 4px' : 2, borderRadius: 4, boxShadow: ring,
         width: Number(node.width) || undefined, height: Number(node.height) || undefined,
-        outline: '1px dashed rgba(255,255,255,0.08)',
+        outline: listOutline || '1px dashed rgba(255,255,255,0.08)',
       }}>
-        {childViews(node.children)}
+        {listBadge}
+        {isList ? childViews(node.children.slice(0, 1)) : childViews(node.children)}
       </div>
     )
   }

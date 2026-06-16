@@ -1,9 +1,12 @@
+import { useEffect } from 'react'
+import { useUpdateNodeInternals } from '@xyflow/react'
 import { UIBox, field, selectField, ANCHOR_OPTIONS, useParam } from '@client/src/automation/nodes/ui/shared'
 
 // One node holding an entire UI tree (node.data.tree), edited in the
 // NodeDetailPanel tree editor. Keeps the canvas clean — no node-per-widget.
 export const ui = function UIBuilderNode({ id, data, selected }: any) {
   const set = useParam(id, data)
+  const updateNodeInternals = useUpdateNodeInternals()
   const tree = data.tree
   // Walk the tree once: count nodes AND collect every distinct `callback` string. Each
   // callback becomes a named output handle (⚡) so the flow can react to that button/field
@@ -22,6 +25,10 @@ export const ui = function UIBuilderNode({ id, data, selected }: any) {
     return { count: n, callbacks: cbs }
   })()
   const outputHandles = callbacks.map(cb => ({ id: `cb:${cb}`, label: cb }))
+  // Handles are DYNAMIC (one per callback in the tree). React Flow caches a node's handles,
+  // so when the callback set changes (added a button in the tree editor) we must tell it to
+  // re-measure — otherwise the new ⚡ handle never registers and edges can't attach.
+  useEffect(() => { updateNodeInternals(id) }, [id, callbacks.join('|'), updateNodeInternals])
   // A "repaint" input re-renders this UI for the player (wire a callback into it to refresh
   // the window after a change). Re-running the node with the same UI id rebuilds in place.
   const inputHandles = [{ id: 'repaint', label: 'repaint' }, { id: 'close', label: 'fechar' }]

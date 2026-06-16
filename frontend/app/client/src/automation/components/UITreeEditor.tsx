@@ -14,6 +14,7 @@ const TYPES: { value: string; label: string; container?: boolean }[] = [
   { value: 'col', label: '↕ Coluna', container: true },
   { value: 'row', label: '↔ Linha', container: true },
   { value: 'tabs', label: '🗂 Abas', container: true },
+  { value: 'list', label: '🔁 Lista (loop)', container: true },
   { value: 'text', label: '🔤 Texto' },
   { value: 'text_input', label: '⌨ Campo de Texto' },
   { value: 'icon', label: '🖼 Ícone' },
@@ -31,6 +32,14 @@ function defaults(type: string): UINode {
     case 'col': return { type, gap: 8, children: [] }
     // A "grid" palette item is really a col in grid mode (cols columns of blocked children).
     case 'grid': return { type: 'col', mode: 'grid', grid_rows: ['50 50'], gap: 8, width: 200, height: 120, children: [] }
+    // A "list" palette item = a col that REPEATS its first child once per item of a list
+    // ({{...}}). Comes pre-filled with a row template (icon + text) bound to {{item.*}}.
+    case 'list': return { type: 'col', gap: 6, repeat: '', as: 'item', children: [
+      { type: 'row', gap: 8, children: [
+        { type: 'icon', prefab: '{{item.prefab}}', size: 32 },
+        { type: 'text', text: '{{item.name}}', size: 16 },
+      ]},
+    ]}
     case 'row': return { type, gap: 12, children: [] }
     case 'tabs': return { type, active: 0, tabs: [{ label: 'Aba 1', child: { type: 'col', gap: 6, children: [] } }] }
     case 'text': return { type, text: 'Texto', size: 18 }
@@ -65,6 +74,16 @@ const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
 // lists so it shows in the inspector without editing each array above.
 for (const k of Object.keys(FIELDS)) {
   FIELDS[k].push({ key: 'scale', label: 'Escala (1 = normal)', ph: '1' })
+}
+
+// Containers can be a DYNAMIC LIST: set `repeat` to an array template ({{player.items}}) and
+// the container renders its FIRST child once per item, binding {{item}}/{{index}} (or a
+// custom name via `as`). The backend (resolveTree) expands it before rendering.
+for (const k of ['col', 'row', 'panel'] as const) {
+  FIELDS[k].push(
+    { key: 'repeat', label: 'Repetir por lista (1º filho = modelo)', ph: '{{player.items}}' },
+    { key: 'as', label: 'Nome do item (no modelo)', ph: 'item' },
+  )
 }
 
 // ─── path helpers: a path is a list of steps into the tree ──────────────────
@@ -475,6 +494,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
               {[...TYPES.filter(t => !t.container),
                 { value: 'col', label: '▦ Grupo (empilha)' },
                 { value: 'grid', label: '⊞ Grade (grid)' },
+                { value: 'list', label: '🔁 Lista (loop)' },
               ].map(t => (
                 <div key={t.value} draggable
                   onDragStart={e => { e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}

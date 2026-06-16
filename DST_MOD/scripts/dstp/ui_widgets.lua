@@ -540,8 +540,10 @@ local function MaybeClickable(widget, node, ctx, w, h)
         local now = _G.GetTime and _G.GetTime() or 0
         if last >= 0 and (now - last) < 0.5 then return end  -- 0.5s debounce, as buttons
         last = now
-        if ctx.fire then ctx.fire(cb, {})
-        elseif ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+        -- node.data (a table set by the author, e.g. { slot=.., prefab=.. }) rides along in
+        -- callback_data.data so ONE callback can carry per-item info (a list's drop button).
+        if ctx.fire then ctx.fire(cb, { data = node.data })
+        elseif ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, { data = node.data }) end
     end
     -- pad: Text's GetRegionSize can under-report the glyphs, so inflate a touch so the
     -- whole string is clickable. node.hit_pad tunes it; default 8.
@@ -809,8 +811,8 @@ RenderNodeImpl = function(node, parent, ctx)
             local now = _G.GetTime and _G.GetTime() or 0
             if last >= 0 and (now - last) < 0.5 then return end
             last = now
-            if ctx.fire then ctx.fire(cb, { id = node.id })
-            elseif cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+            if ctx.fire then ctx.fire(cb, { id = node.id, data = node.data })
+            elseif cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, { data = node.data }) end
         end)
         Register(ctx, node, holder, function(props)
             if props.text ~= nil and label.inst:IsValid() then label:SetString(tostring(props.text)) end

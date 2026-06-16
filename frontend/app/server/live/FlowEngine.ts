@@ -1103,14 +1103,82 @@ export class FlowEngine {
   // Resolve {{templates}} throughout a literal UI tree (from a ui_builder node),
   // returning a new tree. Strings are resolved; children/tabs recursed; numbers
   // and arrays (e.g. color) pass through. Coerces numeric-ish props by key.
+  // Resolve every string leaf of a plain value (object/array/string) against the context.
+  // Used for a widget's `data` payload so per-item templates resolve.
+  private resolveDeep(val: any, context: Record<string, any>): any {
+    if (typeof val === 'string') return this.resolveValue(val, context)
+    if (Array.isArray(val)) return val.map(v => this.resolveDeep(v, context))
+    if (val && typeof val === 'object') {
+      const o: any = {}
+      for (const [k, v] of Object.entries(val)) o[k] = this.resolveDeep(v, context)
+      return o
+    }
+    return val
+  }
+
   private resolveTree(node: any, context: Record<string, any>): any {
     if (node == null || typeof node !== 'object') return node
+
+    // Dynamic list: a node with `repeat` (an array, or a template/JS resolving to one) and a
+    // `template` child renders one copy of `template` per item. Inside each copy, `{{item}}`
+    // / `{{index}}` (and aliases via `as`) are bound. The container keeps its own props and
+    // gets the generated copies as children (appended after any static children).
+    if (node.repeat !== undefined) {
+      let list = typeof node.repeat === 'string' ? this.resolveValue(node.repeat, context) : node.repeat
+      if (typeof list === 'string') {
+        const s = list.trim()
+        // Try JSON ([...] or {...}); else treat a delimited string as a list (a,b,c / a|b).
+        if (s.startsWith('[') || s.startsWith('{')) { try { list = JSON.parse(s) } catch { /* keep */ } }
+        else if (s !== '') list = s.split(/[,|\n;]+/).map(x => x.trim()).filter(Boolean)
+        else list = []
+      }
+      // Normalize ANY shape into an array of rows. Object → its [key,value] pairs (so
+      // inventory "slots" work). Primitives → wrapped so {{item}} (raw), {{item.value}} and
+      // {{item._key}} all resolve no matter the source shape.
+      let raw: any[] = []
+      if (Array.isArray(list)) raw = list
+      else if (list && typeof list === 'object') raw = Object.entries(list).map(([k, v]) => ({ __k: k, __v: v }))
+      const items = raw.map((entry, i) => {
+        const k = entry && typeof entry === 'object' && '__k' in entry ? entry.__k : i
+        const v = entry && typeof entry === 'object' && '__k' in entry ? entry.__v : entry
+        if (v && typeof v === 'object') return { ...v, _key: k, _index: i }
+        return { value: v, _key: k, _index: i, toString: () => String(v ?? '') }
+      })
+      const asKey = typeof node.as === 'string' && node.as ? node.as : 'item'
+      // Template = explicit `template`/`item`, else the FIRST static child (editor-friendly:
+      // the author designs one item row as the container's first child + sets `repeat`).
+      const tmplNode = node.template ?? node.item ?? (Array.isArray(node.children) ? node.children[0] : null)
+      const staticChildren = (node.template ?? node.item) ? (node.children || []) : []
+      const generated = tmplNode
+        ? items.slice(0, 200).map((it, i) => {
+            // For a primitive row, also bind {{item}} to the RAW value (not the wrapper) so a
+            // plain list ["a","b"] renders {{item}} = "a". Object rows bind the object.
+            const bound = ('value' in it && Object.keys(it).filter(x => x !== 'toString').length === 3) ? it.value : it
+            return this.resolveTree(tmplNode, { ...context, [asKey]: bound, item: bound, index: i, i, _row: it })
+          })
+        : []
+      const out: any = {}
+      for (const [k, v] of Object.entries(node)) {
+        if (k === 'repeat' || k === 'template' || k === 'item' || k === 'as' || k === 'children') continue
+        if (typeof v === 'string') out[k] = this.resolveValue(v, context)
+        else out[k] = v
+      }
+      // Children = any explicit static children (when template was named) + the generated
+      // copies. When the template is the first child, that child is consumed (not static).
+      out.children = [...staticChildren.map((c: any) => this.resolveTree(c, context)), ...generated]
+      return out
+    }
+
     const out: any = {}
     for (const [k, v] of Object.entries(node)) {
       if (k === 'children' && Array.isArray(v)) {
         out.children = v.map(c => this.resolveTree(c, context))
       } else if (k === 'tabs' && Array.isArray(v)) {
         out.tabs = v.map((t: any) => ({ label: this.resolveValue(t.label, context), child: this.resolveTree(t.child, context) }))
+      } else if (k === 'data' && v && typeof v === 'object') {
+        // `data` is the per-widget payload carried back in callback_data.data. Resolve its
+        // string leaves so a list's button can ship {{item.slot}}/{{item.prefab}} per copy.
+        out.data = this.resolveDeep(v, context)
       } else if (typeof v === 'string') {
         out[k] = this.resolveValue(v, context)
       } else {
