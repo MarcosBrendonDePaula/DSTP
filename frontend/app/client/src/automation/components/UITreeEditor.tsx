@@ -34,10 +34,13 @@ function defaults(type: string): UINode {
     case 'grid': return { type: 'col', mode: 'grid', grid_rows: ['50 50'], gap: 8, width: 200, height: 120, children: [] }
     // A "list" palette item = a col that REPEATS its first child once per item of a list
     // ({{...}}). Comes pre-filled with a row template (icon + text) bound to {{item.*}}.
-    case 'list': return { type: 'col', gap: 6, repeat: '', as: 'item', children: [
+    // A "list" = a col that STACKS one row per item (repeat). Each row is a plain `row` whose
+    // columns have FIXED widths (a text gets a wrap/box width), so every generated row lines
+    // up the same — no grid needed (the mod just stacks; columns align by their fixed width).
+    case 'list': return { type: 'col', gap: 4, repeat: '', as: 'item', children: [
       { type: 'row', gap: 8, children: [
-        { type: 'icon', prefab: '{{item.prefab}}', size: 32 },
-        { type: 'text', text: '{{item.name}}', size: 16 },
+        { type: 'icon', prefab: '{{item.prefab}}', size: 32, width: 36, height: 36 },
+        { type: 'text', text: '{{item.name}}', size: 15, width: 150, height: 32 },
       ]},
     ]}
     case 'row': return { type, gap: 12, children: [] }

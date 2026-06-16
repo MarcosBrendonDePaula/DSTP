@@ -213,9 +213,20 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
       let rowSpecs: { w: number[]; h?: number }[] = Array.isArray(node.grid_rows) && node.grid_rows.length
         ? node.grid_rows.map(parseRow).filter(r => r.w.length)
         : []
+      // `rows` set (without grid_rows) → fix the ROW count and flow into COLUMNS (fill down
+      // then across): rows=2, 7 items → 4 columns (2+2+2+1). Otherwise `cols` fixes columns
+      // and flows into rows (the default).
+      const flowByColumn = !node.grid_rows?.length && Number(node.rows) > 0
       if (!rowSpecs.length) {
-        const c = Math.max(1, Math.floor(Number(node.cols) || 2))
-        rowSpecs = [{ w: Array.from({ length: c }, () => 1) }]
+        if (flowByColumn) {
+          const rws = Math.max(1, Math.floor(Number(node.rows)))
+          const ncols = Math.max(1, Math.ceil(kids.length / rws))
+          rowSpecs = Array.from({ length: rws }, () => ({ w: Array.from({ length: ncols }, () => 1) }))
+        } else {
+          const c = Math.max(1, Math.floor(Number(node.cols) || 2))
+          const need = Math.max(1, Math.ceil(kids.length / c))
+          rowSpecs = Array.from({ length: need }, () => ({ w: Array.from({ length: c }, () => 1) }))
+        }
       }
       // child lookup by cell
       const childAt: Record<string, number> = {}
@@ -224,11 +235,17 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         const gc = Math.max(0, Math.floor(Number(c.gc) || 0))
         if (childAt[`${gr},${gc}`] == null) childAt[`${gr},${gc}`] = i
       })
-      // auto-flow children that have no explicit cell into the first free cells
+      // auto-flow children with no explicit cell. Row-major by default; column-major when
+      // flowing by column (fill column top→bottom, then next column).
       const assigned = new Set(Object.values(childAt))
       let af = 0
       const freeCells: Array<{ r: number; c: number }> = []
-      rowSpecs.forEach((rs, r) => rs.w.forEach((_, c) => { if (childAt[`${r},${c}`] == null) freeCells.push({ r, c }) }))
+      const nCols = rowSpecs[0]?.w.length || 1
+      if (flowByColumn) {
+        for (let c = 0; c < nCols; c++) for (let r = 0; r < rowSpecs.length; r++) { if (childAt[`${r},${c}`] == null) freeCells.push({ r, c }) }
+      } else {
+        rowSpecs.forEach((rs, r) => rs.w.forEach((_, c) => { if (childAt[`${r},${c}`] == null) freeCells.push({ r, c }) }))
+      }
       kids.forEach((_, i) => {
         if (assigned.has(i)) return
         const cell = freeCells[af++]

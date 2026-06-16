@@ -1159,13 +1159,61 @@ export class FlowEngine {
         : []
       const out: any = {}
       for (const [k, v] of Object.entries(node)) {
-        if (k === 'repeat' || k === 'template' || k === 'item' || k === 'as' || k === 'children') continue
+        if (k === 'repeat' || k === 'template' || k === 'item' || k === 'as' || k === 'children' || k === 'cols' || k === 'rows') continue
         if (typeof v === 'string') out[k] = this.resolveValue(v, context)
         else out[k] = v
       }
-      // Children = any explicit static children (when template was named) + the generated
-      // copies. When the template is the first child, that child is consumed (not static).
-      out.children = [...staticChildren.map((c: any) => this.resolveTree(c, context)), ...generated]
+      const statics = staticChildren.map((c: any) => this.resolveTree(c, context))
+
+      // The NODE arranges the grid here, in the backend — the mod just stacks. When `cols`
+      // (or `rows`) is set, the generated copies are grouped into ROWS of `cols` items each
+      // (or `rows` rows flowed by column), every group becoming a plain `row`. The container
+      // is forced to a simple stacking `col` (mode/grid stripped) so the client only ever
+      // does LayoutChildren — no grid math on the game side.
+      // PROPORTIONAL columns: when `col_widths` ("15 60 25" — weights) is set, the NODE sizes
+      // each column of every generated row to a fraction of the list's width (node.width),
+      // minus gaps. So the content fills the whole row (text stretches, icon/button fixed by
+      // weight) and lines up across rows — the mod just renders fixed widths, no centering.
+      const colWeights = String(node.col_widths ?? '').trim().split(/\s+/).map(Number).filter(n => n > 0)
+      const listW = Number(node.width) || 0
+      const gapN = Number(node.gap) || 8
+      if (colWeights.length && listW > 0) {
+        const totalWeight = colWeights.reduce((a, b) => a + b, 0)
+        const usable = listW - gapN * (colWeights.length - 1)
+        for (const row of generated) {
+          const kids = Array.isArray(row?.children) ? row.children : []
+          colWeights.forEach((w, ci) => {
+            const child = kids[ci]
+            if (!child) return
+            const cw = Math.max(1, Math.round(usable * (w / totalWeight)))
+            child.width = cw
+            // a text/box should wrap to its column; an icon keeps its art but the slot is cw
+            if (child.type === 'text' && child.height == null) child.height = Number(child.size) || 32
+          })
+        }
+      }
+
+      const cols = Math.max(0, Math.floor(Number(node.cols) || 0))
+      const rowsN = Math.max(0, Math.floor(Number(node.rows) || 0))
+      const gap = Number(node.gap) || 8
+      if (cols > 0 || rowsN > 0) {
+        delete out.mode; delete out.grid_rows
+        out.type = 'col'
+        let grouped: any[][] = []
+        if (rowsN > 0) {
+          // flow by column: fill `rowsN` rows down, then across → each ROW collects every
+          // (col*rowsN + r) item.
+          const ncols = Math.ceil(generated.length / rowsN)
+          grouped = Array.from({ length: rowsN }, (_, r) =>
+            Array.from({ length: ncols }, (_, c) => generated[c * rowsN + r]).filter(Boolean))
+        } else {
+          for (let i = 0; i < generated.length; i += cols) grouped.push(generated.slice(i, i + cols))
+        }
+        out.children = [...statics, ...grouped.map(g => ({ type: 'row', gap, children: g }))]
+      } else {
+        // No cols/rows → straight stack (one item per row, as the col already implies).
+        out.children = [...statics, ...generated]
+      }
       return out
     }
 
