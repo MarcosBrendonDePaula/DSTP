@@ -55,7 +55,12 @@ describe('ui_builder node', () => {
     // ui_builder uses rc.uiNodeId() for the widget id (mock returns ui_<nodeId>).
     s.rc.uiNodeId = () => 'wallet'
     const r = await uiBuilder(s.rc)
-    expect(r).toBe('continue')
+    // Continues, but via a followEdges filter that skips `cb:` event handles (so a repaint
+    // wired off a callback doesn't loop). The filter passes normal edges, drops cb: ones.
+    expect(typeof r).toBe('object')
+    const filter = (r as any).followEdges
+    expect(filter({ sourceHandle: undefined })).toBe(true)
+    expect(filter({ sourceHandle: 'cb:submit' })).toBe(false)
     expect(s.commands[0].type).toBe('ui_command')
     expect(s.commands[0].data.userid).toBe('KU_1')
     expect(s.commands[0].data.cmd).toMatchObject({ action: 'create', type: 'tree', id: 'wallet' })

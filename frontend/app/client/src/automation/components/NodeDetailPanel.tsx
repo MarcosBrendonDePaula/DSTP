@@ -116,6 +116,29 @@ interface NodeDetailPanelProps {
 
 // ─── Helpers: find upstream data ──────────────────────
 
+// The shape a ui_builder emits when one of its callbacks fires (ui_callback). Without a
+// capture this lets a downstream node preview exactly what {{trigger...}} will hold — incl.
+// callback_data.fields keyed by every text_input id in the tree (auto "field_N" if unset).
+function uiBuilderCallbackShape(tree: any): Record<string, any> {
+  const fieldIds: string[] = []
+  let auto = 0
+  const walk = (x: any) => {
+    if (!x || typeof x !== 'object') return
+    if (x.type === 'text_input') { auto++; fieldIds.push(x.id ? String(x.id) : `field_${auto}`) }
+    ;(x.children || []).forEach(walk)
+    ;(x.tabs || []).forEach((t: any) => walk(t?.child))
+  }
+  walk(tree)
+  const fields: Record<string, any> = {}
+  for (const id of fieldIds) fields[id] = `<${id}>`
+  return {
+    userid: '<userid>', name: '<name>',
+    callback: '<callback>', callback_name: '<callback>', widget_id: '<ui id>',
+    callback_data: { value: '<campo que disparou>', id: '<id>', fields },
+    _event_type: 'ui_callback',
+  }
+}
+
 function getUpstreamNodeIds(nodeId: string, allNodes: Node[], allEdges: Array<{ source: string; target: string }>): string[] {
   const upstream: string[] = []
   const visited = new Set<string>()
@@ -228,10 +251,23 @@ function getInputData(
         // (e.g. two triggers into a Merge) each extra also gets its own key so
         // none is lost.
         const real = traceEntry?.output || (lastOutput && typeof lastOutput === 'object' ? lastOutput : null)
-        const shape = real || triggerShape((upNode.data as any)?.event_type)
+        const shape = real || triggerShape((upNode.data as any)?.event_type, (upNode.data as any)?.params)
         if (real) anyReal = true
         if (!input['trigger']) input['trigger'] = shape
         else if (key !== 'trigger') input[key] = shape   // 2nd+ trigger → its own key
+      } else if (upNode.type === 'ui_builder') {
+        // ui_builder is the entry point for ui_callback (its `cb:` handles). When THIS node
+        // is reachable from a `cb:` handle, the ui_callback IS its trigger — so it OWNS the
+        // `trigger` key (overwriting any player_spawn that merely opened the UI; that's a
+        // different execution path). The shape includes callback_data.fields so
+        // {{trigger.callback_data.fields.x}} previews before any capture.
+        const viaCallback = allEdges.some(e => e.source === upId && String((e as any).sourceHandle || '').startsWith('cb:'))
+        const real = traceEntry?.output
+        const shape = real || uiBuilderCallbackShape((upNode.data as any)?.tree)
+        if (real) anyReal = true
+        if (viaCallback) input['trigger'] = shape            // callback-driven → owns trigger
+        else if (!input['trigger']) input['trigger'] = shape
+        else if (key !== 'trigger') input[key] = shape
       } else if (traceEntry?.output) {
         if (key !== 'trigger') { input[key] = traceEntry.output; anyReal = true }
       } else if (lastOutput && typeof lastOutput === 'object') {
@@ -699,11 +735,28 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
   const { input: inputData, isSchema: inputIsSchema } = getInputData(node, allNodes, allEdges, trace, context)
   const outputData = getOutputData(node, trace, context)
 
-  // Middle-column tabs. Most nodes only have "config"; ui_builder adds Árvore +
-  // Render (the visual tree editor) as sibling tabs in the SAME middle column.
+  // Middle-column tabs. Most nodes only have "config"; ui_builder adds a single
+  // "Editor" tab — which shows the visual canvas OR the structured tree depending on
+  // the root's `mode` (chosen in Config), never both.
   const isUIBuilder = type === 'ui_builder'
-  const [midTab, setMidTab] = useState<'config' | 'tree' | 'render'>('config')
+  const [midTab, setMidTab] = useState<'config' | 'editor'>('config')
   useEffect(() => { setMidTab('config') }, [node.id])
+  // The ui_builder edit mode lives on the tree root: mode==='canvas' → visual designer,
+  // else → structured tree. Toggled from Config.
+  const uiTree = (data as any)?.tree as any
+  const uiMode: 'canvas' | 'layout' = uiTree?.mode === 'canvas' ? 'canvas' : 'layout'
+  const setUIMode = (m: 'canvas' | 'layout') => {
+    const base = uiTree && uiTree.type ? uiTree : { type: 'panel', title: 'Painel', children: [] }
+    const next = { ...base }
+    if (m === 'canvas') {
+      next.mode = 'canvas'
+      if (!Number(next.width)) next.width = 260
+      if (!Number(next.height)) next.height = 180
+    } else {
+      delete next.mode
+    }
+    onUpdateTree?.(node.id, next)
+  }
   // Collapse the Input/Output side columns to give the middle column more room.
   // Output starts collapsed — without a capture it's just the schema, rarely the
   // focus when you open a node; expand it when you want to inspect the result.
@@ -839,12 +892,13 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) lastFocusedRef.current = t
             }}
           >
-            {/* Middle-column tabs. ui_builder gets Config + Árvore + Render; other
+            {/* Middle-column tabs. ui_builder gets Config + a single Editor tab (whose
+                content is the canvas OR the tree, per the mode chosen in Config); other
                 nodes show just the config form. */}
             <div className="flex items-center justify-between mb-3">
               {isUIBuilder ? (
                 <div className="flex gap-1">
-                  {([['config', 'Config'], ['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
+                  {([['config', 'Config'], ['editor', uiMode === 'canvas' ? '🎨 Editor visual' : '🌳 Editor (árvore)']] as const).map(([k, lbl]) => (
                     <button key={k} onClick={() => setMidTab(k)}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${midTab === k ? 'bg-indigo-500/20 text-indigo-300' : 'text-gray-500 hover:text-gray-300'}`}>
                       {lbl}
@@ -856,10 +910,29 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               )}
               <span className="text-[9px] text-gray-600">auto-save</span>
             </div>
-            {isUIBuilder && midTab !== 'config' ? (
-              <UITreeEditor nodeId={node.id} tree={(data as any)?.tree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} forceTab={midTab} />
+            {isUIBuilder && midTab === 'editor' ? (
+              <UITreeEditor nodeId={node.id} tree={uiTree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} forceTab={uiMode === 'canvas' ? 'render' : 'tree'} />
             ) : (
               <div className="space-y-3">
+                {isUIBuilder && (
+                  // Edit-mode chooser — decides which Editor the tab above shows.
+                  <div className="pb-3 mb-1 border-b border-white/10">
+                    <span className="text-[10px] text-gray-400 block mb-1.5">Modo de edição da UI</span>
+                    <div className="flex gap-1.5">
+                      {([['canvas', '🎨 Visual (posição livre)'], ['layout', '🌳 Estruturado (empilhado)']] as const).map(([m, lbl]) => (
+                        <button key={m} onClick={() => { setUIMode(m); setMidTab('editor') }}
+                          className={`flex-1 px-2 py-1.5 rounded-md text-[10px] font-medium border transition-colors ${uiMode === m ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-200' : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-gray-600 mt-1.5 leading-tight">
+                      {uiMode === 'canvas'
+                        ? 'Arrasta os componentes livremente no formulário (estilo Visual Basic).'
+                        : 'Empilha os componentes em colunas/linhas automaticamente.'}
+                    </p>
+                  </div>
+                )}
                 <NodeConfigEditor nodeId={node.id} type={type} data={data} updateData={updateData} />
               </div>
             )}

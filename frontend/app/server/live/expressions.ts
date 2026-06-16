@@ -27,22 +27,70 @@ function lookup(path: string, context: Record<string, any>): { found: boolean; v
   return { found: true, value }
 }
 
+// Split an expression into its lookup path and an optional `?? fallback`. The fallback may
+// be a quoted string ("x" / 'x') or another path. Returns { path, hasFallback, fallback }.
+function parseExpr(expr: string): { path: string; hasFallback: boolean; fallbackRaw?: string } {
+  const i = expr.indexOf('??')
+  if (i === -1) return { path: expr.trim(), hasFallback: false }
+  return { path: expr.slice(0, i).trim(), hasFallback: true, fallbackRaw: expr.slice(i + 2).trim() }
+}
+
+// Resolve a `?? fallback` token: a quoted literal → its inner text; otherwise treat it as a
+// context path (so `{{a ?? b.c}}` falls back to another field). Empty → "".
+function resolveFallback(raw: string | undefined, context: Record<string, any>): any {
+  if (raw == null || raw === '') return ''
+  const m = raw.match(/^"([^"]*)"$/) || raw.match(/^'([^']*)'$/)
+  if (m) return m[1]
+  const { found, value } = lookup(raw, context)
+  return found ? value : ''
+}
+
+// {{= <js> }} runs arbitrary JS with the flow context in scope and returns the value.
+//
+// SECURITY: SAME trust class as the `script` node — an admin authored the flow, so this is
+// accepted RCE (see CLAUDE.md). NOT a sandbox: the expression can reach Node globals. The
+// isolation boundary is the per-server WORKER core (a runaway/crash takes down only that
+// core, which the watchdog respawns — never the API process or other servers), exactly like
+// `script`. The created Function is local to this call → GC'd right after; nothing is
+// retained, so there is no leak. Errors resolve to "" so a bad expr never crashes the render.
+//
+// Keys that aren't valid identifiers (e.g. "node-1") are skipped as locals but remain
+// reachable via `ctx["node-1"]`.
+function evalJsExpr(jsSrc: string, context: Record<string, any>): any {
+  try {
+    const keys = Object.keys(context).filter(k => /^[A-Za-z_$][\w$]*$/.test(k))
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('ctx', ...keys, `"use strict"; return ( ${jsSrc} );`)
+    return fn(context, ...keys.map(k => context[k]))
+  } catch {
+    return ''
+  }
+}
+
 export function resolveValue(template: any, context: Record<string, any>): any {
   if (typeof template !== 'string') return template
   if (!template.includes('{{')) return template
 
-  // Whole string is a single {{path}} → return the raw typed value.
+  // Whole string is a single {{...}} → return the RAW typed value. `{{= js }}` evals JS
+  // (the js may contain `}` so match greedily here); otherwise a lookup path + optional `??`.
+  const singleJs = template.match(/^\{\{=([\s\S]+)\}\}$/)
+  if (singleJs) return evalJsExpr(singleJs[1], context)
   const singleMatch = template.match(/^\{\{([^}]+)\}\}$/)
   if (singleMatch) {
-    const { found, value } = lookup(singleMatch[1], context)
-    return found ? value : template
+    const { path, hasFallback, fallbackRaw } = parseExpr(singleMatch[1])
+    const { found, value } = lookup(path, context)
+    if (found) return value
+    return hasFallback ? resolveFallback(fallbackRaw, context) : template
   }
 
-  // Mixed content → interpolate each {{...}} as a string, leaving unresolved
-  // placeholders untouched.
-  return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+  // Mixed content → interpolate each {{...}} as a string. A `{{= js }}` segment runs JS; a
+  // plain `{{path}}` (no inner `}`) does a lookup with optional `?? fallback`.
+  return template.replace(/\{\{(=[\s\S]*?|[^}]*)\}\}/g, (match, expr) => {
+    if (expr.startsWith('=')) return String(evalJsExpr(expr.slice(1), context) ?? '')
+    const { path, hasFallback, fallbackRaw } = parseExpr(expr)
     const { found, value } = lookup(path, context)
-    return found ? String(value) : match
+    if (found) return String(value)
+    return hasFallback ? String(resolveFallback(fallbackRaw, context)) : match
   })
 }
 
