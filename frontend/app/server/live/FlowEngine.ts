@@ -274,23 +274,33 @@ export class FlowEngine {
 
             // Required-args check: any declared arg flagged `required` that's missing → don't
             // fire; PM the player a usage message. `usage` overrides the auto one.
-            const missing = decl.some((d, i) => d.required && (args[i] == null || args[i] === ''))
-            if (missing) {
+            // Which required args are missing? (by name; unnamed required → its 1-based pos)
+            const missingNames = decl
+              .map((d, i) => (d.required && (args[i] == null || args[i] === '')) ? (d.name || `arg${i + 1}`) : null)
+              .filter(Boolean) as string[]
+            const baseData = {
+              ...event.data,
+              command_name: got, args, argc: args.length, rest,
+              ...Object.fromEntries(args.map((a, i) => [`arg${i + 1}`, a])),
+              ...named,
+            }
+            if (missingNames.length > 0) {
               const auto = `Uso: !${got || want}${decl.length ? ' ' + decl.map(d => d.name ? (d.required ? `<${d.name}>` : `[${d.name}]`) : '').join(' ').trim() : ''}`
               const usage = String(this.param(trigger, 'usage') ?? '').trim() || auto
-              const uid = event.data?.userid
-              if (uid) this.host.pushCommand(server_id, 'private_message', { userid: uid, message: usage })
-              matches = false
-            } else {
-              event = {
-                ...event,
-                data: {
-                  ...event.data,
-                  command_name: got, args, argc: args.length, rest,
-                  ...Object.fromEntries(args.map((a, i) => [`arg${i + 1}`, a])),
-                  ...named,
-                },
+              // Still PM the auto usage when no `missing` output is wired; if the flow handles
+              // the `missing` handle, it decides the response. We always fire the handle and
+              // pass the missing field names so the flow can react.
+              const wired = (flow.edges as FlowEdge[]).some(e => e.source === trigger.id && e.sourceHandle === 'missing')
+              if (!wired && event.data?.userid) {
+                this.host.pushCommand(server_id, 'private_message', { userid: event.data.userid, message: usage })
+                matches = false  // nothing to route to → don't run the ok path
+              } else {
+                // Route ONLY to the `missing` handle, with the missing field info.
+                event = { ...event, _startHandle: 'missing', data: { ...baseData, missing: missingNames, missing_text: missingNames.join(', '), usage } }
               }
+            } else {
+              // ok path: run all out-edges EXCEPT the `missing` handle.
+              event = { ...event, _startHandle: '!missing', data: baseData }
             }
           }
         }
@@ -655,11 +665,19 @@ export class FlowEngine {
     this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
     try {
-      // When a ui_builder acts as an entry point for a ui_callback, only follow the edges
-      // off its matching `cb:<callback>` handle (set on context._startHandle below).
+      // `_startHandle` restricts which of the trigger's out-edges to follow:
+      //   undefined        → all edges
+      //   "name"           → only edges off the `name` source handle
+      //   "!name"          → all edges EXCEPT the `name` handle (e.g. command's ok path
+      //                      skips the `missing` handle)
       const startHandle: string | undefined = (event as any)._startHandle
-      const outEdges = edges.filter(e => e.source === trigger.id
-        && (!startHandle || e.sourceHandle === startHandle))
+      const negate = startHandle?.startsWith('!')
+      const wantHandle = negate ? startHandle!.slice(1) : startHandle
+      const outEdges = edges.filter(e => {
+        if (e.source !== trigger.id) return false
+        if (!startHandle) return true
+        return negate ? (e.sourceHandle || undefined) !== wantHandle : e.sourceHandle === wantHandle
+      })
       for (const edge of outEdges) {
         if (signal?.aborted) break  // flow deleted/disabled mid-run → stop following edges
         const target = nodes.find(n => n.id === edge.target)

@@ -41,7 +41,7 @@ export const EVENT_FIELDS: Record<string, string[]> = {
   trade_received: ['receiver', 'item'],
 
   chat_message: ['message'],
-  command: ['message', 'command_name', 'args', 'argc', 'rest', 'arg1', 'arg2', 'arg3'],
+  command: ['message', 'command_name', 'args', 'argc', 'rest', 'arg1', 'arg2', 'arg3', 'missing', 'missing_text'],
 
   container_opened: ['container_prefab'],
   container_closed: ['container_prefab'],

@@ -274,7 +274,9 @@ export function BaseNode({ type, icon, label, subtitle, description: description
       {outputLabels && (
         <div className="flex flex-col items-end gap-1 px-3 pb-2.5 pt-0.5">
           {outputLabels.map((out) => {
-            const c = out.id === 'true' ? '#22c55e' : out.id === 'false' ? '#ef4444' : colors.accent
+            const c = (out.id === 'true' || out.id === 'ok') ? '#22c55e'
+              : (out.id === 'false' || out.id === 'missing' || out.id === 'error') ? '#ef4444'
+              : colors.accent
             return (
               <div key={out.id} className="relative flex items-center gap-1.5 pr-1.5">
                 <span className="text-[9px] font-medium" style={{ color: `${c}cc` }}>{out.label}</span>

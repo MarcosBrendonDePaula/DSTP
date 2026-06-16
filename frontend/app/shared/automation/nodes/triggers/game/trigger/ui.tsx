@@ -181,8 +181,14 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
 
   const nodeLabel = selectedEvent?.label || 'Trigger'
 
+  // A command trigger with at least one required arg gets a second output: `missing`,
+  // fired (instead of the normal flow) when the player omits a required arg — the branch
+  // receives {{trigger.missing}} (array) / {{trigger.missing_text}}.
+  const hasRequired = data.event_type === 'command' && Array.isArray(data.params?.args) && data.params.args.some((a: any) => a?.required)
+  const outputLabels = hasRequired ? [{ id: 'ok', label: 'ok' }, { id: 'missing', label: '⚠ faltou arg' }] : undefined
+
   return (
-    <BaseNode type="trigger" icon="⚡" label={nodeLabel} selected={selected} hasInput={false} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
+    <BaseNode type="trigger" icon="⚡" label={nodeLabel} selected={selected} hasInput={false} outputLabels={outputLabels} executionStatus={data._executionStatus} executionOutput={data._executionOutput} executionError={data._executionError} hasCaptureData={data._hasCaptureData} alias={data.alias} onAliasChange={v => updateNodeData(id, { ...data, alias: v })}>
       {/* The event is fixed when the trigger is added from the catalog — show it
           as read-only text. The dropdown only appears for a bare trigger with no
           event yet (legacy / hand-created). */}
@@ -252,14 +258,12 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
                 </div>
               ))}
             </div>
-            <NodeField label="Mensagem se faltar argumento (opcional)">
-              <NodeInput value={p.usage || ''} onChange={(usage: string) => setP({ usage })} placeholder='ex: Uso: !tp <alvo>' />
-            </NodeField>
             <div className="text-[8px] text-gray-500 mt-0.5">
               Dispara em "!{p.command || 'cmd'} ...". Separa por "{p.separator || 'espaço'}".
               {argList.length > 0
                 ? <> Acesse: {argList.filter(a => a.name).map(a => `{{trigger.${a.name}}}`).join(', ')}.</>
                 : <> N args em {'{{'}trigger.args{'}}'}, {'{{'}trigger.arg1{'}}'}…</>}
+              {argList.some(a => a.required) && <> Faltando obrigatório → saída <span className="text-red-400">⚠ faltou arg</span> (ou PM automática se não ligada).</>}
             </div>
           </>
         )
