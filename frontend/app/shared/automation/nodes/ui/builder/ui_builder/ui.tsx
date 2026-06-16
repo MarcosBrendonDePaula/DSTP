@@ -5,14 +5,28 @@ import { UIBox, field, selectField, ANCHOR_OPTIONS, useParam } from '@client/src
 export const ui = function UIBuilderNode({ id, data, selected }: any) {
   const set = useParam(id, data)
   const tree = data.tree
-  const count = (() => {
+  // Walk the tree once: count nodes AND collect every distinct `callback` string. Each
+  // callback becomes a named output handle (⚡) so the flow can react to that button/field
+  // event straight from this node — no separate ui_callback trigger needed.
+  const { count, callbacks } = (() => {
     let n = 0
-    const walk = (x: any) => { if (!x) return; n++; (x.children || []).forEach(walk); (x.tabs || []).forEach((t: any) => walk(t.child)) }
+    const cbs: string[] = []
+    const walk = (x: any) => {
+      if (!x) return
+      n++
+      if (x.callback && !cbs.includes(String(x.callback))) cbs.push(String(x.callback))
+      ;(x.children || []).forEach(walk)
+      ;(x.tabs || []).forEach((t: any) => walk(t.child))
+    }
     walk(tree)
-    return n
+    return { count: n, callbacks: cbs }
   })()
+  const outputHandles = callbacks.map(cb => ({ id: `cb:${cb}`, label: cb }))
+  // A "repaint" input re-renders this UI for the player (wire a callback into it to refresh
+  // the window after a change). Re-running the node with the same UI id rebuilds in place.
+  const inputHandles = [{ id: 'repaint', label: 'repaint' }, { id: 'close', label: 'fechar' }]
   return (
-    <UIBox id={id} data={data} selected={selected} icon="🎨" label="UI Builder" isContainer={false}>
+    <UIBox id={id} data={data} selected={selected} icon="🎨" label="UI Builder" isContainer={false} outputHandles={outputHandles} inputHandles={inputHandles}>
       {field('Player', data.params?.userid ?? '{{trigger.userid}}', v => set('userid', v), '{{trigger.userid}}')}
       {field('ID da UI', data.params?.id ?? '', v => set('id', v), 'loja')}
       {selectField('Âncora (posição na tela)', data.params?.anchor ?? 'center', v => set('anchor', v), ANCHOR_OPTIONS)}

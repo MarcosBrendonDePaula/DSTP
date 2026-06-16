@@ -205,6 +205,65 @@ export const ui = function TriggerNode({ id, data, selected }: any) {
           />
         </NodeField>
       )}
+      {data.event_type === 'command' && (() => {
+        const p = data.params || {}
+        const setP = (patch: any) => updateNodeData(id, { ...data, params: { ...p, ...patch } })
+        // args: a list of { name, required }. The dev adds/removes rows; each row is one
+        // positional argument bound to {{trigger.<name>}}. The LAST row may be "rest" to
+        // capture everything remaining.
+        const argList: Array<{ name: string; required?: boolean; rest?: boolean }> = Array.isArray(p.args) ? p.args : []
+        const setArgs = (next: typeof argList) => setP({ args: next })
+        const updateArg = (i: number, patch: any) => setArgs(argList.map((a, j) => j === i ? { ...a, ...patch } : a))
+        const addArg = () => setArgs([...argList, { name: `arg${argList.length + 1}`, required: true }])
+        const removeArg = (i: number) => setArgs(argList.filter((_, j) => j !== i))
+        return (
+          <>
+            {/* Comando + separador na mesma linha (separador é curto). */}
+            <div className="grid grid-cols-[1fr_88px] gap-2">
+              <NodeField label="Comando (sem prefixo)">
+                <NodeInput value={p.command || ''} onChange={(command: string) => setP({ command: command.replace(/^[!#/]/, '').trim() })} placeholder="cmd" />
+              </NodeField>
+              <NodeField label="Separador">
+                <NodeInput value={p.separator || ''} onChange={(separator: string) => setP({ separator })} placeholder="espaço" />
+              </NodeField>
+            </div>
+            {/* Arg list — add/remove rows. Each becomes {{trigger.<name>}}. */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-gray-400 font-medium">Argumentos</span>
+                <button onClick={addArg} className="text-[10px] text-indigo-300 hover:text-indigo-200">+ adicionar argumento</button>
+              </div>
+              {argList.length === 0 && <div className="text-[8px] text-gray-600">Sem args — clique "+ adicionar argumento". Ou deixe vazio p/ {'{{'}trigger.args{'}}'}.</div>}
+              {argList.map((a, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <span className="text-[8px] text-gray-500 w-3">{i + 1}</span>
+                  <NodeInput value={a.name || ''} onChange={(name: string) => updateArg(i, { name: name.replace(/[^a-zA-Z0-9_]/g, '') })} placeholder="nome" />
+                  <button onClick={() => updateArg(i, { required: !a.required })}
+                    title={a.required ? 'obrigatório' : 'opcional'}
+                    className={`px-1 py-0.5 rounded text-[8px] border ${a.required ? 'bg-amber-500/20 border-amber-400/40 text-amber-300' : 'bg-white/5 border-white/10 text-gray-500'}`}>
+                    {a.required ? 'obrig.' : 'opc.'}
+                  </button>
+                  <button onClick={() => updateArg(i, { rest: !a.rest })}
+                    title="captura todo o resto da mensagem"
+                    className={`px-1 py-0.5 rounded text-[8px] border ${a.rest ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-300' : 'bg-white/5 border-white/10 text-gray-500'}`}>
+                    resto
+                  </button>
+                  <button onClick={() => removeArg(i)} className="text-red-400 hover:text-red-300 text-[10px]" title="Remover">✕</button>
+                </div>
+              ))}
+            </div>
+            <NodeField label="Mensagem se faltar argumento (opcional)">
+              <NodeInput value={p.usage || ''} onChange={(usage: string) => setP({ usage })} placeholder='ex: Uso: !tp <alvo>' />
+            </NodeField>
+            <div className="text-[8px] text-gray-500 mt-0.5">
+              Dispara em "!{p.command || 'cmd'} ...". Separa por "{p.separator || 'espaço'}".
+              {argList.length > 0
+                ? <> Acesse: {argList.filter(a => a.name).map(a => `{{trigger.${a.name}}}`).join(', ')}.</>
+                : <> N args em {'{{'}trigger.args{'}}'}, {'{{'}trigger.arg1{'}}'}…</>}
+            </div>
+          </>
+        )
+      })()}
       {data.event_type === 'key_combo' && (() => {
         const p = data.params || {}
         const mode = p.mode || 'simultaneous'

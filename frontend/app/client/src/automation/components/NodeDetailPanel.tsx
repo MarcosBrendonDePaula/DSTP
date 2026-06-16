@@ -116,6 +116,29 @@ interface NodeDetailPanelProps {
 
 // ─── Helpers: find upstream data ──────────────────────
 
+// The shape a ui_builder emits when one of its callbacks fires (ui_callback). Without a
+// capture this lets a downstream node preview exactly what {{trigger...}} will hold — incl.
+// callback_data.fields keyed by every text_input id in the tree (auto "field_N" if unset).
+function uiBuilderCallbackShape(tree: any): Record<string, any> {
+  const fieldIds: string[] = []
+  let auto = 0
+  const walk = (x: any) => {
+    if (!x || typeof x !== 'object') return
+    if (x.type === 'text_input') { auto++; fieldIds.push(x.id ? String(x.id) : `field_${auto}`) }
+    ;(x.children || []).forEach(walk)
+    ;(x.tabs || []).forEach((t: any) => walk(t?.child))
+  }
+  walk(tree)
+  const fields: Record<string, any> = {}
+  for (const id of fieldIds) fields[id] = `<${id}>`
+  return {
+    userid: '<userid>', name: '<name>',
+    callback: '<callback>', callback_name: '<callback>', widget_id: '<ui id>',
+    callback_data: { value: '<campo que disparou>', id: '<id>', fields },
+    _event_type: 'ui_callback',
+  }
+}
+
 function getUpstreamNodeIds(nodeId: string, allNodes: Node[], allEdges: Array<{ source: string; target: string }>): string[] {
   const upstream: string[] = []
   const visited = new Set<string>()
@@ -228,10 +251,23 @@ function getInputData(
         // (e.g. two triggers into a Merge) each extra also gets its own key so
         // none is lost.
         const real = traceEntry?.output || (lastOutput && typeof lastOutput === 'object' ? lastOutput : null)
-        const shape = real || triggerShape((upNode.data as any)?.event_type)
+        const shape = real || triggerShape((upNode.data as any)?.event_type, (upNode.data as any)?.params)
         if (real) anyReal = true
         if (!input['trigger']) input['trigger'] = shape
         else if (key !== 'trigger') input[key] = shape   // 2nd+ trigger → its own key
+      } else if (upNode.type === 'ui_builder') {
+        // ui_builder is the entry point for ui_callback (its `cb:` handles). When THIS node
+        // is reachable from a `cb:` handle, the ui_callback IS its trigger — so it OWNS the
+        // `trigger` key (overwriting any player_spawn that merely opened the UI; that's a
+        // different execution path). The shape includes callback_data.fields so
+        // {{trigger.callback_data.fields.x}} previews before any capture.
+        const viaCallback = allEdges.some(e => e.source === upId && String((e as any).sourceHandle || '').startsWith('cb:'))
+        const real = traceEntry?.output
+        const shape = real || uiBuilderCallbackShape((upNode.data as any)?.tree)
+        if (real) anyReal = true
+        if (viaCallback) input['trigger'] = shape            // callback-driven → owns trigger
+        else if (!input['trigger']) input['trigger'] = shape
+        else if (key !== 'trigger') input[key] = shape
       } else if (traceEntry?.output) {
         if (key !== 'trigger') { input[key] = traceEntry.output; anyReal = true }
       } else if (lastOutput && typeof lastOutput === 'object') {
@@ -714,8 +750,8 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
     const next = { ...base }
     if (m === 'canvas') {
       next.mode = 'canvas'
-      if (!Number(next.width)) next.width = 400
-      if (!Number(next.height)) next.height = 300
+      if (!Number(next.width)) next.width = 260
+      if (!Number(next.height)) next.height = 180
     } else {
       delete next.mode
     }

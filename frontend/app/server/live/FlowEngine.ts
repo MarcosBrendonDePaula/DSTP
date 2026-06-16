@@ -15,6 +15,16 @@ import { executeAIAgent } from './ai/executeAIAgent'
 import { getNodeEntry } from './nodes/registry'
 import type { NodeRunContext } from './nodes/types'
 
+// Does a ui_builder tree declare this callback anywhere? (used to route ui_callback to the
+// node's `cb:<callback>` output handle). Walks children + tab children.
+function uiTreeHasCallback(tree: any, callback: string): boolean {
+  if (!tree || typeof tree !== 'object') return false
+  if (String(tree.callback ?? '') === callback) return true
+  if (Array.isArray(tree.children) && tree.children.some((c: any) => uiTreeHasCallback(c, callback))) return true
+  if (Array.isArray(tree.tabs) && tree.tabs.some((t: any) => uiTreeHasCallback(t?.child, callback))) return true
+  return false
+}
+
 // ─── Host interface ──────────────────────────────────
 // All external side-effects the engine needs are injected via this host, so the
 // same engine can run against the main process (direct) or a worker (RPC).
@@ -189,6 +199,28 @@ export class FlowEngine {
       // Both `trigger` nodes (game events, matched by event_type) and `webhook`
       // nodes (inbound HTTP, matched by node id == event.webhookId) act as entry
       // points. From here on a matched node is just "the trigger" for the flow.
+      // A ui_builder also acts as an entry point for ui_callback: if the fired callback
+      // matches one declared in its tree, start the flow from that node's `cb:<callback>`
+      // handle. This is IN ADDITION to any manual ui_callback trigger (both fire).
+      if (event.type === 'ui_callback') {
+        const cb = String(event.data?.callback ?? '')
+        if (cb) {
+          const startHandle = `cb:${cb}`
+          for (const node of flow.nodes as FlowNode[]) {
+            if (node.type !== 'ui_builder') continue
+            if (!uiTreeHasCallback((node.data as any)?.tree, cb)) continue
+            // ONLY act as an entry point when the matching `cb:<callback>` handle is actually
+            // WIRED to something. Otherwise a flow that handles ui_callback via a manual
+            // trigger (e.g. the shop) would fire twice. No wire → not an entry here.
+            const wired = (flow.edges as FlowEdge[]).some(e => e.source === node.id && e.sourceHandle === startHandle)
+            if (!wired) continue
+            const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
+            const ev = { ...event, _startHandle: startHandle }
+            if (analysis.isSimple) this.executeFlow(flow, node, ev, server_id)
+            else this.executeStatefulBranch(flow, node, ev, server_id, analysis)
+          }
+        }
+      }
       const triggers = (flow.nodes as FlowNode[]).filter(n => n.type === 'trigger' || n.type === 'webhook')
       for (const trigger of triggers) {
         let matches = trigger.type === 'webhook'
@@ -204,6 +236,63 @@ export class FlowEngine {
         // so the right combo trigger fires and not every key_combo on the server.
         if (matches && event.type === 'key_combo') {
           matches = event.data?.combo_id === trigger.id
+        }
+        // command matches by the declared `command` name: the chat message must start with
+        // "!<command>" (also accept #/ prefixes that DST rewrites). Empty command = any.
+        // When it matches, parse the rest into args so the flow reads {{trigger.arg1}} /
+        // {{trigger.args}} without a split node.
+        if (matches && event.type === 'command') {
+          const want = String(this.param(trigger, 'command') ?? '').replace(/^[!#/]/, '').trim().toLowerCase()
+          const msg = String(event.data?.message ?? '').trim()
+          const m = msg.match(/^[!#/]?(\S+)\s*([\s\S]*)$/)
+          const got = m ? m[1].toLowerCase() : ''
+          matches = want === '' ? true : got === want
+          if (matches && m) {
+            const rest = m[2].trim()
+            // Split args by the dev-chosen separator (default: any whitespace). A literal
+            // char (",", "|", ";", …) splits on that; empty/unset → whitespace.
+            const sepRaw = String(this.param(trigger, 'separator') ?? '').trim()
+            let args = rest === ''
+              ? []
+              : (sepRaw === ''
+                  ? rest.split(/\s+/)
+                  : rest.split(sepRaw).map(s => s.trim()).filter(s => s !== ''))
+
+            // Declared arg list: [{ name, required, rest }]. Each positional arg binds to its
+            // name → {{trigger.<name>}}. A `rest` arg captures everything from its position on
+            // (joined back with the separator) — good for reasons/messages.
+            const decl: Array<{ name?: string; required?: boolean; rest?: boolean }> =
+              Array.isArray((trigger.data as any)?.params?.args) ? (trigger.data as any).params.args : []
+            const joiner = sepRaw === '' ? ' ' : sepRaw
+            const restIdx = decl.findIndex(d => d.rest)
+            if (restIdx >= 0 && args.length > restIdx) {
+              // collapse args[restIdx..] into one
+              args = [...args.slice(0, restIdx), args.slice(restIdx).join(joiner)]
+            }
+            const named: Record<string, any> = {}
+            decl.forEach((d, i) => { if (d.name) named[d.name] = args[i] ?? '' })
+
+            // Required-args check: any declared arg flagged `required` that's missing → don't
+            // fire; PM the player a usage message. `usage` overrides the auto one.
+            const missing = decl.some((d, i) => d.required && (args[i] == null || args[i] === ''))
+            if (missing) {
+              const auto = `Uso: !${got || want}${decl.length ? ' ' + decl.map(d => d.name ? (d.required ? `<${d.name}>` : `[${d.name}]`) : '').join(' ').trim() : ''}`
+              const usage = String(this.param(trigger, 'usage') ?? '').trim() || auto
+              const uid = event.data?.userid
+              if (uid) this.host.pushCommand(server_id, 'private_message', { userid: uid, message: usage })
+              matches = false
+            } else {
+              event = {
+                ...event,
+                data: {
+                  ...event.data,
+                  command_name: got, args, argc: args.length, rest,
+                  ...Object.fromEntries(args.map((a, i) => [`arg${i + 1}`, a])),
+                  ...named,
+                },
+              }
+            }
+          }
         }
         if (matches) {
           const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
@@ -416,7 +505,11 @@ export class FlowEngine {
       for (const edge of outEdges) {
         const nextNode = nodes.find(n => n.id === edge.target)
         if (nextNode) {
+          // Expose which TARGET handle this edge entered, so a node with multiple named
+          // inputs (e.g. ui_builder's repaint / close) can branch on it. Cleared after.
+          ;(context as any)._incomingHandle = edge.targetHandle || undefined
           const waitResult = await this.processNode(nextNode, nodes, edges, context, serverId, executedActions, setContext, stopAtWait)
+          ;(context as any)._incomingHandle = undefined
           if (waitResult) return waitResult
         }
       }
@@ -545,6 +638,11 @@ export class FlowEngine {
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
     }
+    // The entry node's event is the canonical `trigger`, but also expose it under the entry
+    // node's OWN id — so a ui_builder acting as a ui_callback entry resolves both
+    // {{trigger.callback_data...}} AND {{<ui_builder_id>.callback_data...}} (the editor's
+    // Input panel may insert either form). Harmless for normal triggers.
+    context[trigger.id] = triggerData
 
     const setContext = (nodeId: string, value: any) => {
       context[nodeId] = value
@@ -557,7 +655,11 @@ export class FlowEngine {
     this.pushTrace(serverId, trigger.id, 'completed', {}, context.trigger, undefined, context)
 
     try {
-      const outEdges = edges.filter(e => e.source === trigger.id)
+      // When a ui_builder acts as an entry point for a ui_callback, only follow the edges
+      // off its matching `cb:<callback>` handle (set on context._startHandle below).
+      const startHandle: string | undefined = (event as any)._startHandle
+      const outEdges = edges.filter(e => e.source === trigger.id
+        && (!startHandle || e.sourceHandle === startHandle))
       for (const edge of outEdges) {
         if (signal?.aborted) break  // flow deleted/disabled mid-run → stop following edges
         const target = nodes.find(n => n.id === edge.target)
@@ -639,6 +741,11 @@ export class FlowEngine {
     if (trigger.data.alias) {
       context[trigger.data.alias] = triggerData
     }
+    // The entry node's event is the canonical `trigger`, but also expose it under the entry
+    // node's OWN id — so a ui_builder acting as a ui_callback entry resolves both
+    // {{trigger.callback_data...}} AND {{<ui_builder_id>.callback_data...}} (the editor's
+    // Input panel may insert either form). Harmless for normal triggers.
+    context[trigger.id] = triggerData
 
     const setContext = (nodeId: string, value: any) => {
       context[nodeId] = value

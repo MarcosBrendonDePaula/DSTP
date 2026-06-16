@@ -4,10 +4,21 @@ import type { Node, Edge } from '@xyflow/react'
 // node to a COLUMN by its longest distance from a root (a node with no incoming
 // edge, e.g. a trigger), then stacks nodes vertically within each column. Good
 // enough to "tidy up" a DST flow into readable lanes — like n8n's auto-arrange.
-const COL_GAP = 320   // horizontal spacing between columns
-const ROW_GAP = 150   // vertical spacing between nodes in a column
+const COL_GAP = 120   // horizontal GAP between columns (added to the widest node in the left column)
+const ROW_GAP = 40    // vertical GAP between stacked nodes (added to each node's real height)
 const X0 = 80
 const Y0 = 80
+// Fallbacks when a node hasn't been measured yet (first layout before render).
+const DEF_W = 200
+const DEF_H = 90
+
+// Real rendered size of a node (React Flow fills `measured` after layout; fall back to
+// width/height or sane defaults so the first auto-layout still avoids overlaps).
+function nodeSize(n: Node): { w: number; h: number } {
+  const w = (n as any).measured?.width ?? (n as any).width ?? DEF_W
+  const h = (n as any).measured?.height ?? (n as any).height ?? DEF_H
+  return { w, h }
+}
 
 export function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
   if (nodes.length === 0) return nodes
@@ -56,11 +67,28 @@ export function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
   const posY = new Map(nodes.map(n => [n.id, n.position?.y ?? 0]))
   for (const arr of byCol.values()) arr.sort((a, b) => (posY.get(a)! - posY.get(b)!) || a.localeCompare(b))
 
+  const nodeById = new Map(nodes.map(n => [n.id, n]))
+  // Column X = accumulated width of all previous columns (their WIDEST node) + COL_GAP, so a
+  // column of fat nodes pushes the next one further right (no horizontal overlap).
+  const cols = [...byCol.keys()].sort((a, b) => a - b)
+  const colX = new Map<number, number>()
+  let x = X0
+  for (const c of cols) {
+    colX.set(c, x)
+    let widest = DEF_W
+    for (const id of byCol.get(c)!) widest = Math.max(widest, nodeSize(nodeById.get(id)!).w)
+    x += widest + COL_GAP
+  }
+
+  // Within a column, stack by REAL height: y advances by each node's height + ROW_GAP, so a
+  // tall node (wait with N inputs, ui_builder) never overlaps the one below it.
   const newPos = new Map<string, { x: number; y: number }>()
   for (const [c, arr] of byCol) {
-    arr.forEach((id, row) => {
-      newPos.set(id, { x: X0 + c * COL_GAP, y: Y0 + row * ROW_GAP })
-    })
+    let y = Y0
+    for (const id of arr) {
+      newPos.set(id, { x: colX.get(c)!, y })
+      y += nodeSize(nodeById.get(id)!).h + ROW_GAP
+    }
   }
 
   return nodes.map(n => ({ ...n, position: newPos.get(n.id) ?? n.position }))

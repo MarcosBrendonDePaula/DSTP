@@ -41,7 +41,7 @@ export const EVENT_FIELDS: Record<string, string[]> = {
   trade_received: ['receiver', 'item'],
 
   chat_message: ['message'],
-  command: ['message', 'command', 'args'],
+  command: ['message', 'command_name', 'args', 'argc', 'rest', 'arg1', 'arg2', 'arg3'],
 
   container_opened: ['container_prefab'],
   container_closed: ['container_prefab'],
@@ -111,12 +111,19 @@ export const EVENT_FIELDS: Record<string, string[]> = {
   key_combo: ['keys', 'mode'],
 }
 
-// Build a placeholder { field: '<field>' } object for an event type. Always
-// includes the base trigger fields. Used by the detail panel's Input column.
-export function triggerShape(eventType: string | undefined): Record<string, any> {
+// Build a placeholder { field: '<field>' } object for an event type. Always includes the
+// base trigger fields. Used by the detail panel's Input column. `params` lets a trigger add
+// node-specific fields — e.g. a `command` trigger surfaces its declared arg names so the
+// flow can reference {{trigger.<name>}} before any capture.
+export function triggerShape(eventType: string | undefined, params?: Record<string, any>): Record<string, any> {
   const extra = (eventType && EVENT_FIELDS[eventType]) || []
   const all = [...BASE_TRIGGER_FIELDS, ...extra]
   const shape: Record<string, any> = {}
   for (const f of all) shape[f] = `<${f}>`
+  if (eventType === 'command' && Array.isArray(params?.args)) {
+    for (const a of params.args as Array<{ name?: string }>) {
+      if (a?.name) shape[a.name] = `<${a.name}>`
+    }
+  }
   return shape
 }

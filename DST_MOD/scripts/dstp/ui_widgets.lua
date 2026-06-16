@@ -305,14 +305,167 @@ local function CanvasChildren(node, container, ctx)
     local W = tonumber(node.width) or 0
     local H = tonumber(node.height) or 0
     for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
-        local cwidget = RenderNode(childdef, container, ctx)
+        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
         if cwidget then
+            -- x,y is the child's TOP-LEFT corner relative to the container's top-left
+            -- (matches the editor). DST widgets are centered on their own origin, so the
+            -- widget's CENTER must land at corner + half its own size. Container origin is
+            -- its center → left edge = -W/2, top edge = +H/2 (y grows up).
             local x = tonumber(childdef.x) or 0
             local y = tonumber(childdef.y) or 0
-            cwidget:SetPosition(x - W / 2, H / 2 - y, 0)
+            cw, ch = cw or 0, ch or 0
+            cwidget:SetPosition(-W / 2 + x + cw / 2, H / 2 - y - ch / 2, 0)
         end
     end
     return W, H
+end
+
+-- Grid mode: lay children out in a `cols`-column grid, row by row, with `gap` between
+-- cells. Each cell is the size of the largest child (uniform grid). Children stay
+-- "blocked" (auto-placed) but the whole grid sits inside a canvas container at its x,y.
+-- Returns (W, H) of the grid so the parent reserves the slot.
+-- Parse a row spec "50 50" / "25 25 25 25" / "50 50 @120" into { weights..., h=height }.
+-- "@N" (anywhere) fixes the row height in px; otherwise the row auto-sizes.
+local function ParseRowSpec(s)
+    local str = tostring(s or "")
+    local out = {}
+    local h = tonumber(str:match("@%s*(%d+%.?%d*)"))
+    str = str:gsub("@%s*%d+%.?%d*", " ")
+    for tok in str:gmatch("%S+") do
+        local n = tonumber(tok)
+        if n and n > 0 then table.insert(out, n) end
+    end
+    out.h = h
+    return out
+end
+
+-- Layout grid by ROWS of widths (Bootstrap-like). node.grid_rows = list of width specs,
+-- one per row ("50 50", "25 25 25 25"). A child sits in cell (gr=row, gc=col within the
+-- row). The grid has a fixed total width (node.width or measured); each row's columns split
+-- it by their weights. Children are centered in their cell. Rows stack top→down.
+local function GridChildren(node, container, ctx)
+    local gap = tonumber(node.gap) or 8
+    -- Build row specs (default: one row of `cols` equal columns).
+    local rowSpecs = {}
+    if type(node.grid_rows) == "table" then
+        for _, r in ipairs(node.grid_rows) do
+            local spec = ParseRowSpec(r)
+            if #spec > 0 then table.insert(rowSpecs, spec) end
+        end
+    end
+    if #rowSpecs == 0 then
+        local cols = math.max(1, math.floor(tonumber(node.cols) or 2))
+        local r = {}
+        for _ = 1, cols do table.insert(r, 1) end
+        rowSpecs = { r }
+    end
+
+    -- Render children; bucket by explicit (gr,gc), auto-flow the rest into free cells.
+    local placed = {}        -- placed[r][c] = widget
+    local kids = {}
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
+        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        if cwidget then
+            local gr = tonumber(childdef.gr)
+            local gc = tonumber(childdef.gc)
+            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0,
+                gr = gr and math.floor(gr) or nil, gc = gc and math.floor(gc) or nil })
+        end
+    end
+    local function put(r, c, k) placed[r] = placed[r] or {}; placed[r][c] = k end
+    for _, k in ipairs(kids) do
+        if k.gr ~= nil and k.gc ~= nil then put(k.gr, k.gc, k) end
+    end
+    -- auto-flow
+    do
+        local fr, fc = 0, 0
+        local function nextFree()
+            while true do
+                local cols = rowSpecs[fr + 1]
+                if not cols then return nil end
+                if fc >= #cols then fr = fr + 1; fc = 0
+                elseif placed[fr] and placed[fr][fc] then fc = fc + 1
+                else local r, c = fr, fc; fc = fc + 1; return r, c end
+            end
+        end
+        for _, k in ipairs(kids) do
+            if k.gr == nil or k.gc == nil then
+                local r, c = nextFree()
+                if r then put(r, c, k) end
+            end
+        end
+    end
+
+    -- Measure: total width = node.width (or the widest natural row), row height = tallest cell.
+    local totalW = tonumber(node.width)
+    if not totalW then
+        -- natural width = max over rows of (sum of cell natural widths + gaps)
+        totalW = 0
+        for r, cols in ipairs(rowSpecs) do
+            local sumw = 0
+            for c = 0, #cols - 1 do
+                local k = placed[r - 1] and placed[r - 1][c]
+                sumw = sumw + (k and k.width or 0)
+            end
+            sumw = sumw + gap * (#cols - 1)
+            if sumw > totalW then totalW = sumw end
+        end
+        if totalW <= 0 then totalW = 200 end
+    end
+
+    -- Row heights: each row's "@N" is a HEIGHT WEIGHT (fr) of the grid's total height
+    -- (node.height). Rows without @ get weight 1. If node.height is unset, fall back to the
+    -- measured (content) height per row so the grid still renders.
+    local rowH = {}
+    local gridH = 0
+    local totalH = tonumber(node.height)
+    if totalH then
+        local sumW = 0
+        for _, cols in ipairs(rowSpecs) do sumW = sumW + (cols.h and cols.h > 0 and cols.h or 1) end
+        local usableH = totalH - gap * (#rowSpecs - 1)
+        if usableH < 0 then usableH = totalH end
+        for r, cols in ipairs(rowSpecs) do
+            local wgt = (cols.h and cols.h > 0) and cols.h or 1
+            rowH[r] = usableH * (wgt / sumW)
+        end
+        gridH = totalH
+    else
+        for r, cols in ipairs(rowSpecs) do
+            local h = 0
+            for c = 0, #cols - 1 do
+                local k = placed[r - 1] and placed[r - 1][c]
+                if k and k.height > h then h = k.height end
+            end
+            if h <= 0 then h = 24 end
+            rowH[r] = h
+            gridH = gridH + h
+        end
+        gridH = gridH + gap * (#rowSpecs - 1)
+    end
+
+    -- Place: rows top→down (DST grows up → start at +gridH/2). Within a row, columns split
+    -- totalW by weight; center each child in its column band.
+    local yTop = gridH / 2
+    for r, cols in ipairs(rowSpecs) do
+        local total = 0
+        for _, wgt in ipairs(cols) do total = total + wgt end
+        local h = rowH[r]
+        local yCenter = yTop - h / 2
+        local usableW = totalW - gap * (#cols - 1)
+        local xLeft = -totalW / 2
+        for c = 0, #cols - 1 do
+            local wgt = cols[c + 1]
+            local bandW = usableW * (wgt / total)
+            local k = placed[r - 1] and placed[r - 1][c]
+            if k then
+                local xCenter = xLeft + bandW / 2
+                k.w:SetPosition(xCenter, yCenter, 0)
+            end
+            xLeft = xLeft + bandW + gap
+        end
+        yTop = yTop - h - gap
+    end
+    return totalW, gridH
 end
 
 -- Register an addressable node: ctx.byId[id] = { widget, patch }. `patch` is a
@@ -387,7 +540,8 @@ local function MaybeClickable(widget, node, ctx, w, h)
         local now = _G.GetTime and _G.GetTime() or 0
         if last >= 0 and (now - last) < 0.5 then return end  -- 0.5s debounce, as buttons
         last = now
-        if ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+        if ctx.fire then ctx.fire(cb, {})
+        elseif ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
     end
     -- pad: Text's GetRegionSize can under-report the glyphs, so inflate a touch so the
     -- whole string is clickable. node.hit_pad tunes it; default 8.
@@ -466,6 +620,9 @@ RenderNodeImpl = function(node, parent, ctx)
         if node.mode == "canvas" then
             local w, h = CanvasChildren(node, c, ctx)
             return c, w, h
+        elseif node.mode == "grid" then
+            local w, h = GridChildren(node, c, ctx)
+            return c, tonumber(node.width) or w, tonumber(node.height) or h
         end
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
         -- Optional fixed size: when width/height are set, REPORT that size to the parent
@@ -652,7 +809,8 @@ RenderNodeImpl = function(node, parent, ctx)
             local now = _G.GetTime and _G.GetTime() or 0
             if last >= 0 and (now - last) < 0.5 then return end
             last = now
-            if cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
+            if ctx.fire then ctx.fire(cb, { id = node.id })
+            elseif cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id) end
         end)
         Register(ctx, node, holder, function(props)
             if props.text ~= nil and label.inst:IsValid() then label:SetString(tostring(props.text)) end
@@ -698,7 +856,8 @@ RenderNodeImpl = function(node, parent, ctx)
             if last >= 0 and (now - last) < 0.3 then return end  -- debounce vs double-fire
             last = now
             local s = (node.password and te.GetLineEditString) and te:GetLineEditString() or te:GetString()
-            ctx.callback_fn(cb, ctx.root_id, { value = s or "", id = node.id })
+            if ctx.fire then ctx.fire(cb, { value = s or "", id = node.id })
+            else ctx.callback_fn(cb, ctx.root_id, { value = s or "", id = node.id }) end
             if node.clear_on_submit and te.SetString then te:SetString("") end
         end
         te.OnTextEntered = function() submit() end                          -- Enter commit
@@ -711,6 +870,18 @@ RenderNodeImpl = function(node, parent, ctx)
         -- Remember the field so the tree-destroy path can release the keyboard grab.
         ctx.text_fields = ctx.text_fields or {}
         ctx.text_fields[#ctx.text_fields + 1] = te
+        -- Register a value getter keyed by the field id, so ANY callback (a button, another
+        -- field) can ship every field's current value as callback_data.fields[id]. If the
+        -- field has no explicit id, auto-assign "field_N" so it STILL shows up in fields
+        -- (generic — the user doesn't have to set an id for the data to be captured).
+        do
+            ctx.field_getters = ctx.field_getters or {}
+            local fid = node.id and tostring(node.id) or ("field_" .. (#ctx.field_getters + 1))
+            ctx.field_getters[#ctx.field_getters + 1] = { id = fid, get = function()
+                if not te.inst:IsValid() then return "" end
+                return ((node.password and te.GetLineEditString) and te:GetLineEditString() or te:GetString()) or ""
+            end }
+        end
 
         Register(ctx, node, holder, function(props)
             if not te.inst:IsValid() then return end
@@ -797,11 +968,13 @@ RenderNodeImpl = function(node, parent, ctx)
             -- Render any children too (composed nodes), centered as a col (or canvas).
             local content = holder:AddChild(Widget("content"))
             if node.mode == "canvas" then CanvasChildren(node, content, ctx)
+            elseif node.mode == "grid" then GridChildren(node, content, ctx)
             else LayoutChildren(node, content, ctx, "y") end
         else
             local content = holder:AddChild(Widget("content"))
             local cw, ch
             if node.mode == "canvas" then cw, ch = CanvasChildren(node, content, ctx)
+            elseif node.mode == "grid" then cw, ch = GridChildren(node, content, ctx)
             else cw, ch = LayoutChildren(node, content, ctx, "y") end
             local padX, padY = 28, 28
             pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
@@ -875,6 +1048,19 @@ CreateTree = function(cmd)
     if not root or not cmd.tree then return nil end
     local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
     local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id, byId = {} }
+    -- fire(cb, data): send a callback, ALWAYS enriching callback_data with `fields` = every
+    -- text_input's current value keyed by its id. So a button click ships the whole form.
+    ctx.fire = function(cb, data)
+        if not (cb and ctx.callback_fn) then return end
+        local fields = {}
+        for _, fg in ipairs(ctx.field_getters or {}) do
+            local ok, v = _G.pcall(fg.get)
+            fields[fg.id] = ok and v or ""
+        end
+        data = data or {}
+        data.fields = fields
+        ctx.callback_fn(cb, ctx.root_id, data)
+    end
     RenderNode(cmd.tree, w, ctx)
     local ax, ay = AnchorOffset(cmd.anchor or "center")
     w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
