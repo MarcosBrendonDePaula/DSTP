@@ -99,7 +99,14 @@ local function DoPoll()
             state.poll_in_flight = false
             if isSuccessful and result then
                 local data = SafeDecode(result)
-                if data then
+                -- A backend that is UP but answers garbage (200 + JSON whose fields are
+                -- the wrong type) must NOT crash the game. SafeDecode already pcall-guards
+                -- the parse; here we (1) require the decoded body to be a table, (2) type-
+                -- check every field before iterating it, and (3) wrap the whole apply in
+                -- pcall as a backstop for any field we forgot — a malformed response is a
+                -- logged no-op, never a crash. (Backend DOWN is the else-branch / #17.)
+                if type(data) == "table" then
+                    local ok, err = _G.pcall(function()
                     -- POST confirmed: NOW drain the events we sent. We remove them BY
                     -- IDENTITY (each event is a unique table), not by position: during
                     -- the round-trip new events are appended AND the core queue cap
@@ -124,27 +131,31 @@ local function DoPoll()
                     if sending_prefabs then state.prefabs_sent = true end
                     -- Backend lost its cache (restart) → resend on the next poll.
                     if data.request_prefabs then state.prefabs_sent = false end
-                    if data.commands and #data.commands > 0 then
+                    if type(data.commands) == "table" and #data.commands > 0 then
                         state.last_cmd_count = #data.commands
                         ProcessCommands(data.commands)
                     else
                         state.last_cmd_count = 0
                     end
                     -- Hot-toggle event categories from backend
-                    if data.enable_events then
+                    if type(data.enable_events) == "table" then
                         HotToggleEvents(data.enable_events)
                     end
                     -- Update the key_pressed watch set (which keys clients listen for)
-                    if data.watch_keys then
+                    if type(data.watch_keys) == "table" then
                         SetWatchKeys(data.watch_keys)
                     end
                     -- Update debounce times from backend
-                    if data.debounce then
+                    if type(data.debounce) == "table" then
                         for k, v in pairs(data.debounce) do
                             if type(v) == "number" then
                                 event_debounce[k] = v
                             end
                         end
+                    end
+                    end)
+                    if not ok then
+                        LogError("Malformed /dst/sync response — discarded: " .. tostring(err))
                     end
                 end
             else
@@ -189,16 +200,30 @@ function Http.Init(c, collectors)
 end
 
 -- Start the self-scheduling adaptive poll on the world inst. First poll after 2s.
+-- DoPoll is wrapped in pcall so a failure inside it (a collector touching bad game
+-- state, etc.) can NEVER kill the re-schedule — otherwise one throw would stop polling
+-- permanently. A crashed poll is logged; the next one is always scheduled.
 function Http.Start(inst)
+    local function SafePoll()
+        local ok, err = _G.pcall(DoPoll)
+        if not ok then
+            -- Release the in-flight guard so a mid-poll crash can't deadlock polling.
+            state.poll_in_flight = false
+            LogError("Poll cycle errored — continuing: " .. tostring(err))
+        end
+    end
     local function ScheduleNextPoll()
-        local delay = ComputeNextDelay()
+        -- ComputeNextDelay reads game state (TheNet); guard it so a throw here can't
+        -- break the scheduling chain. Fall back to the configured interval.
+        local ok, delay = _G.pcall(ComputeNextDelay)
+        if not ok or type(delay) ~= "number" then delay = config.poll_interval or 5 end
         inst:DoTaskInTime(delay, function()
-            DoPoll()
+            SafePoll()
             ScheduleNextPoll()
         end)
     end
     inst:DoTaskInTime(2, function()
-        DoPoll()
+        SafePoll()
         ScheduleNextPoll()
     end)
 end
