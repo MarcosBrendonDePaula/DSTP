@@ -9,9 +9,7 @@
 // provider client — never the prompt/system text sent to the model.
 
 import { generateText, stepCountIs, dynamicTool, jsonSchema, type ToolSet } from 'ai'
-import { createAnthropic } from '@ai-sdk/anthropic'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { buildModel } from './buildModel'
 import type { FlowNode, FlowEdge } from '../../db'
 import { maskSecrets } from '../vault-mask'
 
@@ -124,15 +122,7 @@ export interface AIAgentDeps {
   saveHistory?: (scopeKey: string, turns: ChatTurn[]) => void
 }
 
-// Build the language model for the configured provider, using the resolved key.
-function buildModel(provider: string, model: string, apiKey: string) {
-  switch (provider) {
-    case 'anthropic': return createAnthropic({ apiKey })(model)
-    case 'openai': return createOpenAI({ apiKey })(model)
-    case 'google': return createGoogleGenerativeAI({ apiKey })(model)
-    default: throw new Error(`unknown AI provider: ${provider}`)
-  }
-}
+// buildModel moved to ./buildModel (shared with the AI flow generator).
 
 // Sanitize a node into a valid tool name: [a-zA-Z0-9_], non-empty.
 export function toolNameFor(node: FlowNode, used: Set<string>): string {

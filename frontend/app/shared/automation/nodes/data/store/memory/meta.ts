@@ -18,6 +18,9 @@ export const meta: NodeMeta = {
 
   subgroup: 'Armazenamento',
   defaults: { action: 'read', params: { key: '' } },
+  aiEnums: { action: ['read', 'write', 'delete', 'read_all'] },
+  aiConfigExample: { action: 'read', params: { key: 'coins:{{trigger.userid}}' }, alias: 'bal' },
+  aiConfigNote: "action is FLAT on data. write uses params.value. Output {{alias.value}}.",
   outputSchema: {
     description: 'Result of the memory operation',
     fields: [

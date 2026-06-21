@@ -12,10 +12,16 @@ export const meta: NodeMeta = {
   aiParamDescriptions: {
     list: 'The array to iterate (e.g. {{getPlayers.players}} or a {{node.field}} that resolves to an array).',
   },
+  aiConfigExample: { params: { list: '{{listAllPlayers.players}}' } },
+  aiConfigNote: "params.list must resolve to an array. Handles 'each' (per item) / 'done'. Inside 'each' use {{loop.item}} and {{loop.index}}. Cap 40.",
   kind: 'logic',
 
   subgroup: 'Repetição',
   defaults: { params: { list: '' } },
+  outputHandles: [
+    { id: 'each', description: 'Runs once per list item ({{loop.item}}/{{loop.index}}).' },
+    { id: 'done', description: 'Runs once after the iteration finishes.' },
+  ],
   outputSchema: {
     description: 'Loop summary (available after "done")',
     fields: [

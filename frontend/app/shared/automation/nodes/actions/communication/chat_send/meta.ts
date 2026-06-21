@@ -26,6 +26,7 @@ export const meta: NodeMeta = {
     }
   ],
   defaults: { action_type: 'chat_send', params: {} },
+  aiConfigExample: { action_type: 'chat_send', params: { message: 'Bem-vindo {{trigger.name}}!', name: '[DSTP]' } },
   outputSchema: {
     description: 'chat_send result',
     fields: [

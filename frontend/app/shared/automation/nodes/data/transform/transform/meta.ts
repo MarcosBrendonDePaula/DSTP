@@ -19,6 +19,9 @@ export const meta: NodeMeta = {
 
   subgroup: 'Transformar',
   defaults: { params: { value: '', operation: 'uppercase', operand: '', replacement: '' } },
+  aiEnums: { operation: ['uppercase', 'lowercase', 'trim', 'length', 'number', 'round', 'add', 'sub', 'mul', 'div', 'json_parse', 'json_stringify', 'replace'] },
+  aiConfigExample: { params: { value: '{{bal.value}}', operation: 'number' }, alias: 'coins' },
+  aiConfigNote: 'add/sub/mul/div use params.operand; replace uses params.replacement. Output is {{alias.value}}.',
   outputSchema: {
     description: 'Transform result',
     fields: [{ name: 'value', type: 'any', description: 'The transformed value' }],

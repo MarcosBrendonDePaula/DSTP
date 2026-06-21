@@ -19,6 +19,11 @@ export const meta: NodeMeta = {
 
   subgroup: 'Jogador',
   defaults: { params: { userid: '{{trigger.userid}}', attribute: 'temperature', mode: 'set', value: '' } },
+  aiEnums: {
+    attribute: ['health', 'hunger', 'sanity', 'max_health', 'temperature', 'moisture', 'fire', 'freeze', 'speed', 'position', 'tag'],
+    mode: ['percent', 'value', 'on', 'off'],
+  },
+  aiConfigExample: { params: { userid: '{{trigger.userid}}', attribute: 'health', mode: 'percent', value: '0.5' } },
   outputSchema: {
     description: 'Player state applied',
     fields: [

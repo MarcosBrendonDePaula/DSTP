@@ -34,6 +34,19 @@ export interface NodeMeta {
   /** Optional per-param hints for the AI tool schema (param key → what it means).
    *  Used to enrich the generated tool input schema instead of "Parameter X". */
   aiParamDescriptions?: Record<string, string>
+  /** Allowed values for enum-like params (param key → exact accepted values), so the
+   *  flow-generator AI emits a valid `operator`/`event_type`/`action_type` instead of
+   *  inventing one. Only list params whose value space is CLOSED; free-text stays
+   *  absent. Runtime source of truth is exec.ts / the ui.tsx option lists — kept in
+   *  sync by meta-enum.test.ts. */
+  aiEnums?: Record<string, string[]>
+  /** ONE valid `node.data` object for this node — the literal an author would save,
+   *  with correct nesting (flat vs data.params) and a real template ref. The flow
+   *  generator copies its shape; highest-leverage field for getting `data` right. */
+  aiConfigExample?: Record<string, any>
+  /** Short free-form grammar note for nodes a flat example can't fully capture
+   *  (ui_builder tree, switch dynamic cases). Rendered verbatim after the example. */
+  aiConfigNote?: string
   kind: NodeKind
   /** Form fields rendered in the node body / detail modal. For dedicated action
    *  nodes these were moved OUT of the central ACTION_TYPES catalog so each node
@@ -43,6 +56,15 @@ export interface NodeMeta {
   defaults?: Record<string, any>
   /** Output shape for {{node.field}} autocomplete (replaces nodeOutputSchemas). */
   outputSchema?: NodeOutputSchema
+  /** Named output handles for edges that branch (condition/switch/foreach/loop/
+   *  try_catch). Omit for the common case of a single unnamed output — consumers
+   *  (the AI catalog, the validator) treat "no outputHandles" as one default edge.
+   *  `dynamic` marks a handle whose exact id is derived at author time from the
+   *  node's data (e.g. switch's `case_<i>`, one per entry in data.cases); `id` then
+   *  holds the PATTERN and `description` explains how to expand it. The engine's
+   *  exec.ts is the source of truth for which handles it actually follows — this
+   *  field just MIRRORS that so it can be read without importing the handler. */
+  outputHandles?: Array<{ id: string; description?: string; dynamic?: boolean }>
   /** Hide from the palette (internal/child-only nodes). */
   hidden?: boolean
   /** Flow-control flags read by FlowAnalyzer / the engine dispatcher. */

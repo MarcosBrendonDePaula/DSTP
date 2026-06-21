@@ -12,10 +12,21 @@ export const meta: NodeMeta = {
   aiParamDescriptions: {
     mode: 'while (loop while the condition is true) | until (loop until the condition becomes true)',
   },
+  aiEnums: {
+    mode: ['while', 'until'],
+    operator: ['equals', 'not_equals', 'greater_than', 'less_than', 'contains',
+      'not_contains', 'starts_with', 'not_starts_with', 'ends_with', 'exists'],
+  },
+  aiConfigExample: { params: { mode: 'while' }, field: '{{vars.counter}}', operator: 'less_than', value: '10' },
+  aiConfigNote: "params.mode is nested; field/operator/value are FLAT on data. Handles: 'body'/'done'. Cap 200 iterations.",
   kind: 'logic',
 
   subgroup: 'Repetição',
   defaults: { params: { mode: 'while' }, field: '', operator: '', value: '' },
+  outputHandles: [
+    { id: 'body', description: 'The loop body, re-run each iteration.' },
+    { id: 'done', description: 'Runs once after the loop stops.' },
+  ],
   outputSchema: {
     description: 'Loop summary (available after the "done" handle)',
     fields: [

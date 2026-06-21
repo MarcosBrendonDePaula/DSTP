@@ -22,6 +22,7 @@ export const meta: NodeMeta = {
     }
   ],
   defaults: { action_type: 'announce', params: {} },
+  aiConfigExample: { action_type: 'announce', params: { message: '{{trigger.name}} entrou no servidor!' } },
   outputSchema: {
     description: 'announce result',
     fields: [

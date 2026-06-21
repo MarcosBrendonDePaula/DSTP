@@ -13,6 +13,10 @@ export const meta: NodeMeta = {
 
   subgroup: 'Ramificação',
   defaults: { params: {} },
+  outputHandles: [
+    { id: 'try', description: 'The guarded branch. Errors here are caught.' },
+    { id: 'catch', description: 'Runs instead if the try branch throws ({{<node>.error}}).' },
+  ],
   outputSchema: {
     description: 'Try/catch result',
     fields: [

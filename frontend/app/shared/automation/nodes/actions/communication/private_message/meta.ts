@@ -27,6 +27,7 @@ export const meta: NodeMeta = {
     }
   ],
   defaults: { action_type: 'private_message', params: {} },
+  aiConfigExample: { action_type: 'private_message', params: { userid: '{{trigger.userid}}', message: 'Mensagem privada' } },
   outputSchema: {
     description: 'private_message result',
     fields: [

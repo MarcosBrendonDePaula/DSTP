@@ -18,6 +18,8 @@ export const meta: NodeMeta = {
 
   subgroup: 'Aleatório',
   defaults: { params: { list: '', min: '', max: '' } },
+  aiConfigExample: { params: { min: '1', max: '6' }, alias: 'd' },
+  aiConfigNote: 'params.min/max for an integer, OR params.list for a random list pick. Output {{alias.value}}.',
   outputSchema: {
     description: 'Random pick',
     fields: [
