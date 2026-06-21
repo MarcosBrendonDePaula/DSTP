@@ -18,6 +18,27 @@ export interface SimHostOptions {
   verbose?: boolean
 }
 
+// A representative slice of real DST prefab names, sent once on the first sync so
+// prefab-autocomplete inputs (give_item, spawn_prefab, ...) have a list to offer in
+// the simulator — a real game sends its full _G.Prefabs via the mod.
+const SIM_PREFABS = [
+  'log', 'twigs', 'cutgrass', 'flint', 'rocks', 'goldnugget', 'nitre', 'charcoal',
+  'cutreeds', 'silk', 'spidergland', 'monstermeat', 'meat', 'smallmeat', 'berries',
+  'carrot', 'seeds', 'petals', 'foliage', 'rope', 'boards', 'cutstone', 'papyrus',
+  'torch', 'campfire', 'firepit', 'spear', 'spear_wathgrithr', 'hambat', 'nightsword',
+  'axe', 'pickaxe', 'goldenaxe', 'goldenpickaxe', 'shovel', 'hammer', 'pitchfork',
+  'armorwood', 'armormarble', 'armorgrass', 'footballhat', 'tophat', 'strawhat',
+  'backpack', 'piggyback', 'krampus_sack', 'icebox', 'cookpot', 'meatballs',
+  'healingsalve', 'bandage', 'lifeinjector', 'amulet', 'redamulet', 'blueamulet',
+  'purpleamulet', 'orangeamulet', 'yellowamulet', 'greenamulet',
+  'beefalo', 'pigman', 'spider', 'hound', 'frog', 'rabbit', 'butterfly', 'bee',
+  'killerbee', 'tentacle', 'tallbird', 'krampus', 'deerclops', 'bearger', 'dragonfly',
+  'spiderden', 'rabbithole', 'beehive', 'wasphive', 'pighouse', 'wall_stone',
+  'wall_wood', 'wall_hay', 'treasurechest', 'researchlab', 'researchlab2', 'tent',
+  'flower', 'sapling', 'grass', 'berrybush', 'tree', 'evergreen', 'rock1', 'rock2',
+  'flint_rock', 'goldenrock', 'marble', 'gears', 'transistor', 'lightbulb', 'slurtleslime',
+]
+
 export class SimHost {
   private baseUrl: string
   private serverId: string
@@ -38,6 +59,7 @@ export class SimHost {
 
   private timer: ReturnType<typeof setInterval> | null = null
   private polling = false
+  private prefabsSent = false
 
   // stats
   pollCount = 0
@@ -132,6 +154,8 @@ export class SimHost {
       events,
       active_events: this.activeEvents,
     }
+    // Send the prefab list once (like the mod does) so autocomplete has data.
+    if (!this.prefabsSent) (body as any).prefabs = SIM_PREFABS
 
     try {
       const res = await fetch(`${this.baseUrl}/api/dst/sync`, {
@@ -141,6 +165,11 @@ export class SimHost {
       })
       const json = (await res.json()) as SyncResponse
       this.pollCount++
+
+      // We sent prefabs this cycle and the POST succeeded → don't resend. If the
+      // backend lost its cache (request_prefabs), send them again next poll.
+      if ((body as any).prefabs) this.prefabsSent = true
+      if ((json as any).request_prefabs) this.prefabsSent = false
 
       // Honor backend's enable_events request (auto-activation), so subsequent
       // polls report the right active_events — mirrors the mod.

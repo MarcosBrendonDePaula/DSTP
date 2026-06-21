@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { LuKey } from 'react-icons/lu'
 import { apiGet, apiSend, seg } from '../lib/api'
 
 // Environments vault UI. Lists environments, lets you create/delete them and
@@ -76,7 +77,7 @@ export function EnvironmentsModal({ serverId, onClose }: { serverId: string; onC
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
-          <h2 className="text-base font-bold text-white">🔑 Environments</h2>
+          <h2 className="text-base font-bold text-white flex items-center gap-1.5"><LuKey className="w-4 h-4" /> Environments</h2>
           <span className="text-[10px] text-gray-600">{serverId}</span>
           <div className="flex-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>

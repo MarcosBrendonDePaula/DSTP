@@ -1,9 +1,30 @@
 // DSTPanel - DST Admin Panel usando Live Components
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import {
+  LuGamepad2, LuZap, LuPuzzle, LuGlobe, LuLock, LuPlug, LuPickaxe,
+  LuSun, LuSunrise, LuMoon, LuSkipForward, LuLeaf, LuSnowflake, LuFlower2,
+  LuCloudRain, LuRotateCcw, LuSkull, LuCrown, LuMapPin, LuThermometer,
+  LuDroplets, LuBackpack, LuShield, LuMessageCircle, LuClipboardList,
+  LuLayoutGrid, LuSword, LuFuel,
+  LuHeart, LuUtensils, LuBrain, LuRefreshCw, LuGift, LuUserX, LuBan,
+  LuUsers, LuArrowRight, LuPackage,
+} from 'react-icons/lu'
 import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveDSTP } from '@server/live/LiveDSTP'
 import { useServerRoom } from './useServerRoom'
+import { getPrefabs, subscribePrefabs } from '../automation/prefabCache'
+
+// Live list of this server's runtime prefabs (for the Give Item autocomplete).
+function usePrefabs(): string[] {
+  const [prefabs, setPrefabs] = useState<string[]>(() => getPrefabs())
+  useEffect(() => {
+    const off = subscribePrefabs(() => setPrefabs(getPrefabs()))
+    setPrefabs(getPrefabs()) // kicks off a fetch if not cached
+    return off
+  }, [])
+  return prefabs
+}
 import { AccountMenu } from '../components/AccountMenu'
 
 // ─── Confirm Dialog Hook ─────────────────────────────
@@ -78,9 +99,9 @@ function useConfirm() {
 // ─── Icons (inline SVG) ─────────────────────────────
 
 const Icons = {
-  heart: <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>,
-  hunger: <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M18.06 23h1.66c.84 0 1.53-.65 1.63-1.47L23 7h-5.75l.42-4.44C17.72 2.11 17.34 1.7 16.9 1.7c-.28 0-.55.15-.7.38l-5.2 8.3H1v12h9.49l1.57-5.84zM9 20H3v-8h6v8z"/></svg>,
-  brain: <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>,
+  heart: <LuHeart className="w-3 h-3" />,
+  hunger: <LuUtensils className="w-3 h-3" />,
+  brain: <LuBrain className="w-3 h-3" />,
   close: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path d="M18 6L6 18M6 6l12 12"/></svg>,
   bag: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM10 4h4v2h-4V4z"/></svg>,
   shield: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>,
@@ -169,8 +190,8 @@ function InventoryView({ inventory }: { inventory: any }) {
           <div className="flex items-center gap-2">
             <span className="text-xs text-white font-medium truncate">{item.name || item.prefab}</span>
             {item.stack && item.stack > 1 && <span className="text-[10px] px-1.5 rounded bg-white/5 text-gray-400 font-mono">x{item.stack}</span>}
-            {item.damage != null && <Badge color="#ef4444">⚔ {item.damage}</Badge>}
-            {hasArmor && <Badge color="#60a5fa">🛡 {Math.round(item.absorb * 100)}%</Badge>}
+            {item.damage != null && <Badge color="#ef4444"><LuSword className="w-3 h-3 inline-block mr-0.5" />{item.damage}</Badge>}
+            {hasArmor && <Badge color="#60a5fa"><LuShield className="w-3 h-3 inline-block mr-0.5" />{Math.round(item.absorb * 100)}%</Badge>}
           </div>
           {(hasDurability || hasPerish || hasArmor || hasFuel) && (
             <div className="flex gap-3 mt-1">
@@ -201,7 +222,7 @@ function InventoryView({ inventory }: { inventory: any }) {
                 </div>
               )}
               {hasFuel && (
-                <span className="text-[9px] text-orange-400">⛽ {Math.round(item.fuel)}/{Math.round(item.max_fuel)}</span>
+                <span className="text-[9px] text-orange-400 inline-flex items-center gap-0.5"><LuFuel className="w-3 h-3" /> {Math.round(item.fuel)}/{Math.round(item.max_fuel)}</span>
               )}
             </div>
           )}
@@ -303,7 +324,7 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-white truncate">{player.name}</span>
-            <span className="text-[10px] text-gray-600">{player.shard_type === 'caves' ? '⛏' : '🌍'}</span>
+            <span className="text-[10px] text-gray-600">{player.shard_type === 'caves' ? <LuPickaxe className="w-3 h-3 inline-block" /> : <LuGlobe className="w-3 h-3 inline-block" />}</span>
           </div>
           <div className="text-[10px] text-gray-500">{player.prefab} · Day {player.age}</div>
         </div>
@@ -312,7 +333,7 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
           {buffs.in_combat && <Badge color="#ef4444">COMBAT</Badge>}
           {buffs.is_starving && <Badge color="#facc15">STARVING</Badge>}
           {hp?.invincible && <Badge color="#4ade80">GOD</Badge>}
-          {player.admin && <Badge color="#f59e0b">👑 ADMIN</Badge>}
+          {player.admin && <Badge color="#f59e0b"><LuCrown className="w-3 h-3 inline-block mr-0.5" />ADMIN</Badge>}
         </div>
       </div>
 
@@ -325,9 +346,9 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
 
       {/* Info row */}
       <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-3 tabular-nums font-mono">
-        {player.position && <span>📍 {player.position.x}, {player.position.z}</span>}
-        {buffs.temperature != null && <span>🌡 {buffs.temperature}°</span>}
-        {buffs.moisture != null && buffs.moisture > 0 && <span>💧 {buffs.moisture}</span>}
+        {player.position && <span className="inline-flex items-center gap-0.5"><LuMapPin className="w-3 h-3" /> {player.position.x}, {player.position.z}</span>}
+        {buffs.temperature != null && <span className="inline-flex items-center gap-0.5"><LuThermometer className="w-3 h-3" /> {buffs.temperature}°</span>}
+        {buffs.moisture != null && buffs.moisture > 0 && <span className="inline-flex items-center gap-0.5"><LuDroplets className="w-3 h-3" /> {buffs.moisture}</span>}
       </div>
 
       {/* Quick actions */}
@@ -337,7 +358,7 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
         <Btn color="#fb923c" size="xs" onClick={(e) => { e.stopPropagation(); onAction('restore_sanity', player) }}>Sanity</Btn>
         <Btn color="#c084fc" size="xs" onClick={(e) => { e.stopPropagation(); onAction('respawn', player) }}>Respawn</Btn>
         <div className="flex-1" />
-        <Btn color="#60a5fa" size="xs" onClick={(e) => { e.stopPropagation(); onOpenInventory(player) }}>🎒 Inventory</Btn>
+        <Btn color="#60a5fa" size="xs" onClick={(e) => { e.stopPropagation(); onOpenInventory(player) }}><LuBackpack className="w-3 h-3 inline-block mr-0.5" />Inventory</Btn>
         <Btn color="#f87171" size="xs" onClick={(e) => { e.stopPropagation(); onAction('kick', player) }}>Kick</Btn>
       </div>
     </div>
@@ -346,9 +367,13 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
 
 // ─── Player Actions Modal ────────────────────────────
 
-function PlayerActionsModal({ player, open, onClose, onAction }: any) {
+function PlayerActionsModal({ player, open, onClose, onAction, allPlayers = [] }: any) {
   const [giveItem, setGiveItem] = useState('')
   const [giveCount, setGiveCount] = useState('1')
+  const [tpTarget, setTpTarget] = useState('')
+  const prefabs = usePrefabs()
+  // Other online players this one can be teleported TO.
+  const tpTargets = (allPlayers as any[]).filter(p => p.userid !== player?.userid)
   const [tpX, setTpX] = useState(player?.position?.x?.toString() || '')
   const [tpZ, setTpZ] = useState(player?.position?.z?.toString() || '')
 
@@ -364,75 +389,107 @@ function PlayerActionsModal({ player, open, onClose, onAction }: any) {
 
   return (
     <Modal open={open} onClose={onClose} title={`${player.name} — Ações`}>
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/5">
-        <CharacterAvatar prefab={player.prefab} isGhost={player.buffs?.is_ghost} size={48} />
-        <div>
-          <div className="text-sm font-bold text-white">{player.name}</div>
-          <div className="text-[10px] text-gray-500">{player.prefab} · Day {player.age} · {player.userid}</div>
-          <div className="text-[10px] text-gray-600">{player.shard_type === 'caves' ? '⛏ Caves' : '🌍 Overworld'} · Pos: {player.position?.x}, {player.position?.z}</div>
+      <div className="mb-4 pb-3 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <CharacterAvatar prefab={player.prefab} isGhost={player.buffs?.is_ghost} size={48} />
+          <div>
+            <div className="text-sm font-bold text-white">{player.name}</div>
+            <div className="text-[10px] text-gray-500">{player.prefab} · Day {player.age} · {player.userid}</div>
+            <div className="text-[10px] text-gray-600 flex items-center gap-1">{player.shard_type === 'caves' ? <><LuPickaxe className="w-3 h-3" /> Caves</> : <><LuGlobe className="w-3 h-3" /> Overworld</>} · Pos: {player.position?.x}, {player.position?.z}</div>
+          </div>
+        </div>
+        {/* Live status bars */}
+        <div className="space-y-1.5 mt-3">
+          {player.health && <Bar current={player.health.current} max={player.health.max} color="#ef4444" icon={Icons.heart} />}
+          {player.hunger && <Bar current={player.hunger.current} max={player.hunger.max} color="#eab308" icon={Icons.hunger} />}
+          {player.sanity && <Bar current={player.sanity.current} max={player.sanity.max} color="#f97316" icon={Icons.brain} />}
         </div>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Status actions */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Status</h4>
+        <Section icon={<LuHeart className="w-3.5 h-3.5" />} title="Status">
           <div className="flex gap-1.5 flex-wrap">
-            <Btn color="#4ade80" size="md" onClick={() => onAction('heal', player)}>Full Heal</Btn>
-            <Btn color="#facc15" size="md" onClick={() => onAction('feed', player)}>Full Feed</Btn>
-            <Btn color="#fb923c" size="md" onClick={() => onAction('restore_sanity', player)}>Full Sanity</Btn>
-            <Btn color="#c084fc" size="md" onClick={() => onAction('respawn', player)}>Respawn</Btn>
+            <Btn color="#4ade80" size="md" onClick={() => onAction('heal', player)}><LuHeart className="w-3.5 h-3.5 inline-block mr-1" />Heal</Btn>
+            <Btn color="#facc15" size="md" onClick={() => onAction('feed', player)}><LuUtensils className="w-3.5 h-3.5 inline-block mr-1" />Feed</Btn>
+            <Btn color="#fb923c" size="md" onClick={() => onAction('restore_sanity', player)}><LuBrain className="w-3.5 h-3.5 inline-block mr-1" />Sanity</Btn>
+            <Btn color="#c084fc" size="md" onClick={() => onAction('respawn', player)}><LuRefreshCw className="w-3.5 h-3.5 inline-block mr-1" />Respawn</Btn>
             <Btn color="#60a5fa" size="md" onClick={() => onAction('godmode', player, { enabled: !player.health?.invincible })}>
-              {player.health?.invincible ? '🛡 Godmode OFF' : '🛡 Godmode ON'}
+              <LuShield className="w-3.5 h-3.5 inline-block mr-1" />{player.health?.invincible ? 'Godmode OFF' : 'Godmode ON'}
             </Btn>
           </div>
-        </div>
-
-        {/* Admin */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Admin</h4>
-          <div className="flex gap-1.5 flex-wrap">
-            <Btn color="#22c55e" size="md" onClick={() => onAction('add_admin', player)}>👑 Set Admin</Btn>
-            <Btn color="#6b7280" size="md" onClick={() => onAction('remove_admin', player)}>Remove Admin</Btn>
-          </div>
-        </div>
-
-        {/* Danger zone */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-red-400/60 uppercase tracking-wider mb-2">Danger Zone</h4>
-          <div className="flex gap-1.5 flex-wrap">
-            {!player.health?.invincible && <Btn color="#f87171" size="md" onClick={() => onAction('kill', player)}>Kill</Btn>}
-            <Btn color="#b91c1c" size="md" onClick={() => onAction('kick', player)}>Kick</Btn>
-            <Btn color="#7f1d1d" size="md" onClick={() => onAction('ban', player)}>Ban</Btn>
-          </div>
-        </div>
+        </Section>
 
         {/* Give Item */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Give Item</h4>
+        <Section icon={<LuGift className="w-3.5 h-3.5" />} title="Dar item">
           <div className="flex gap-2">
-            <input className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white flex-1 focus:border-blue-500/30 focus:outline-none" placeholder="prefab (log, spear, goldnugget...)" value={giveItem} onChange={e => setGiveItem(e.target.value)} />
-            <input className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-16 text-center focus:border-blue-500/30 focus:outline-none" placeholder="qty" value={giveCount} onChange={e => setGiveCount(e.target.value)} />
-            <Btn color="#60a5fa" size="md" onClick={() => { if (giveItem) { onAction('give_item', player, { prefab: giveItem, count: parseInt(giveCount) || 1 }); setGiveItem('') } }}>Give</Btn>
+            <div className="relative flex-1">
+              <LuPackage className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input list="dstp-prefab-list" className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:border-blue-500/40 focus:outline-none" placeholder="prefab (log, spear, goldnugget…)" value={giveItem} onChange={e => setGiveItem(e.target.value)} />
+              <datalist id="dstp-prefab-list">
+                {prefabs.map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+            <input className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-14 text-center font-mono focus:border-blue-500/40 focus:outline-none" placeholder="qty" value={giveCount} onChange={e => setGiveCount(e.target.value)} />
+            <Btn color="#60a5fa" size="md" onClick={() => { if (giveItem) { onAction('give_item', player, { prefab: giveItem, count: parseInt(giveCount) || 1 }); setGiveItem('') } }}>Dar</Btn>
           </div>
-        </div>
+        </Section>
 
         {/* Teleport */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Teleport</h4>
-          <div className="flex gap-2">
-            <div className="flex items-center gap-1 flex-1">
-              <span className="text-[10px] text-gray-500">X</span>
-              <input className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white flex-1 font-mono focus:border-blue-500/30 focus:outline-none" value={tpX} onChange={e => setTpX(e.target.value)} />
+        <Section icon={<LuMapPin className="w-3.5 h-3.5" />} title="Teleporte">
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="text-[10px] text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 font-mono">X</span>
+                <input className="w-full bg-black/20 border border-white/10 rounded-lg pl-7 pr-3 py-2 text-xs text-white font-mono focus:border-blue-500/40 focus:outline-none" value={tpX} onChange={e => setTpX(e.target.value)} placeholder="0" />
+              </div>
+              <div className="relative flex-1">
+                <span className="text-[10px] text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 font-mono">Z</span>
+                <input className="w-full bg-black/20 border border-white/10 rounded-lg pl-7 pr-3 py-2 text-xs text-white font-mono focus:border-blue-500/40 focus:outline-none" value={tpZ} onChange={e => setTpZ(e.target.value)} placeholder="0" />
+              </div>
+              <Btn color="#60a5fa" size="md" onClick={() => { if (tpX && tpZ) onAction('teleport', player, { x: parseFloat(tpX), z: parseFloat(tpZ) }) }}><LuMapPin className="w-3.5 h-3.5 inline-block mr-1" />Coords</Btn>
             </div>
-            <div className="flex items-center gap-1 flex-1">
-              <span className="text-[10px] text-gray-500">Z</span>
-              <input className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white flex-1 font-mono focus:border-blue-500/30 focus:outline-none" value={tpZ} onChange={e => setTpZ(e.target.value)} />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <LuUsers className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:border-blue-500/40 focus:outline-none appearance-none disabled:opacity-50"
+                  value={tpTarget}
+                  onChange={e => setTpTarget(e.target.value)}
+                  disabled={tpTargets.length === 0}
+                >
+                  <option value="">{tpTargets.length ? 'Ir até outro player…' : 'Nenhum outro player online'}</option>
+                  {tpTargets.map((p: any) => (
+                    <option key={p.userid} value={p.userid}>{p.name} ({p.prefab})</option>
+                  ))}
+                </select>
+              </div>
+              <Btn color="#60a5fa" size="md" onClick={() => { if (tpTarget) onAction('teleport_to_player', player, { target_userid: tpTarget }) }}><LuArrowRight className="w-3.5 h-3.5 inline-block mr-1" />Ir</Btn>
             </div>
-            <Btn color="#60a5fa" size="md" onClick={() => { if (tpX && tpZ) onAction('teleport', player, { x: parseFloat(tpX), z: parseFloat(tpZ) }) }}>Teleport</Btn>
           </div>
-        </div>
+        </Section>
+
+        {/* Danger zone */}
+        <Section icon={<LuSkull className="w-3.5 h-3.5" />} title="Zona de perigo" danger>
+          <div className="flex gap-1.5 flex-wrap">
+            {!player.health?.invincible && <Btn color="#f87171" size="md" onClick={() => onAction('kill', player)}><LuSkull className="w-3.5 h-3.5 inline-block mr-1" />Kill</Btn>}
+            <Btn color="#b91c1c" size="md" onClick={() => onAction('kick', player)}><LuUserX className="w-3.5 h-3.5 inline-block mr-1" />Kick</Btn>
+            <Btn color="#7f1d1d" size="md" onClick={() => onAction('ban', player)}><LuBan className="w-3.5 h-3.5 inline-block mr-1" />Ban</Btn>
+          </div>
+        </Section>
       </div>
     </Modal>
+  )
+}
+
+// A titled card section for the player-actions modal.
+function Section({ icon, title, danger, children }: { icon: React.ReactNode; title: string; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`rounded-xl border p-3 ${danger ? 'border-red-500/20 bg-red-500/[0.03]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+      <h4 className={`text-[11px] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${danger ? 'text-red-400/70' : 'text-gray-400'}`}>
+        {icon} {title}
+      </h4>
+      {children}
+    </div>
   )
 }
 
@@ -441,7 +498,7 @@ function PlayerActionsModal({ player, open, onClose, onAction }: any) {
 function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: string, data?: any) => void; confirm: (opts: ConfirmOptions) => Promise<boolean> }) {
   if (!shard) return null
 
-  const icon = shard.shard_type === 'caves' ? '⛏' : '🌍'
+  const icon = shard.shard_type === 'caves' ? <LuPickaxe className="w-3.5 h-3.5" /> : <LuGlobe className="w-3.5 h-3.5" />
   const name = shard.shard_type === 'caves' ? 'Caves' : 'Overworld'
 
   // Highlight active phase/season
@@ -474,10 +531,10 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
         <div>
           <h4 className="text-[10px] text-gray-500 mb-1.5">Fase do Dia</h4>
           <div className="flex gap-1 flex-wrap">
-            <Btn color="#facc15" size="xs" onClick={() => onCmd('set_phase', { phase: 'day' })}>☀ Dia</Btn>
-            <Btn color="#f97316" size="xs" onClick={() => onCmd('set_phase', { phase: 'dusk' })}>🌅 Dusk</Btn>
-            <Btn color="#6366f1" size="xs" onClick={() => onCmd('set_phase', { phase: 'night' })}>🌙 Noite</Btn>
-            <Btn color="#8b5cf6" size="xs" onClick={() => onCmd('set_next_phase')}>⏭ Next</Btn>
+            <Btn color="#facc15" size="xs" onClick={() => onCmd('set_phase', { phase: 'day' })}><LuSun className="w-3 h-3 inline-block mr-0.5" />Dia</Btn>
+            <Btn color="#f97316" size="xs" onClick={() => onCmd('set_phase', { phase: 'dusk' })}><LuSunrise className="w-3 h-3 inline-block mr-0.5" />Dusk</Btn>
+            <Btn color="#6366f1" size="xs" onClick={() => onCmd('set_phase', { phase: 'night' })}><LuMoon className="w-3 h-3 inline-block mr-0.5" />Noite</Btn>
+            <Btn color="#8b5cf6" size="xs" onClick={() => onCmd('set_next_phase')}><LuSkipForward className="w-3 h-3 inline-block mr-0.5" />Next</Btn>
           </div>
         </div>
 
@@ -485,10 +542,10 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
         <div>
           <h4 className="text-[10px] text-gray-500 mb-1.5">Estação</h4>
           <div className="flex gap-1 flex-wrap">
-            <Btn color="#f97316" size="xs" onClick={() => onCmd('set_season', { season: 'autumn' })}>🍂 Autumn</Btn>
-            <Btn color="#60a5fa" size="xs" onClick={() => onCmd('set_season', { season: 'winter' })}>❄ Winter</Btn>
-            <Btn color="#4ade80" size="xs" onClick={() => onCmd('set_season', { season: 'spring' })}>🌸 Spring</Btn>
-            <Btn color="#ef4444" size="xs" onClick={() => onCmd('set_season', { season: 'summer' })}>☀ Summer</Btn>
+            <Btn color="#f97316" size="xs" onClick={() => onCmd('set_season', { season: 'autumn' })}><LuLeaf className="w-3 h-3 inline-block mr-0.5" />Autumn</Btn>
+            <Btn color="#60a5fa" size="xs" onClick={() => onCmd('set_season', { season: 'winter' })}><LuSnowflake className="w-3 h-3 inline-block mr-0.5" />Winter</Btn>
+            <Btn color="#4ade80" size="xs" onClick={() => onCmd('set_season', { season: 'spring' })}><LuFlower2 className="w-3 h-3 inline-block mr-0.5" />Spring</Btn>
+            <Btn color="#ef4444" size="xs" onClick={() => onCmd('set_season', { season: 'summer' })}><LuSun className="w-3 h-3 inline-block mr-0.5" />Summer</Btn>
           </div>
         </div>
 
@@ -496,8 +553,8 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
         <div>
           <h4 className="text-[10px] text-gray-500 mb-1.5">Clima</h4>
           <div className="flex gap-1 flex-wrap">
-            <Btn color="#60a5fa" size="xs" onClick={() => onCmd('set_rain', { enabled: true })}>🌧 Chuva</Btn>
-            <Btn color="#facc15" size="xs" onClick={() => onCmd('stop_rain')}>☀ Parar</Btn>
+            <Btn color="#60a5fa" size="xs" onClick={() => onCmd('set_rain', { enabled: true })}><LuCloudRain className="w-3 h-3 inline-block mr-0.5" />Chuva</Btn>
+            <Btn color="#facc15" size="xs" onClick={() => onCmd('stop_rain')}><LuSun className="w-3 h-3 inline-block mr-0.5" />Parar</Btn>
           </div>
         </div>
 
@@ -551,10 +608,10 @@ function WorldControls({ shard, onCmd, confirm }: { shard: any; onCmd: (type: st
         <Btn color="#ef4444" size="xs" onClick={async () => {
           const v = parseInt((document.getElementById(`rb-${shard.shard_id}`) as HTMLInputElement)?.value || '0')
           if (await confirm({ title: '↩ Rollback', message: `Rollback ${name} em ${v} dia(s)? O servidor vai reiniciar.`, confirmText: 'Rollback', danger: true })) onCmd('rollback', { days: v })
-        }}>↩ Rollback</Btn>
+        }}><LuRotateCcw className="w-3 h-3 inline-block mr-0.5" />Rollback</Btn>
         <Btn color="#7f1d1d" size="xs" onClick={async () => {
           if (await confirm({ title: '💀 Regenerar Mundo', message: `REGENERAR ${name}? Isso vai DELETAR TODO o progresso deste mundo permanentemente!`, confirmText: 'Regenerar', danger: true })) onCmd('regenerate')
-        }}>💀 Regenerate</Btn>
+        }}><LuSkull className="w-3 h-3 inline-block mr-0.5" />Regenerate</Btn>
       </div>
     </div>
   )
@@ -579,7 +636,7 @@ function EventLog({ events }: { events: any[] }) {
         return (
           <div key={i} className="flex items-start gap-2 py-1.5 px-2 rounded-md hover:bg-white/[0.02] transition-colors">
             <span className="text-[9px] text-gray-700 mt-0.5 tabular-nums font-mono shrink-0">{new Date(e.received_at).toLocaleTimeString()}</span>
-            <span className="text-[9px] mt-0.5 shrink-0">{e.shard_type === 'caves' ? '⛏' : '🌍'}</span>
+            <span className="text-[9px] mt-0.5 shrink-0">{e.shard_type === 'caves' ? <LuPickaxe className="w-2.5 h-2.5 inline-block" /> : <LuGlobe className="w-2.5 h-2.5 inline-block" />}</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ color: style.color, background: `${style.color}15` }}>{style.label}</span>
             <span className="text-[10px] text-gray-400 truncate">{e.data?.name || e.data?.message || JSON.stringify(e.data)}</span>
           </div>
@@ -621,7 +678,7 @@ function ChatPanel({ events, onSend }: { events: any[]; onSend: (msg: string) =>
           <div key={i} className="py-1.5 px-2 rounded-md hover:bg-white/[0.02] transition-colors">
             <div className="flex items-baseline gap-1.5">
               <span className="text-[9px] text-gray-700 tabular-nums font-mono">{new Date(e.received_at).toLocaleTimeString()}</span>
-              <span className="text-[9px]">{e.shard_type === 'caves' ? '⛏' : '🌍'}</span>
+              <span className="text-[9px]">{e.shard_type === 'caves' ? <LuPickaxe className="w-2.5 h-2.5 inline-block" /> : <LuGlobe className="w-2.5 h-2.5 inline-block" />}</span>
               <span className="text-[11px] font-semibold text-blue-300">{e.data?.name || 'Unknown'}</span>
             </div>
             <p className="text-[11px] text-gray-300 pl-[52px] -mt-0.5">{e.data?.message}</p>
@@ -659,8 +716,8 @@ function RightPanel({ events, onChatSend }: { events: any[]; onChatSend: (msg: s
       {/* Tabs */}
       <div className="flex gap-1 mb-2">
         {[
-          { key: 'chat' as const, label: '💬 Chat', count: chatCount },
-          { key: 'events' as const, label: '📋 Eventos' },
+          { key: 'chat' as const, label: <><LuMessageCircle className="w-3 h-3 inline-block mr-0.5" />Chat</>, count: chatCount },
+          { key: 'events' as const, label: <><LuClipboardList className="w-3 h-3 inline-block mr-0.5" />Eventos</> },
         ].map(t => (
           <button
             key={t.key}
@@ -766,32 +823,32 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
       {/* Features */}
       <section className="max-w-5xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-3 gap-4">
         <Feature
-          icon="🎮"
+          icon={<LuGamepad2 className="w-7 h-7" />}
           title="Administração em tempo real"
           body="Veja players, vida/fome/sanidade, posição e inventário ao vivo. Execute kick, ban, heal, teleport ou qualquer ação via painel."
         />
         <Feature
-          icon="⚡"
+          icon={<LuZap className="w-7 h-7" />}
           title="Automações visuais"
           body="Editor estilo n8n com 11 tipos de nós. Reaja a eventos do jogo (boss, morte, chat) com condições, delays, HTTP e scripts customizados."
         />
         <Feature
-          icon="🧩"
+          icon={<LuPuzzle className="w-7 h-7" />}
           title="UI in-game por flows"
           body="Notifications, paineis, barras de progresso e botões clicáveis dentro do DST — renderizados pelo mod e disparados pelos seus flows."
         />
         <Feature
-          icon="🌐"
+          icon={<LuGlobe className="w-7 h-7" />}
           title="Multi-shard nativo"
           body="Master e caves agrupados por server_id automaticamente. Comandos roteados pro shard certo, abas separadas na UI."
         />
         <Feature
-          icon="🔐"
+          icon={<LuLock className="w-7 h-7" />}
           title="Auth por servidor"
           body="Cada servidor tem sua senha isolada. Acesso rápido via magic link no jogo ou senha pela web."
         />
         <Feature
-          icon="🔌"
+          icon={<LuPlug className="w-7 h-7" />}
           title="Zero infra de jogo"
           body="Só HTTP polling do mod. Sem sockets, sem FFI, sem hacks no DST — só Lua sandbox e TheSim:QueryServer."
         />
@@ -818,7 +875,7 @@ function LandingPage({ dstp, serverIds, requestedServer }: { dstp: any; serverId
   )
 }
 
-function Feature({ icon, title, body }: { icon: string; title: string; body: string }) {
+function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5 hover:bg-white/[0.04] hover:border-white/10 transition-colors">
       <div className="text-2xl mb-2">{icon}</div>
@@ -1076,6 +1133,7 @@ export function DSTPanel() {
         open={!!actionsPlayerData}
         onClose={() => setActionsPlayer(null)}
         onAction={handleAction}
+        allPlayers={allPlayers}
       />
 
       {/* Header */}
@@ -1112,9 +1170,9 @@ export function DSTPanel() {
       {/* Shard Tabs */}
       <div className="flex gap-1 mb-3">
         {[
-          { key: 'all' as const, label: 'Todos', icon: '📋' },
-          { key: 'master' as const, label: 'Overworld', icon: '🌍', shard: masterShard },
-          { key: 'caves' as const, label: 'Caves', icon: '⛏', shard: cavesShard },
+          { key: 'all' as const, label: 'Todos', icon: <LuLayoutGrid className="w-3.5 h-3.5" /> },
+          { key: 'master' as const, label: 'Overworld', icon: <LuGlobe className="w-3.5 h-3.5" />, shard: masterShard },
+          { key: 'caves' as const, label: 'Caves', icon: <LuPickaxe className="w-3.5 h-3.5" />, shard: cavesShard },
         ].map(tab => {
           const isActive = activeTab === tab.key
           const count = tab.key === 'all' ? allPlayers.length : allPlayers.filter((p: any) => p.shard_type === tab.key).length

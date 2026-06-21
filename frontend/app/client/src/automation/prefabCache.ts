@@ -22,11 +22,15 @@ async function load(serverId: string): Promise<string[]> {
       const res = await fetch(`/api/dst/prefabs/${encodeURIComponent(serverId)}`)
       const json = await res.json()
       const list: string[] = Array.isArray(json?.prefabs) ? json.prefabs : []
-      _cache.set(serverId, list)
-      _subs.forEach(fn => fn())
+      // Only CACHE a non-empty result — an empty list means the server hasn't sent
+      // its prefabs yet (mod/sim still booting), so we must keep re-fetching instead
+      // of caching [] forever. Subscribers re-render once a real list arrives.
+      if (list.length > 0) {
+        _cache.set(serverId, list)
+        _subs.forEach(fn => fn())
+      }
       return list
     } catch {
-      _cache.set(serverId, [])
       return []
     } finally {
       _inflight.delete(serverId)

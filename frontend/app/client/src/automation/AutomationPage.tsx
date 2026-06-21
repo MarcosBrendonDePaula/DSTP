@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { LuZap, LuRefreshCw, LuDownload, LuUpload, LuKey, LuSparkles } from 'react-icons/lu'
 import { Link, useSearchParams } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveAutomation } from '@server/live/LiveAutomation'
@@ -10,6 +11,7 @@ import { AccountMenu } from '../components/AccountMenu'
 import { EnvironmentsModal } from './EnvironmentsModal'
 import { FlowExplorer } from './FlowExplorer'
 import { PromptModal, ConfirmModal, ImportModal } from './FlowModal'
+import { GenerateFlowModal, type AISettings } from './FlowAIModal'
 
 export function AutomationPage() {
   const auto = Live.use(LiveAutomation, { initialState: LiveAutomation.defaultState })
@@ -121,17 +123,107 @@ export function AutomationPage() {
 
   const justCreatedRef = useRef<string | null>(null)
 
-  const createNewFlow = (folder = '') => {
+  // Open a fresh, empty flow in the editor with the given name + folder.
+  const openNewFlow = (name: string, folder = '') => {
     const id = `flow_${Date.now()}`
     justCreatedRef.current = id
     setEditingFlow(id)
-    setFlowName('Novo Fluxo')
+    setHydrated(id)         // mark hydrated NOW so the key flips to ':ready' and the
+                            // editor remounts with the EMPTY nodes/edges below (not the
+                            // previous flow's, which lingered when hydrated stayed stale)
+    setFlowName(name.trim() || 'Novo Fluxo')
     setEditorNodes([])
     setEditorEdges([])
     setOriginalCreatedAt(null)
     setFlowEnabled(true)
     setFlowFolder(folder)   // new flow lands in the open/selected folder, not always root
   }
+
+  // "Novo Fluxo" first asks for a name, then opens the editor with it.
+  const [newFlowFolder, setNewFlowFolder] = useState('')
+  const [showNewFlow, setShowNewFlow] = useState(false)
+  const createNewFlow = (folder = '') => { setNewFlowFolder(folder); setShowNewFlow(true) }
+
+  // ── AI flow generation (from the list) ──────────────────────────────────────
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  // Per-server feature flag: AI flow generation/editing is OFF unless enabled in the
+  // cluster config. Loaded once the component is synced.
+  const [aiEnabled, setAiEnabled] = useState(false)
+  useEffect(() => {
+    if (!urlServer) return
+    const status = (auto as any).$status
+    if (status !== 'synced' || !(auto as any).$componentId) return
+    ;(async () => {
+      try {
+        const cfg: any = await auto.getServerConfig({ server_id: urlServer })
+        setAiEnabled(!!cfg?.ai_flows_enabled)
+      } catch { /* not ready */ }
+    })()
+  }, [urlServer, (auto as any).$status, (auto as any).$componentId])
+
+  const toggleAi = async () => {
+    if (!urlServer) return
+    try {
+      const cfg: any = await auto.setServerConfig({ server_id: urlServer, ai_flows_enabled: !aiEnabled })
+      setAiEnabled(!!cfg?.ai_flows_enabled)
+    } catch { /* not ready */ }
+  }
+
+  // Fire-and-forget: the backend pushes progress/result via STATE_DELTA (aiGen:server).
+  // We watch that key below — so a long, multi-round generation never trips the WS
+  // request timeout and we can show live status.
+  const generateFlowWithAI = async (prompt: string, referenceId: string | undefined, settings: AISettings) => {
+    if (!urlServer || !prompt) return
+    setGenerating(true); setGenerateError(null)
+    aiGenSeenAt.current = Date.now()  // ignore any stale prior result
+    try {
+      await auto.generateFlow({
+        server_id: urlServer, prompt, reference_flow_id: referenceId,
+        provider: settings.provider, model: settings.model, api_key: settings.api_key,
+      })
+    } catch (err: any) {
+      setGenerating(false)
+      setGenerateError(err?.message ?? 'Falha ao iniciar.')
+    }
+  }
+
+  // Open an AI result {nodes, edges} in the editor as a preview (not saved).
+  const openGeneratedFlow = (flow: { nodes: any[]; edges: any[] }, name?: string) => {
+    const id = `flow_${Date.now()}`
+    justCreatedRef.current = id
+    setEditingFlow(id)
+    setFlowName(name?.trim() || 'Fluxo gerado por IA')
+    setEditorNodes(flow.nodes || [])
+    setEditorEdges(flow.edges || [])
+    setOriginalCreatedAt(null)
+    setFlowEnabled(true)
+    setFlowFolder('')
+    setShowGenerate(false)
+  }
+
+  // Watch the pushed AI-generation state and react when a result arrives.
+  const aiGenSeenAt = useRef(0)
+  const aiGen = (auto.$state as any)[`aiGen:${urlServer}`] || null
+  // Ignore any result that predates this page (a stale aiGen from a previous session).
+  useEffect(() => { aiGenSeenAt.current = aiGen?.at ?? 0 /* eslint-disable-line */ }, [])
+  useEffect(() => {
+    if (!generating) return                                  // only react to our own request
+    if (!aiGen || !aiGen.at || aiGen.at <= aiGenSeenAt.current) return
+    if (aiGen.status === 'done' && aiGen.flow) {
+      aiGenSeenAt.current = aiGen.at
+      setGenerating(false)
+      openGeneratedFlow(aiGen.flow, aiGen.name)
+      const errs = aiGen.validation?.errors ?? []
+      if (errs.length) console.warn('[DSTP] generated flow has validation warnings:', errs)
+    } else if (aiGen.status === 'error') {
+      aiGenSeenAt.current = aiGen.at
+      setGenerating(false)
+      setGenerateError(aiGen.error || 'A IA falhou.')
+    }
+  }, [aiGen, generating])
 
   const editFlow = (flow: any) => {
     setEditingFlow(flow.id)
@@ -492,6 +584,11 @@ export function AutomationPage() {
           captureData={editingFlow ? (captureData?.flowId === editingFlow ? captureData : captureData?.active ? captureData : null) : null}
           onStartCapture={() => auto.startCapture({ server_id: urlServer })}
           onStopCapture={() => auto.stopCapture({ server_id: urlServer })}
+          editFlowAI={!aiEnabled ? undefined : ((prompt, currentFlow, settings) => auto.editFlow({
+            server_id: urlServer, prompt, current_flow: currentFlow,
+            provider: settings.provider, model: settings.model, api_key: settings.api_key,
+          }))}
+          aiEdit={(auto.$state as any)[`aiEdit:${urlServer}`] || null}
         />
       </div>
     )
@@ -505,7 +602,7 @@ export function AutomationPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 pb-3 border-b border-white/5">
         <Link to={`/?server=${urlServer}`} className="text-xs text-gray-500 hover:text-gray-300 transition-colors shrink-0">← Painel</Link>
         <div className="h-4 w-px bg-white/10 hidden sm:block" />
-        <h1 className="text-base sm:text-lg font-bold text-white shrink-0">⚡ Automações</h1>
+        <h1 className="text-base sm:text-lg font-bold text-white shrink-0 flex items-center gap-1.5"><LuZap className="w-4 h-4" /> Automações</h1>
         <span className="text-[10px] text-gray-600 hidden sm:inline">{urlServer}</span>
         <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${auto.$connected ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
           {auto.$connected ? '● Connected' : '○ Offline'}
@@ -529,12 +626,21 @@ export function AutomationPage() {
           className="text-xs px-3 sm:px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 font-medium transition-colors shrink-0"
         >+ Novo Fluxo</button>
 
+        {aiEnabled && (
+          <button
+            onClick={() => { setGenerateError(null); setShowGenerate(true) }}
+            className="text-xs px-3 sm:px-4 py-2 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 font-medium transition-colors shrink-0"
+            title="Gerar um fluxo a partir de uma descrição"
+          >✨ Gerar com IA</button>
+        )}
+
         {/* Secondary actions — inline on >=md, collapsed into a menu on mobile */}
         <div className="hidden md:flex items-center gap-3">
-          <button onClick={() => auto.loadFlows({ server_id: urlServer })} className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition-colors" title="Recarregar">↻</button>
-          <button onClick={exportAllFlows} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Exporta todos os fluxos">↓ Exportar tudo</button>
-          <button onClick={() => fileInputRef.current?.click()} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Importar fluxo">↑ Importar</button>
-          <button onClick={() => setShowEnvironments(true)} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Variáveis de ambiente criptografadas">🔑 Environments</button>
+          <button onClick={() => auto.loadFlows({ server_id: urlServer })} className="text-xs px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition-colors" title="Recarregar"><LuRefreshCw className="w-3.5 h-3.5 inline-block" /></button>
+          <button onClick={exportAllFlows} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Exporta todos os fluxos"><LuDownload className="w-3.5 h-3.5 inline-block mr-1" /> Exportar tudo</button>
+          <button onClick={() => fileInputRef.current?.click()} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Importar fluxo"><LuUpload className="w-3.5 h-3.5 inline-block mr-1" /> Importar</button>
+          <button onClick={() => setShowEnvironments(true)} className="text-xs px-4 py-2 rounded-lg bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 font-medium transition-colors" title="Variáveis de ambiente criptografadas"><LuKey className="w-3.5 h-3.5 inline-block mr-1" /> Environments</button>
+          <button onClick={toggleAi} className={`text-xs px-4 py-2 rounded-lg border font-medium transition-colors ${aiEnabled ? 'bg-purple-500/20 text-purple-300 border-purple-500/30 hover:bg-purple-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`} title="Habilitar/desabilitar geração de fluxos por IA neste servidor"><LuSparkles className="w-3.5 h-3.5 inline-block mr-1" /> IA {aiEnabled ? 'ON' : 'OFF'}</button>
         </div>
 
         {/* Mobile overflow menu */}
@@ -547,12 +653,12 @@ export function AutomationPage() {
                   spills off-screen on narrow phones. */}
               <div className="fixed right-2 mt-1 z-50 w-48 py-1 bg-[#16181d] border border-white/10 rounded-lg shadow-2xl">
                 {[
-                  { label: '↻ Recarregar', fn: () => auto.loadFlows({ server_id: urlServer }) },
-                  { label: '↓ Exportar tudo', fn: exportAllFlows },
-                  { label: '↑ Importar', fn: () => fileInputRef.current?.click() },
-                  { label: '🔑 Environments', fn: () => setShowEnvironments(true) },
+                  { id: 'reload', label: <><LuRefreshCw className="w-3.5 h-3.5 inline-block mr-1" /> Recarregar</>, fn: () => auto.loadFlows({ server_id: urlServer }) },
+                  { id: 'export', label: <><LuDownload className="w-3.5 h-3.5 inline-block mr-1" /> Exportar tudo</>, fn: exportAllFlows },
+                  { id: 'import', label: <><LuUpload className="w-3.5 h-3.5 inline-block mr-1" /> Importar</>, fn: () => fileInputRef.current?.click() },
+                  { id: 'env', label: <><LuKey className="w-3.5 h-3.5 inline-block mr-1" /> Environments</>, fn: () => setShowEnvironments(true) },
                 ].map(item => (
-                  <button key={item.label} onClick={() => { item.fn(); setShowMobileMenu(false) }} className="w-full text-left text-xs px-3 py-2 text-gray-300 hover:bg-white/[0.06] transition-colors">{item.label}</button>
+                  <button key={item.id} onClick={() => { item.fn(); setShowMobileMenu(false) }} className="w-full text-left text-xs px-3 py-2 text-gray-300 hover:bg-white/[0.06] transition-colors">{item.label}</button>
                 ))}
               </div>
             </>
@@ -564,6 +670,17 @@ export function AutomationPage() {
       {showEnvironments && urlServer && (
         <EnvironmentsModal serverId={urlServer} onClose={() => setShowEnvironments(false)} />
       )}
+      {showGenerate && urlServer && (
+        <GenerateFlowModal
+          flows={(flows as any[]).map(f => ({ id: f.id, name: f.name }))}
+          loading={generating}
+          error={generateError}
+          phase={aiGen?.status === 'streaming' || aiGen?.status === 'running' ? aiGen?.phase : null}
+          partial={aiGen?.status === 'streaming' ? aiGen?.partial : null}
+          onGenerate={generateFlowWithAI}
+          onClose={() => setShowGenerate(false)}
+        />
+      )}
       {showNewFolder && (
         <PromptModal
           title="Nova pasta"
@@ -572,6 +689,16 @@ export function AutomationPage() {
           confirmLabel="Criar"
           onConfirm={createFolder}
           onClose={() => setShowNewFolder(false)}
+        />
+      )}
+      {showNewFlow && (
+        <PromptModal
+          title="Novo fluxo"
+          label="Nome do fluxo"
+          placeholder="Ex: Loja de itens"
+          confirmLabel="Criar"
+          onConfirm={(name: string) => { setShowNewFlow(false); openNewFlow(name, newFlowFolder) }}
+          onClose={() => setShowNewFlow(false)}
         />
       )}
       {confirmDeleteFlow && (

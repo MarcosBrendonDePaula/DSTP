@@ -21,6 +21,7 @@ import { registryDefaults, registryCatalog, registryMetaByType } from './nodes/r
 import { NodeDetailPanel, type CaptureTraceEntry } from './components/NodeDetailPanel'
 import { nodeIcon } from './nodes/nodeIcons'
 import { autoLayout } from './autoLayout'
+import { EditFlowModal, type AISettings } from './FlowAIModal'
 import { LuZap, LuGitFork, LuDatabase, LuTarget, LuBot, LuPalette, LuShapes } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 
@@ -51,6 +52,14 @@ interface FlowEditorProps {
   captureData?: CaptureData | null
   onStartCapture?: () => void
   onStopCapture?: () => void
+  /** Fire the AI edit (fire-and-forget; result arrives via aiEdit prop below). */
+  editFlowAI?: (
+    prompt: string,
+    currentFlow: { nodes: any[]; edges: any[] },
+    settings: { provider: string; model: string; api_key: string },
+  ) => Promise<any>
+  /** Pushed AI-edit state (aiEdit:<server>): { status, phase, partial, flow, error }. */
+  aiEdit?: { status?: string; phase?: string; partial?: string; flow?: any; error?: string; at?: number } | null
 }
 
 let nodeIdCounter = 0
@@ -120,7 +129,7 @@ const TRIGGER_CATALOG: NodeCatalogItem[] = TRIGGER_EVENTS.map(event => ({
 // ACTION_NODE_CATALOG (derived from ACTION_TYPES) is gone.
 const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, folderPath, onFolderChange, folderSuggestions = [], onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, folderPath, onFolderChange, folderSuggestions = [], onBack, executionContext, captureData, onStartCapture, onStopCapture, editFlowAI, aiEdit }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
@@ -139,6 +148,59 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
   // drawer, and auto-connect the chosen node. Cleared after use or on cancel.
   const pendingConnectRef = useRef<{ source: string; sourceHandle: string | null; position: XYPosition } | null>(null)
   const reactFlowRef = useRef<ReactFlowInstance | null>(null)
+
+  // AI edit modal
+  const [showAIEdit, setShowAIEdit] = useState(false)
+  const [aiEditing, setAiEditing] = useState(false)
+  const [aiEditError, setAiEditError] = useState<string | null>(null)
+
+  // Fire-and-forget: the result/stream arrives via the aiEdit prop (watched below).
+  const aiEditSeenAt = useRef(0)
+  const applyAIEdit = useCallback(async (prompt: string, settings: AISettings) => {
+    if (!editFlowAI) return
+    setAiEditing(true); setAiEditError(null)
+    aiEditSeenAt.current = Date.now()
+    try {
+      const current = {
+        nodes: nodes.map(n => ({ id: n.id, type: n.type, data: n.data, position: n.position })),
+        edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })),
+      }
+      await editFlowAI(prompt, current, settings)
+    } catch (err: any) {
+      setAiEditing(false)
+      setAiEditError(err?.message ?? 'Falha ao iniciar.')
+    }
+  }, [editFlowAI, nodes, edges])
+
+  // On mount, mark any PRE-EXISTING aiEdit result as already seen — otherwise a stale
+  // result from a previous edit session would be applied immediately and wipe the flow.
+  useEffect(() => {
+    aiEditSeenAt.current = aiEdit?.at ?? 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Watch the pushed AI-edit state; apply the result ONLY when an edit we started is
+  // in flight (aiEditing) AND this is a newer push than we've processed.
+  useEffect(() => {
+    if (!aiEditing) return                                   // only react to our own request
+    if (!aiEdit || !aiEdit.at || aiEdit.at <= aiEditSeenAt.current) return
+    if (aiEdit.status === 'done' && aiEdit.flow) {
+      aiEditSeenAt.current = aiEdit.at
+      setAiEditing(false)
+      // Guard: never let an empty result silently wipe the canvas.
+      if (Array.isArray(aiEdit.flow.nodes) && aiEdit.flow.nodes.length > 0) {
+        setNodes(aiEdit.flow.nodes)
+        setEdges(aiEdit.flow.edges || [])
+        setShowAIEdit(false)
+      } else {
+        setAiEditError('A IA retornou um fluxo vazio — nada foi alterado.')
+      }
+    } else if (aiEdit.status === 'error') {
+      aiEditSeenAt.current = aiEdit.at
+      setAiEditing(false)
+      setAiEditError(aiEdit.error || 'A IA falhou.')
+    }
+  }, [aiEdit, aiEditing, setNodes, setEdges])
 
   // Undo/Redo history
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([{ nodes: initialNodes, edges: initialEdges }])
@@ -532,8 +594,26 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="6" rx="1"/><rect x="14" y="4" width="7" height="6" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/></svg>
             Organizar
           </button>
+          {editFlowAI && (
+            <button
+              onClick={() => { setAiEditError(null); setShowAIEdit(true) }}
+              title={nodes.length === 0 ? 'Construir o fluxo com IA' : 'Editar o fluxo com IA'}
+              className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 font-medium transition-colors"
+            >🤖 {nodes.length === 0 ? 'Criar com IA' : 'Editar com IA'}</button>
+          )}
         </div>
       </header>
+
+      {showAIEdit && (
+        <EditFlowModal
+          loading={aiEditing}
+          error={aiEditError}
+          phase={aiEditing && (aiEdit?.status === 'streaming' || aiEdit?.status === 'running') ? aiEdit?.phase : null}
+          partial={aiEditing && aiEdit?.status === 'streaming' ? aiEdit?.partial : null}
+          onEdit={applyAIEdit}
+          onClose={() => setShowAIEdit(false)}
+        />
+      )}
 
       {/* Canvas */}
       <main className="absolute left-0 right-0 top-[68px] bottom-9" onDragOver={onCanvasDragOver} onDrop={onCanvasDrop}>
