@@ -120,6 +120,11 @@ const TRIGGER_CATALOG: NodeCatalogItem[] = TRIGGER_EVENTS.map(event => ({
 // ACTION_NODE_CATALOG (derived from ACTION_TYPES) is gone.
 const NODE_CATALOG_MERGED: NodeCatalogItem[] = registryCatalog
 
+// Stable identity for React Flow's defaultEdgeOptions. Inlining `{{...}}` in JSX
+// makes a fresh object every render, which forces React Flow to re-init edge
+// rendering each pass. Hoisting it to a module const keeps the reference stable.
+const EDGE_DEFAULTS = { type: 'smoothstep', style: { strokeWidth: 2 } } as const
+
 export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowName, onNameChange, folderPath, onFolderChange, folderSuggestions = [], onBack, executionContext, captureData, onStartCapture, onStopCapture }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -554,7 +559,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={detailNode ? null : ['Backspace', 'Delete']}
-          defaultEdgeOptions={{ type: 'smoothstep', style: { strokeWidth: 2 } }}
+          defaultEdgeOptions={EDGE_DEFAULTS}
           connectionLineType={'smoothstep' as any}
           proOptions={{ hideAttribution: true }}
           style={{ background: '#0a0b0d' }}

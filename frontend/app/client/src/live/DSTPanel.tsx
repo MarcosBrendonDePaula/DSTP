@@ -1,5 +1,5 @@
 // DSTPanel - DST Admin Panel usando Live Components
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
 import { Link } from 'react-router'
 import { Live } from '@/core/client'
 import { LiveDSTP } from '@server/live/LiveDSTP'
@@ -282,7 +282,7 @@ function CharacterAvatar({ prefab, isGhost, size = 40 }: { prefab: string; isGho
 
 // ─── Player Card ─────────────────────────────────────
 
-function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }: any) {
+const PlayerCard = memo(function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }: any) {
   const buffs = player.buffs || {}
   const hp = player.health
   const hg = player.hunger
@@ -342,7 +342,7 @@ function PlayerCard({ player, onAction, onOpenInventory, onSelect, isSelected }:
       </div>
     </div>
   )
-}
+})
 
 // ─── Player Actions Modal ────────────────────────────
 
@@ -1006,12 +1006,12 @@ export function DSTPanel() {
   const inventoryPlayerData = inventoryPlayer ? playersMap[inventoryPlayer.userid] || inventoryPlayer : null
   const actionsPlayerData = actionsPlayer ? playersMap[actionsPlayer.userid] || actionsPlayer : null
 
-  const sendPlayerCmd = async (type: string, player: any, extraData?: any) => {
+  const sendPlayerCmd = useCallback(async (type: string, player: any, extraData?: any) => {
     if (!selectedServer) return
     await dstp.sendPlayerCommand({ server_id: selectedServer, userid: player.userid, type, data: extraData })
-  }
+  }, [selectedServer, dstp])
 
-  const sendServerCmd = async (type: string, data?: any) => {
+  const sendServerCmd = useCallback(async (type: string, data?: any) => {
     if (!selectedServer || !serverInfo?.shards) return
     // Announce/chat are global — only send to master shard to avoid duplicates
     const globalCmds = ['announce', 'chat_send']
@@ -1023,9 +1023,9 @@ export function DSTPanel() {
         await dstp.sendCommand({ shard_id: shard.shard_id, type, data })
       }
     }
-  }
+  }, [selectedServer, serverInfo, dstp])
 
-  const handleAction = async (type: string, player: any, extraData?: any) => {
+  const handleAction = useCallback(async (type: string, player: any, extraData?: any) => {
     const dangerActions: Record<string, { title: string; message: string; btn: string }> = {
       kick: { title: 'Kick Player', message: `Tem certeza que deseja kickar ${player.name}?`, btn: 'Kick' },
       ban: { title: '⛔ Ban Player', message: `Tem certeza que deseja BANIR ${player.name}? Esta ação é permanente.`, btn: 'Banir' },
@@ -1039,7 +1039,14 @@ export function DSTPanel() {
       if (!ok) return
     }
     sendPlayerCmd(type, player, extraData)
-  }
+  }, [showConfirm, sendPlayerCmd])
+
+  // Stable handler so PlayerCard's memo isn't defeated by a fresh closure per
+  // render. Receives the userid from the card and resolves the player itself.
+  const handleSelectPlayer = useCallback((uid: string) => {
+    setSelectedPlayer(uid)
+    setActionsPlayer(playersMap[uid] ?? null)
+  }, [playersMap])
 
   // No server selected, or the selected server isn't in the (instant, singleton)
   // serverIds list → landing page. We gate on serverIds, NOT serverInfo: serverInfo
@@ -1175,9 +1182,9 @@ export function DSTPanel() {
                   key={p.userid}
                   player={p}
                   isSelected={selectedPlayer === p.userid}
-                  onSelect={(uid: string) => { setSelectedPlayer(uid); setActionsPlayer(p) }}
+                  onSelect={handleSelectPlayer}
                   onAction={handleAction}
-                  onOpenInventory={(p: any) => setInventoryPlayer(p)}
+                  onOpenInventory={setInventoryPlayer}
                 />
               ))}
             </div>

@@ -93,6 +93,16 @@ export default defineConfig({
     assetsDir: clientConfig.build.assetsDir,         // ✅ From config
     cssCodeSplit: clientConfig.build.cssCodeSplit,   // ✅ From config
     chunkSizeWarningLimit: clientConfig.build.chunkSizeWarningLimit, // ✅ From config
-    emptyOutDir: clientConfig.build.emptyOutDir      // ✅ From config
+    emptyOutDir: clientConfig.build.emptyOutDir,     // ✅ From config
+    rollupOptions: {
+      output: {
+        // Split heavy, route-specific deps out of the entry chunk so the panel
+        // (home route) doesn't download the flow editor's React Flow bundle.
+        manualChunks: {
+          'react-flow': ['@xyflow/react'],
+          'react-vendor': ['react', 'react-dom', 'react-router'],
+        },
+      },
+    },
   }
 })

@@ -6,7 +6,7 @@
 //
 // During migration this only holds MIGRATED nodes; the legacy index.ts / catalog
 // arrays fill the rest. Once all nodes are migrated, the legacy lists are removed.
-import { createElement, type ComponentType } from 'react'
+import { createElement, memo, type ComponentType } from 'react'
 import { NodeDescriptionContext } from './BaseNode'
 import { makeRotatable } from './RotatableNode'
 import type { NodeMeta } from '@shared/automation/nodeMeta'
@@ -372,8 +372,12 @@ export const registryNodeTypes: Record<string, ComponentType<any>> =
   Object.fromEntries(ENTRIES.map(e => {
     const Ui = makeRotatable(e.ui)   // adds the rotation grip + transform
     const desc = e.meta.description
-    const Wrapped = (props: any) =>
-      createElement(NodeDescriptionContext.Provider, { value: desc }, createElement(Ui, props))
+    // memo: React Flow re-renders ALL node components on any canvas change (drag,
+    // pan, select). Without memo, moving one node re-renders all 113. React Flow
+    // passes stable props (data/selected/id) per node, so memo skips nodes whose
+    // own props didn't change.
+    const Wrapped = memo((props: any) =>
+      createElement(NodeDescriptionContext.Provider, { value: desc }, createElement(Ui, props)))
     return [e.meta.type, Wrapped]
   }))
 
