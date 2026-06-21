@@ -22,5 +22,9 @@ export class LiveAutomation {
     'importFlow',
     'startCapture',
     'stopCapture',
+    'generateFlow',
+    'editFlow',
+    'getServerConfig',
+    'setServerConfig',
   ]
 }

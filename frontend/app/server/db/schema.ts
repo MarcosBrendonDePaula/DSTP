@@ -138,6 +138,18 @@ export const panelAuth = sqliteTable('panel_auth', {
 
 export type PanelAuth = typeof panelAuth.$inferSelect
 
+// ─── Server Config (per-server feature flags / settings) ────────────────
+// Each server has its own sqlite file, so this is a simple key/value store for
+// that server (no serverId column needed). e.g. key 'ai_flows_enabled' = '1'.
+
+export const serverConfig = sqliteTable('server_config', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export type ServerConfigRow = typeof serverConfig.$inferSelect
+
 // ─── Types ───────────────────────────────────────────
 
 export interface FlowNode {

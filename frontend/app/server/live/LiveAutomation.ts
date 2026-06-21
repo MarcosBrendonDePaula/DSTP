@@ -8,11 +8,16 @@
 
 import { LiveComponent } from '@core/types/types'
 import { dstStateStore } from '../services/DSTStateStore'
-import { FlowRepository, FolderRepository, AutomationLogRepository, EventSchemaRepository, type FlowNode, type FlowEdge } from '../db'
+import { FlowRepository, FolderRepository, AutomationLogRepository, EventSchemaRepository, ServerConfigRepository, type FlowNode, type FlowEdge } from '../db'
 import { invalidateAnalysis } from './FlowAnalyzer'
 import { WorkflowInstanceStore } from './WorkflowInstanceStore'
 import { FlowEngine, type EngineHost } from './FlowEngine'
 import { serverCoreManager, setPanelEmitter } from './ServerCoreManager'
+import { streamObject } from 'ai'
+import { buildModel } from './ai/buildModel'
+import { installVaultAccessors } from './vault-context'
+import { resolveValue } from './expressions'
+import { generateFlowFromPrompt, editFlowWithPrompt, type GenFlow, type RunModel } from './ai/generateFlow'
 
 // Route the panel STATE_DELTA emitter to whatever LiveAutomation instance is
 // currently mounted. Per-server worker cores emit panel state via this seam.
@@ -108,6 +113,10 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     'importFlow',
     'startCapture',
     'stopCapture',
+    'generateFlow',
+    'editFlow',
+    'getServerConfig',
+    'setServerConfig',
   ] as const
 
   // Flow execution engine — bound to a host that emits STATE_DELTA via this.setState
@@ -215,6 +224,131 @@ export class LiveAutomation extends LiveComponent<AutomationState> {
     this._ensureEngine().collectWatchKeys(flow.server_id)  // key_pressed watch set
     this.syncState(flow.server_id)
     return { success: true }
+  }
+
+  // ── Per-server config (feature flags) ───────────────────────────────────────
+  private cfgRepo(serverId: string) { return new ServerConfigRepository(serverId) }
+
+  // Read config the client needs (currently just the AI-flows flag).
+  async getServerConfig(payload: { server_id: string }) {
+    if (!payload?.server_id) return { ai_flows_enabled: false }
+    return { ai_flows_enabled: this.cfgRepo(payload.server_id).getBool('ai_flows_enabled', false) }
+  }
+
+  async setServerConfig(payload: { server_id: string; ai_flows_enabled?: boolean }) {
+    if (!payload?.server_id) return { success: false }
+    if (typeof payload.ai_flows_enabled === 'boolean') {
+      this.cfgRepo(payload.server_id).setBool('ai_flows_enabled', payload.ai_flows_enabled)
+    }
+    return { success: true, ai_flows_enabled: this.cfgRepo(payload.server_id).getBool('ai_flows_enabled', false) }
+  }
+
+  private aiEnabled(serverId: string): boolean {
+    return this.cfgRepo(serverId).getBool('ai_flows_enabled', false)
+  }
+
+  // Build the LLM caller for flow generation/edit. The API key is resolved from the
+  // vault the SAME way a flow run resolves {{environment.X.KEY}} — installed lazily
+  // on a throwaway context, never returned to the client, masked in logs. Returns a
+  // RunModel that the pure generator core (ai/generateFlow) drives.
+  private _aiRunModel(serverId: string, opts: { provider?: string; model?: string; api_key?: string }): RunModel {
+    const provider = String(opts.provider || 'openai')
+    const model = String(opts.model || 'gpt-4o')
+    const ctx: Record<string, any> = { _serverId: serverId }
+    installVaultAccessors(ctx, serverId)
+    const apiKey = String(resolveValue(opts.api_key, ctx) ?? '')
+    if (!apiKey) throw new Error('no API key — set api_key, e.g. {{environment.prod.OPENAI_KEY}}')
+    const llm = buildModel(provider, model, apiKey)
+    return async ({ system, user, schema, onPartial }) => {
+      // streamObject so we can push the partial object to the UI as it's built. We
+      // throttle onPartial to avoid flooding STATE_DELTA on every token.
+      const result = streamObject({ model: llm, schema, system, prompt: user })
+      if (onPartial) {
+        let last = 0
+        for await (const partial of result.partialObjectStream) {
+          const now = Date.now()
+          if (now - last > 400) { last = now; try { onPartial(partial) } catch { /* ignore */ } }
+        }
+      }
+      return await result.object
+    }
+  }
+
+  // Generate a brand-new flow from a text prompt (+ optional reference flow). Returns
+  // the validated {nodes, edges} for the client to preview/save — NOT persisted here.
+  // Push AI-generation progress to the panel via STATE_DELTA (key aiGen:<serverId>).
+  // The client watches this instead of awaiting the RPC, so a long (multi-round)
+  // generation never trips the WS request timeout.
+  private _setAiGen(serverId: string, v: { status: string; phase?: string; flow?: any; name?: string; validation?: any; error?: string; partial?: string }) {
+    try { (this as any).setState({ [`aiGen:${serverId}`]: { ...v, at: Date.now() } }) } catch { /* headless */ }
+  }
+
+  // Fire-and-forget: returns immediately; the real result arrives via aiGen:<serverId>.
+  async generateFlow(payload: {
+    server_id: string; prompt: string; reference_flow_id?: string
+    provider?: string; model?: string; api_key?: string
+  }) {
+    const sid = payload?.server_id
+    if (!sid || !payload?.prompt?.trim()) return { success: false, error: 'server_id and prompt are required' }
+    if (!this.aiEnabled(sid)) return { success: false, error: 'AI flows disabled for this server' }
+    console.log(`[DSTP Automation] generateFlow START server=${sid} prompt="${payload.prompt.slice(0, 60)}"`)
+    this._setAiGen(sid, { status: 'running', phase: 'generating' })
+    ;(async () => {
+      try {
+        let reference: GenFlow | undefined
+        if (payload.reference_flow_id) {
+          const ref = this.flowRepo(sid).findById(payload.reference_flow_id)
+          if (ref) reference = { nodes: ref.nodes as FlowNode[], edges: ref.edges as FlowEdge[] }
+        }
+        const runModel = this._aiRunModel(sid, payload)
+        const onPartial = (partial: any) => {
+          // Push the growing partial so the modal can show the AI's live output.
+          const nodes = Array.isArray(partial?.nodes) ? partial.nodes.length : 0
+          const edges = Array.isArray(partial?.edges) ? partial.edges.length : 0
+          this._setAiGen(sid, { status: 'streaming', phase: `${nodes} nós, ${edges} conexões`, partial: JSON.stringify(partial) } as any)
+        }
+        const res = await generateFlowFromPrompt(payload.prompt.trim(), runModel, reference, onPartial)
+        console.log(`[DSTP Automation] generateFlow DONE server=${sid} ok=${res.ok} nodes=${res.flow?.nodes.length} name="${res.name ?? ''}"`)
+        this._setAiGen(sid, { status: 'done', flow: res.flow, name: res.name, validation: res.validation })
+      } catch (err: any) {
+        console.error('[DSTP Automation] generateFlow ERROR:', err?.message)
+        this._setAiGen(sid, { status: 'error', error: err?.message ?? 'generation failed' })
+      }
+    })()
+    return { started: true }
+  }
+
+  // Push edit progress on a SEPARATE key (aiEdit:<serverId>) so the editor can watch
+  // it independently of the generate flow.
+  private _setAiEdit(serverId: string, v: { status: string; phase?: string; flow?: any; validation?: any; error?: string; partial?: string }) {
+    try { (this as any).setState({ [`aiEdit:${serverId}`]: { ...v, at: Date.now() } }) } catch { /* headless */ }
+  }
+
+  // Fire-and-forget + streaming, like generateFlow. Result arrives via aiEdit:<serverId>.
+  async editFlow(payload: {
+    server_id: string; prompt: string; current_flow: GenFlow
+    provider?: string; model?: string; api_key?: string
+  }) {
+    const sid = payload?.server_id
+    if (!sid || !payload?.prompt?.trim() || !payload?.current_flow) return { success: false, error: 'server_id, prompt and current_flow are required' }
+    if (!this.aiEnabled(sid)) return { success: false, error: 'AI flows disabled for this server' }
+    this._setAiEdit(sid, { status: 'running', phase: 'editing' })
+    ;(async () => {
+      try {
+        const runModel = this._aiRunModel(sid, payload)
+        const onPartial = (partial: any) => {
+          const adds = Array.isArray(partial?.addNodes) ? partial.addNodes.length : 0
+          const rms = Array.isArray(partial?.removeNodeIds) ? partial.removeNodeIds.length : 0
+          this._setAiEdit(sid, { status: 'streaming', phase: `+${adds} nós, -${rms}`, partial: JSON.stringify(partial) })
+        }
+        const res = await editFlowWithPrompt(payload.prompt.trim(), payload.current_flow, runModel, onPartial)
+        this._setAiEdit(sid, { status: 'done', flow: res.flow, validation: res.validation })
+      } catch (err: any) {
+        console.error('[DSTP Automation] editFlow ERROR:', err?.message)
+        this._setAiEdit(sid, { status: 'error', error: err?.message ?? 'edit failed' })
+      }
+    })()
+    return { started: true }
   }
 
   async deleteFlow(payload: { flow_id: string; server_id: string }) {
