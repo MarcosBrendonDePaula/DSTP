@@ -410,17 +410,23 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
   return <div onClick={pick} style={{ color: '#a55', fontSize: 10, boxShadow: ring }}>?{t}</div>
 }
 
-export function UIPreview({ tree, sel, onSelect, onReorder, onMove }: {
-  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder; onMove?: Move
+export function UIPreview({ tree, sel, onSelect, onReorder, onMove, bare }: {
+  tree: UINode | null; sel: Step[]; onSelect: (p: Step[]) => void; onReorder?: Reorder; onMove?: Move; bare?: boolean
 }) {
   const root = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
+  const inner = (
+    <div style={{ transform: root.scale && Number(root.scale) !== 1 ? `scale(${Number(root.scale)})` : undefined, transformOrigin: 'center center' }}>
+      <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
+    </div>
+  )
+  // bare = no preview chrome (used inside the fullscreen game-screen editor, which
+  // provides the screen background and positions this absolutely).
+  if (bare) return inner
   return (
     <div className="border border-white/10 rounded-lg bg-black/40 overflow-auto flex items-center justify-center"
       style={{ minHeight: 300, maxHeight: 460, padding: 16,
         backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '12px 12px' }}>
-      <div style={{ transform: root.scale && Number(root.scale) !== 1 ? `scale(${Number(root.scale)})` : undefined, transformOrigin: 'center center' }}>
-        <NodeView node={root} path={[]} sel={sel} onSelect={onSelect} onReorder={onReorder} onMove={onMove} />
-      </div>
+      {inner}
     </div>
   )
 }

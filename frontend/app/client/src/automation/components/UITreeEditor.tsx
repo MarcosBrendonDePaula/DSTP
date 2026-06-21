@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react'
+import { LuArrowUp, LuArrowDown, LuMaximize } from 'react-icons/lu'
 import { UICanvas } from './UICanvas'
+import { UIPreview } from './UIPreview'
+import { GameScreenEditor } from './GameScreenPreview'
 
 // Visual tree editor for a ui_builder node. Builds node.data.tree — the same
 // {type, ...props, children} the backend renders. No canvas spam, no JSON: pick
@@ -110,9 +113,10 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
   return clone
 }
 
-export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render' }) {
+export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onSetParam }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
   const [tabState, setTab] = useState<'tree' | 'render'>('tree')
+  const [fullscreen, setFullscreen] = useState(false)
   // When the host (detail modal) owns the tab switching, it passes forceTab and we
   // hide our own tab bar. Otherwise we manage the tab ourselves.
   const tab = forceTab ?? tabState
@@ -263,8 +267,8 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
           <span className="text-gray-500 truncate flex-1">{n.text || n.prefab || n.title || ''}</span>
           {path.length > 0 && (
             <>
-              <button onClick={e => { e.stopPropagation(); move(path, -1) }} className="text-gray-500 hover:text-white px-0.5" title="Subir">↑</button>
-              <button onClick={e => { e.stopPropagation(); move(path, 1) }} className="text-gray-500 hover:text-white px-0.5" title="Descer">↓</button>
+              <button onClick={e => { e.stopPropagation(); move(path, -1) }} className="text-gray-500 hover:text-white px-0.5" title="Subir"><LuArrowUp className="w-3.5 h-3.5 inline-block" /></button>
+              <button onClick={e => { e.stopPropagation(); move(path, 1) }} className="text-gray-500 hover:text-white px-0.5" title="Descer"><LuArrowDown className="w-3.5 h-3.5 inline-block" /></button>
               <button onClick={e => { e.stopPropagation(); removeAt(path) }} className="text-red-400 hover:text-red-300 px-0.5" title="Remover">✕</button>
             </>
           )}
@@ -441,6 +445,29 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
     </div>
   )
 
+  // The canvas-mode block palette (leaf blocks + group/grid/list containers). Shared
+  // between the inline editor and the fullscreen game-screen editor.
+  const canvasPalette = (
+    <div className="border border-white/10 rounded-lg p-1.5 bg-black/20">
+      <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
+      <div className="space-y-1">
+        {[...TYPES.filter(t => !t.container),
+          { value: 'col', label: '▦ Grupo (empilha)' },
+          { value: 'grid', label: '⊞ Grade (grid)' },
+          { value: 'list', label: '🔁 Lista (loop)' },
+        ].map(t => (
+          <div key={t.value} draggable
+            onDragStart={e => { e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
+            className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-emerald-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
+            title="Arraste para o formulário">
+            {t.label}
+          </div>
+        ))}
+      </div>
+      <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste para o formulário. Arraste o componente para mover, alça do canto para redimensionar.</div>
+    </div>
+  )
+
   return (
     <div className="text-xs" style={{ minHeight: 300 }}>
       {/* Tabs — hidden when the host (modal middle column) owns the switching. */}
@@ -489,35 +516,44 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab }: { nodeId: str
       ) : (
         <div className="flex gap-3">
           {/* Palette — drag a block onto the form to create it at the drop point. */}
-          <div className="w-28 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20 self-start">
-            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Blocos</div>
-            <div className="space-y-1">
-              {/* Leaf blocks + group containers (col stacked, grid). Dropping a container on
-                  the form creates a box you can fill with blocked children. */}
-              {[...TYPES.filter(t => !t.container),
-                { value: 'col', label: '▦ Grupo (empilha)' },
-                { value: 'grid', label: '⊞ Grade (grid)' },
-                { value: 'list', label: '🔁 Lista (loop)' },
-              ].map(t => (
-                <div key={t.value} draggable
-                  onDragStart={e => { e.dataTransfer.setData('text/plain', t.value); e.dataTransfer.effectAllowed = 'copy' }}
-                  className="flex items-center gap-1 px-1.5 py-1 rounded cursor-grab active:cursor-grabbing bg-white/5 hover:bg-emerald-500/20 border border-white/10 text-[10px] text-gray-200 select-none"
-                  title="Arraste para o formulário">
-                  {t.label}
-                </div>
-              ))}
-            </div>
-            <div className="text-[8px] text-gray-600 mt-1.5 leading-tight">Arraste para o formulário. Arraste o componente para mover, alça do canto para redimensionar.</div>
-          </div>
+          <div className="w-28 shrink-0 self-start">{canvasPalette}</div>
           {/* Form designer (VB-style canvas) */}
           <div className="flex-1 min-w-[280px]">
-            <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Formulário — arraste da paleta, mova e redimensione</div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[9px] uppercase tracking-wide text-gray-500">Formulário — arraste da paleta, mova e redimensione</span>
+              <button onClick={() => setFullscreen(true)}
+                className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border bg-white/5 text-gray-300 border-white/10 hover:bg-white/10"
+                title="Editar na tela cheia do jogo (1280×720)">
+                <LuMaximize className="w-3 h-3" /> Tela do jogo
+              </button>
+            </div>
             <UICanvas root={root} sel={selPath} onSelect={setSelPath}
               onMoveChild={canvasMoveChild} onResizeChild={canvasResizeChild} onAddChild={canvasAddChild}
               onAddChildInto={canvasAddChildInto} onCellDrop={canvasCellDrop} onResizeForm={canvasResizeForm} />
           </div>
           {inspector}
         </div>
+      )}
+
+      {/* Fullscreen game-screen editor — same canvas, placed on the 1280×720 screen
+          at the node's anchor, real relative size. */}
+      {fullscreen && (
+        <GameScreenEditor
+          pctX={pctX}
+          pctY={pctY}
+          onSetParam={onSetParam}
+          onClose={() => setFullscreen(false)}
+          palette={canvasPalette}
+          inspector={inspector}
+          formW={Number(root.width) || 260}
+          formH={Number(root.height) || 180}
+          onResize={canvasResizeForm}
+        >
+          {/* Render the REAL UI (any layout mode), selectable for the inspector. The
+              fullscreen view is for screen-positioning + prop editing; child layout
+              (reorder/move) stays in the Tree/Canvas tabs. */}
+          <UIPreview tree={root} sel={selPath} onSelect={setSelPath} bare />
+        </GameScreenEditor>
       )}
     </div>
   )

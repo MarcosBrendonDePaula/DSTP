@@ -911,7 +911,15 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
               <span className="text-[9px] text-gray-600">auto-save</span>
             </div>
             {isUIBuilder && midTab === 'editor' ? (
-              <UITreeEditor nodeId={node.id} tree={uiTree ?? null} onChange={tree => onUpdateTree?.(node.id, tree)} forceTab={uiMode === 'canvas' ? 'render' : 'tree'} />
+              <UITreeEditor
+                nodeId={node.id}
+                tree={uiTree ?? null}
+                onChange={tree => onUpdateTree?.(node.id, tree)}
+                forceTab={uiMode === 'canvas' ? 'render' : 'tree'}
+                pctX={(node.data as any)?.params?.pct_x ?? ''}
+                pctY={(node.data as any)?.params?.pct_y ?? ''}
+                onSetParam={(kv) => onUpdateData?.(node.id, { ...(node.data as any), params: { ...((node.data as any)?.params || {}), ...kv } })}
+              />
             ) : (
               <div className="space-y-3">
                 {isUIBuilder && (

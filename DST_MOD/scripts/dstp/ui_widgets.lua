@@ -1064,8 +1064,22 @@ CreateTree = function(cmd)
         ctx.callback_fn(cb, ctx.root_id, data)
     end
     RenderNode(cmd.tree, w, ctx)
-    local ax, ay = AnchorOffset(cmd.anchor or "center")
-    w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
+    -- Positioning. Two models, in priority order:
+    --   1. PERCENT (pct_x/pct_y, 0..100): place the UI's CENTER at that % of the screen
+    --      (relative to its parent = the screen). 0,0 = top-left; 50,50 = center. y is
+    --      flipped because DST's UI space grows UP. Gives free placement anywhere.
+    --   2. ANCHOR (legacy): the old 9-anchor + x/y offset model, kept so existing flows
+    --      keep working.
+    if cmd.pct_x ~= nil and cmd.pct_y ~= nil then
+        local resx = _G.RESOLUTION_X or 1280
+        local resy = _G.RESOLUTION_Y or 720
+        local px = (tonumber(cmd.pct_x) / 100 - 0.5) * resx
+        local py = (0.5 - tonumber(cmd.pct_y) / 100) * resy
+        w:SetPosition(px + (cmd.x or 0), py + (cmd.y or 0))
+    else
+        local ax, ay = AnchorOffset(cmd.anchor or "center")
+        w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
+    end
     return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
 end
 

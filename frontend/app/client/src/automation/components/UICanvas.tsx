@@ -23,7 +23,7 @@ function boxSize(c: UINode): { w: number; h: number } {
 }
 
 export function UICanvas({
-  root, sel, onSelect, onMoveChild, onResizeChild, onAddChild, onAddChildInto, onCellDrop, onResizeForm,
+  root, sel, onSelect, onMoveChild, onResizeChild, onAddChild, onAddChildInto, onCellDrop, onResizeForm, bare,
 }: {
   root: UINode
   sel: Step[]
@@ -34,6 +34,9 @@ export function UICanvas({
   onAddChildInto: (i: number, type: string) => void
   onCellDrop: (gridPath: Step[], gx: number, gy: number, opts: { childIndex?: number; addType?: string }) => void
   onResizeForm: (w: number, h: number) => void
+  /** bare = no outer dark/grid wrapper (used inside the fullscreen game-screen editor,
+   *  which provides its own screen background). */
+  bare?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -113,8 +116,9 @@ export function UICanvas({
   }
 
   return (
-    <div className="border border-white/10 rounded-lg bg-black/50 overflow-auto p-6 flex items-start justify-center"
-      style={{ minHeight: 360, maxHeight: 560,
+    <div
+      className={bare ? 'flex items-start justify-center' : 'border border-white/10 rounded-lg bg-black/50 overflow-auto p-6 flex items-start justify-center'}
+      style={bare ? undefined : { minHeight: 360, maxHeight: 560,
         backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
       {/* The form (root panel). Drop target for the palette. */}
       <div

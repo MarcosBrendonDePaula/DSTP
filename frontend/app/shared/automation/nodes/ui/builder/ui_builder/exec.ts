@@ -17,10 +17,19 @@ export const handler: NodeHandler = async (rc) => {
   }
   const tree = rc.resolveTree(rc.node.data.tree || {})
   if (userid) {
-    rc.pushCommand('ui_command', {
-      userid,
-      cmd: { action: 'create', type: 'tree', id: uiId, group: uiId, tree, anchor: rc.param('anchor', 'center'), seq: Date.now() },
-    })
+    // Position: percent model (pct_x/pct_y) takes priority; else the legacy anchor.
+    // Only forward pct_* when both are set, so anchor-only flows are untouched.
+    const pctXraw = rc.param('pct_x', '')
+    const pctYraw = rc.param('pct_y', '')
+    const hasPct = pctXraw !== '' && pctXraw != null && pctYraw !== '' && pctYraw != null
+    const cmd: any = {
+      action: 'create', type: 'tree', id: uiId, group: uiId, tree,
+      x: Number(rc.param('offset_x', 0)) || 0, y: Number(rc.param('offset_y', 0)) || 0,
+      seq: Date.now(),
+    }
+    if (hasPct) { cmd.pct_x = Number(pctXraw) || 0; cmd.pct_y = Number(pctYraw) || 0 }
+    else { cmd.anchor = rc.param('anchor', 'center') }
+    rc.pushCommand('ui_command', { userid, cmd })
   }
   rc.setContext({ rendered: true })
   // Follow the normal "continua" output, but NOT the `cb:<callback>` handles — those are
