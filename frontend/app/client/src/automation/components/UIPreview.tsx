@@ -71,6 +71,17 @@ function cssColor(v: any): string | undefined {
   if (Array.isArray(v)) { const [r = 1, g = 1, b = 1, a = 1] = v; return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a})` }
   return toCss(v, undefined as any) || undefined
 }
+// A size prop → CSS. Percent = exact (width/height: fills the parent). Pixels = a
+// MINIMUM (min-width/height) so the box grows to fit content, like the renderer.
+function sizeStyle(v: any, dim: 'width' | 'height'): React.CSSProperties {
+  if (v == null || v === '') return {}
+  const s = String(v)
+  if (s.includes('%')) return { [dim]: s }
+  const n = Number(s)
+  if (Number.isNaN(n)) return {}
+  return { [dim === 'width' ? 'minWidth' : 'minHeight']: n }
+}
+
 // px number → px; "50%" → "50%"; else undefined (auto).
 function cssSize(v: any): number | string | undefined {
   if (v == null || v === '') return undefined
@@ -340,7 +351,11 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         background: cssColor(node.background),
         opacity: node.opacity != null ? Number(node.opacity) : undefined,
         borderRadius: 4, boxShadow: ring,
-        width: cssSize(node.width), height: cssSize(node.height),
+        // % width = exact (fills parent); px width = MINIMUM (grows to fit content,
+        // matching the renderer). Same for height.
+        ...sizeStyle(node.width, 'width'),
+        ...sizeStyle(node.height, 'height'),
+        boxSizing: 'border-box',
         outline: listOutline || '1px dashed rgba(255,255,255,0.08)',
       }}>
         {listBadge}

@@ -24,6 +24,10 @@ local function Log(msg)
     print("[DSTP UI] " .. msg)
 end
 
+-- Toggle verbose layout logging (box sizes/positions the renderer computes), so we can
+-- verify the HTML/CSS layout against what the game actually builds. Flip to false to mute.
+local LAYOUT_DEBUG = true
+
 local function InitFontMap()
     FONT_MAP = {
         NEWFONT           = _G.NEWFONT,
@@ -260,12 +264,15 @@ local function ResolveSize(value, ref, ctx, dim)
     if not pct then return nil end              -- not a "<num>%" string
     ref = (ref and tostring(ref):lower()) or "parent"  -- default: relative to the parent
     local base
+    local isW = (dim == "w")
     if ref == "screen" then
-        base = (dim == "w") and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
+        base = isW and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
     elseif ref == "panel" then
-        base = (dim == "w") and ctx and ctx.panel_w or (ctx and ctx.panel_h)
+        -- explicit if/else: the old `A and B and C or D` chain wrongly fell through to the
+        -- HEIGHT base when the width base was nil/0 (Lua and/or precedence).
+        if isW then base = ctx and ctx.panel_w else base = ctx and ctx.panel_h end
     elseif ref == "parent" then
-        base = (dim == "w") and ctx and ctx.parent_w or (ctx and ctx.parent_h)
+        if isW then base = ctx and ctx.parent_w else base = ctx and ctx.parent_h end
     end
     if not base or base <= 0 then return nil end -- unknown reference → caller's default
     return base * pct / 100
@@ -312,10 +319,19 @@ local function LayoutChildren(node, container, ctx, axis)
     local align = node.align or "center"        -- cross axis
     -- The container's box on the main axis: a fixed width/height (if set) defines the
     -- track length for justify; else the track is exactly the content (sum).
-    local fixedMain = axis == "y" and ResolveH(node, ctx) or ResolveW(node, ctx)
-    local track = fixedMain and (fixedMain - 2 * pad) or sum
-    local crossFixed = axis == "y" and ResolveW(node, ctx) or ResolveH(node, ctx)
-    local crossBox = crossFixed and (crossFixed - 2 * pad) or cross
+    -- NB: NOT `axis=="y" and ResolveH or ResolveW` — when ResolveH is nil (no height set)
+    -- that chain falls through to ResolveW, wrongly using WIDTH as the main size.
+    local fixedMain = (axis == "y") and ResolveH(node, ctx) or nil
+    if axis ~= "y" then fixedMain = ResolveW(node, ctx) end
+    -- A fixed main size is a MINIMUM (like CSS min-height): if the content is taller
+    -- than the fixed size, the box GROWS to fit instead of pushing children outside.
+    -- So the track (space children lay out in) = max(fixed content box, content sum).
+    local fixedTrack = fixedMain and (fixedMain - 2 * pad) or nil
+    local track = fixedTrack and math.max(fixedTrack, sum) or sum
+    -- same and/or trap: pick the cross dimension explicitly.
+    local crossFixed = (axis == "y") and ResolveW(node, ctx) or nil
+    if axis ~= "y" then crossFixed = ResolveH(node, ctx) end
+    local crossBox = crossFixed and math.max(crossFixed - 2 * pad, cross) or cross
 
     -- Main-axis start + per-gap spacing for justify (origin centered at 0).
     local extra = track - sum            -- free space along the main axis
@@ -331,6 +347,12 @@ local function LayoutChildren(node, container, ctx, axis)
         else return 0 end                 -- center / stretch → centered
     end
 
+    if LAYOUT_DEBUG then
+        Log(string.format("  layout axis=%s justify=%s align=%s pad=%d track=%d sum=%d cross=%d fixedMain=%s crossFixed=%s kids=%d",
+            axis, tostring(justify), tostring(align), pad, math.floor(track), math.floor(sum), math.floor(cross), tostring(fixedMain), tostring(crossFixed), #kids))
+        for i, k in ipairs(kids) do Log(string.format("    kid[%d] %dx%d margin=%d", i, math.floor(k.width), math.floor(k.height), k.margin)) end
+    end
+
     if axis == "y" then
         -- y grows UP in DST: top is +, so we move DOWN as we advance.
         local cursor = -startOff
@@ -339,7 +361,8 @@ local function LayoutChildren(node, container, ctx, axis)
             k.w:SetPosition(crossPos(k.width), cursor, 0)
             cursor = cursor - k.height / 2 - k.margin - spread
         end
-        return crossBox, fixedMain or sum
+        -- Report the actual box: grown to fit content if the fixed size was smaller.
+        return crossBox, math.max(fixedMain or 0, track)
     else
         local cursor = startOff
         for _, k in ipairs(kids) do
@@ -347,7 +370,7 @@ local function LayoutChildren(node, container, ctx, axis)
             k.w:SetPosition(cursor, crossPos(k.height), 0)
             cursor = cursor + k.width / 2 + k.margin + spread
         end
-        return fixedMain or sum, crossBox
+        return math.max(fixedMain or 0, track), crossBox
     end
 end
 
@@ -726,14 +749,27 @@ RenderNodeImpl = function(node, parent, ctx)
         -- If THIS container has a fixed (resolvable) size, expose its CONTENT box as the
         -- parent reference so children with width_ref:parent / "100%" resolve against it
         -- (top-down, non-circular). Restore after — auto-size parents keep the old ref.
+        -- CSS-like sizing: WIDTH flows top-down (a block fills its parent's width unless
+        -- it has its own), HEIGHT is bottom-up (auto = sum of children). So the content
+        -- box width passed to children = (own width or inherited parent width) − padding;
+        -- children's width:100% resolves against it even when THIS container is auto.
         local prevPW, prevPH = ctx.parent_w, ctx.parent_h
         local selfW, selfH = ResolveW(node, ctx), ResolveH(node, ctx)
         local pad2 = (tonumber(node.padding) or 0) * 2
-        if selfW then ctx.parent_w = selfW - pad2 end
+        local contentW = (selfW or ctx.parent_w)   -- inherit parent width when auto
+        if contentW then ctx.parent_w = contentW - pad2 end
         if selfH then ctx.parent_h = selfH - pad2 end
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
         ctx.parent_w, ctx.parent_h = prevPW, prevPH
+        -- Reported width: own fixed width, else the measured content (keeps auto-grow
+        -- so a small box doesn't silently stretch to the whole screen).
         local fw, fh = selfW or w, selfH or h
+        if LAYOUT_DEBUG then
+            Log(string.format("%s id=%s -> box %dx%d (selfW=%s selfH=%s measured %dx%d) parent=%sx%s kids=%d",
+                t, tostring(node.id or "?"), math.floor(fw), math.floor(fh),
+                tostring(selfW), tostring(selfH), math.floor(w), math.floor(h),
+                tostring(prevPW), tostring(prevPH), type(node.children)=="table" and #node.children or 0))
+        end
         AddBox(c, fw, fh, node)   -- CSS background/border/opacity behind the children
         return c, fw, fh
 
@@ -1073,10 +1109,19 @@ RenderNodeImpl = function(node, parent, ctx)
                 body_txt:SetPosition(0, -10, 0)
             end
             -- Render any children too (composed nodes), centered as a col (or canvas).
+            -- Expose the panel's CONTENT box as the parent reference so children with
+            -- width:100% resolve against the PANEL (pw), not the screen (top-down width).
             local content = holder:AddChild(Widget("content"))
+            local prevPW, prevPH = ctx.parent_w, ctx.parent_h
+            ctx.parent_w, ctx.parent_h = pw - 40, ph - 40
+            local ccw, cch = 0, 0
             if node.mode == "canvas" and HasChildXY(node) then CanvasChildren(node, content, ctx)
             elseif node.mode == "grid" then GridChildren(node, content, ctx)
-            else LayoutChildren(node, content, ctx, "y") end
+            else ccw, cch = LayoutChildren(node, content, ctx, "y") end
+            ctx.parent_w, ctx.parent_h = prevPW, prevPH
+            -- The fixed size is a MINIMUM: grow the panel so its content never spills out.
+            pw = math.max(pw, (ccw or 0) + 40)
+            ph = math.max(ph, (cch or 0) + 40)
         else
             local content = holder:AddChild(Widget("content"))
             local cw, ch
@@ -1238,9 +1283,11 @@ CreateTree = function(cmd)
         local px = (tonumber(cmd.pct_x) / 100 - 0.5) * resx
         local py = (0.5 - tonumber(cmd.pct_y) / 100) * resy
         w:SetPosition(px + (cmd.x or 0), py + (cmd.y or 0))
+        if LAYOUT_DEBUG then Log(string.format("CreateTree id=%s placed by PERCENT %s%%,%s%% -> screen(%d,%d)", tostring(cmd.id), tostring(cmd.pct_x), tostring(cmd.pct_y), math.floor(px), math.floor(py))) end
     else
         local ax, ay = AnchorOffset(cmd.anchor or "center")
         w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
+        if LAYOUT_DEBUG then Log(string.format("CreateTree id=%s placed by ANCHOR %s -> screen(%d,%d)", tostring(cmd.id), tostring(cmd.anchor or "center"), math.floor(ax), math.floor(ay))) end
     end
     return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
 end
