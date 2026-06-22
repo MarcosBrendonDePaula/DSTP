@@ -1055,7 +1055,49 @@ end
 -- COMPOSES with the user factor by reading the widget's current scale and
 -- multiplying, never overwriting. Reported (w,h) is multiplied so the parent
 -- layout reserves the scaled slot.
+-- ── Element model (HTML/CSS-like) → legacy node ─────────────────────────────
+-- New UIs may use { tag, style, children } (see specs/ui-element-model.md). We DON'T
+-- rewrite the renderer: we normalize an element into the legacy node shape RenderNodeImpl
+-- already understands. Legacy nodes (no `tag`) pass through untouched, so both models
+-- render through the same path. `tag:'div'` + style.display maps to col/row/grid/canvas.
+local DISPLAY_TO_LEGACY = {
+    -- display → { type, mode }  (direction handled below)
+    flex = { type = "col" },      -- direction decides col vs row
+    grid = { type = "col", mode = "grid" },
+    block = { type = "col" },
+    absolute = { type = "panel", mode = "canvas" },
+}
+local function NormalizeElement(node)
+    if type(node) ~= "table" or node.tag == nil then return node end
+    local st = node.style or {}
+    local out = {}
+    -- carry non-style/non-tag fields (id, callback, text, prefab, value, children, tabs, ...)
+    for k, v in pairs(node) do
+        if k ~= "tag" and k ~= "style" then out[k] = v end
+    end
+    -- map the box-model style onto the flat props the legacy renderer reads
+    out.width = st.width; out.height = st.height
+    out.width_ref = st.width_ref; out.height_ref = st.height_ref
+    out.gap = st.gap; out.scale = st.scale
+    out.x = st.x; out.y = st.y
+    if st.color ~= nil then out.color = st.color end
+    if node.tag == "div" then
+        local disp = st.display or "flex"
+        local map = DISPLAY_TO_LEGACY[disp] or DISPLAY_TO_LEGACY.flex
+        out.type = map.type
+        if map.mode then out.mode = map.mode end
+        if disp == "flex" and (st.direction == "row") then out.type = "row" end
+        if disp == "grid" and st.cols then out.cols = st.cols end
+        if disp == "grid" and st.grid_template then out.grid_rows = st.grid_template end
+    else
+        -- leaf tags map almost 1:1; `input` was `text_input`.
+        out.type = (node.tag == "input") and "text_input" or node.tag
+    end
+    return out
+end
+
 RenderNode = function(node, parent, ctx)
+    node = NormalizeElement(node)
     local widget, w, h = RenderNodeImpl(node, parent, ctx)
     local s = node and tonumber(node.scale)
     if widget and s and s ~= 1 and widget.SetScale then
