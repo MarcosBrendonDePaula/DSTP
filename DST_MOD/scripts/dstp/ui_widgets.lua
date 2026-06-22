@@ -25,8 +25,8 @@ local function Log(msg)
 end
 
 -- Toggle verbose layout logging (box sizes/positions the renderer computes), so we can
--- verify the HTML/CSS layout against what the game actually builds. Flip to false to mute.
-local LAYOUT_DEBUG = true
+-- verify the HTML/CSS layout against what the game actually builds. OFF in prod.
+local LAYOUT_DEBUG = false
 
 local function InitFontMap()
     FONT_MAP = {
@@ -295,7 +295,9 @@ local function LayoutChildren(node, container, ctx, axis)
             -- CSS margin: outer space around the child along the main axis. Read from the
             -- element style or the flat prop. Symmetric (single value) for now.
             local mar = tonumber(childdef.margin) or (childdef.style and tonumber(childdef.style.margin)) or 0
-            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0, margin = mar })
+            -- z = render order (CSS z-index): higher draws on top. Read style or flat prop.
+            local z = tonumber(childdef.z) or (childdef.style and tonumber(childdef.style.z)) or 0
+            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0, margin = mar, z = z, order = #kids })
         end
     end
 
@@ -345,6 +347,18 @@ local function LayoutChildren(node, container, ctx, axis)
         if align == "start" then return -crossBox / 2 + sizeCross / 2
         elseif align == "end" then return crossBox / 2 - sizeCross / 2
         else return 0 end                 -- center / stretch → centered
+    end
+
+    -- z-index: re-stack children by z (stable: ties keep document order). DST draws in
+    -- child order with MoveToFront putting a widget last/top, so MoveToFront each child in
+    -- ascending z → higher z ends up drawn on top. No-op when all z are 0 (the default).
+    local anyZ = false
+    for _, k in ipairs(kids) do if k.z ~= 0 then anyZ = true break end end
+    if anyZ then
+        local ordered = {}
+        for i, k in ipairs(kids) do ordered[i] = k end
+        table.sort(ordered, function(a, b) if a.z == b.z then return a.order < b.order end return a.z < b.z end)
+        for _, k in ipairs(ordered) do if k.w.MoveToFront then k.w:MoveToFront() end end
     end
 
     if LAYOUT_DEBUG then
@@ -1277,6 +1291,13 @@ CreateTree = function(cmd)
     --      flipped because DST's UI space grows UP. Gives free placement anywhere.
     --   2. ANCHOR (legacy): the old 9-anchor + x/y offset model, kept so existing flows
     --      keep working.
+    if LAYOUT_DEBUG then
+        local sw, sh = "?", "?"
+        if _G.TheSim and _G.TheSim.GetScreenSize then local a, b = _G.TheSim:GetScreenSize(); sw, sh = tostring(a), tostring(b) end
+        local sc = (w.GetScale and w:GetScale()) or "?"
+        Log(string.format("scale-info RESOLUTION=%sx%s screen=%sx%s rootScale=%s",
+            tostring(_G.RESOLUTION_X), tostring(_G.RESOLUTION_Y), sw, sh, tostring(sc)))
+    end
     if cmd.pct_x ~= nil and cmd.pct_y ~= nil then
         local resx = _G.RESOLUTION_X or 1280
         local resy = _G.RESOLUTION_Y or 720

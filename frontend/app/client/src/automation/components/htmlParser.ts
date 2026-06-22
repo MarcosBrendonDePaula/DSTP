@@ -11,7 +11,7 @@
 
 type UINode = Record<string, any>
 
-const NUM_STYLE = new Set(['gap', 'padding', 'margin', 'opacity', 'scale', 'cols', 'x', 'y'])
+const NUM_STYLE = new Set(['gap', 'padding', 'margin', 'opacity', 'scale', 'cols', 'x', 'y', 'z'])
 const COLOR_KEYS = new Set(['background', 'color', 'tint'])
 const TEXT_TAGS = new Set(['text', 'button', 'input'])
 

@@ -24,7 +24,7 @@ export function normalizeElement(node: UINode): UINode {
   out.x = st.x; out.y = st.y
   out.padding = st.padding; out.justify = st.justify; out.align = st.align
   out.margin = st.margin; out.background = st.background; out.border = st.border
-  out.opacity = st.opacity
+  out.opacity = st.opacity; out.z = st.z
   if (st.color != null) out.color = st.color
   if (node.tag === 'div') {
     const disp = st.display || 'flex'
@@ -91,7 +91,7 @@ export function resolveSizes(node: UINode, parentW = SCREEN_W, parentH = SCREEN_
 // ── legacy node → element model (the inverse, for the code editor's "view as HTML") ──
 const STYLE_KEYS = new Set([
   'width', 'height', 'width_ref', 'height_ref', 'gap', 'scale', 'x', 'y',
-  'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'color',
+  'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'color', 'z',
 ])
 const CONTAINER_TYPES = new Set(['col', 'row', 'panel'])
 

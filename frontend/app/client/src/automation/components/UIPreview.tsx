@@ -355,6 +355,7 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         // matching the renderer). Same for height.
         ...sizeStyle(node.width, 'width'),
         ...sizeStyle(node.height, 'height'),
+        zIndex: node.z != null ? Number(node.z) : undefined,
         boxSizing: 'border-box',
         outline: listOutline || '1px dashed rgba(255,255,255,0.08)',
       }}>

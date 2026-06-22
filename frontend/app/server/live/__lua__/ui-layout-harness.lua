@@ -10,6 +10,7 @@ local C = KIT.new_checker()
 local check = C.check
 
 local created = {}
+local MOVE_ORDER = {}   -- records MoveToFront calls in order (for z-index assertions)
 local function mkWidget(kind, ctorArgs)
     local w
     w = { kind = kind, ctorArgs = ctorArgs, children = {}, size = nil, pos = nil,
@@ -20,6 +21,7 @@ local function mkWidget(kind, ctorArgs)
         if key == "SetSize" then return function(self, a, b) self.size = { a, b }; return self end end
         if key == "ForceImageSize" then return function(self, a, b) self.size = { a, b }; return self end end
         if key == "SetPosition" then return function(self, x, y) self.pos = { x, y }; return self end end
+        if key == "MoveToFront" then return function(self) MOVE_ORDER[#MOVE_ORDER+1] = self; self.moved = true; return self end end
         if key == "GetRegionSize" then return function() return 100, 20 end end
         if key == "GetSize" then return function() return 56, 56 end end
         return function(self) return self end
@@ -95,5 +97,29 @@ check("no box stretched to screen size (w>=1240 or h>=700)", not screenWide,
 local tallest = 0
 for _, s in ipairs(sizes) do if s.h > tallest then tallest = s.h end end
 check("nothing absurdly tall (tallest<=400)", tallest <= 400, "tallest=" .. tallest)
+
+-- ── z-index: children re-stacked by z (higher draws on top via MoveToFront) ──
+-- Three texts, middle one z=5. Expect: MoveToFront ran, and the z=5 widget was moved
+-- LAST among the three (ascending z → highest ends on top). z=0 trees do NOT reorder.
+created = {}; MOVE_ORDER = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "z1", tree = {
+    type = "col", gap = 4, children = {
+        { type = "text", text = "A" },
+        { type = "text", text = "B", z = 5 },
+        { type = "text", text = "C" },
+    },
+} })
+-- find the Text widget whose ctor string is "B"
+local bWidget
+for _, w in ipairs(created) do if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == "B" then bWidget = w end end
+check("z-index reordered (MoveToFront ran)", #MOVE_ORDER >= 3)
+check("z=5 child moved to front LAST (drawn on top)", #MOVE_ORDER > 0 and MOVE_ORDER[#MOVE_ORDER] == bWidget)
+
+-- A plain z=0 tree must NOT reorder (no MoveToFront on children).
+created = {}; MOVE_ORDER = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "z2", tree = {
+    type = "col", gap = 4, children = { { type = "text", text = "X" }, { type = "text", text = "Y" } },
+} })
+check("z=0 tree does not reorder children", #MOVE_ORDER == 0)
 
 return C.report()
