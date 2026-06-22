@@ -1,8 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { LuArrowUp, LuArrowDown, LuMaximize } from 'react-icons/lu'
 import { UICanvas } from './UICanvas'
 import { UIPreview } from './UIPreview'
 import { GameScreenEditor } from './GameScreenPreview'
+import Editor from '@monaco-editor/react'
+import { htmlToTree, treeToHtml } from './htmlParser'
+import { toElement, normalizeTree, resolveSizes } from './elementModel'
 
 // Visual tree editor for a ui_builder node. Builds node.data.tree — the same
 // {type, ...props, children} the backend renders. No canvas spam, no JSON: pick
@@ -63,9 +66,9 @@ function defaults(type: string): UINode {
 // any field — including booleans like draggable/closeable — can take a template
 // ({{...}}) instead of a fixed value.
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
-  col: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
-  row: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }, { key: 'background', label: 'Fundo [r,g,b,a]', ph: '[0,0,0,0.5]' }, { key: 'opacity', label: 'Opacidade 0-1', ph: '1' }, { key: 'margin', label: 'Margem (externa)', ph: '0' },],
+  col: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'padding', label: 'Padding', ph: '0' }, { key: 'justify', label: 'Justify (eixo principal)' }, { key: 'align', label: 'Align (eixo cruzado)' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }, { key: 'background', label: 'Fundo [r,g,b,a]', ph: '[0,0,0,0.5]' }, { key: 'opacity', label: 'Opacidade 0-1', ph: '1' }, { key: 'margin', label: 'Margem (externa)', ph: '0' },],
+  row: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'padding', label: 'Padding', ph: '0' }, { key: 'justify', label: 'Justify (eixo principal)' }, { key: 'align', label: 'Align (eixo cruzado)' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'background', label: 'Fundo [r,g,b,a]', ph: '[0,0,0,0.5]' }, { key: 'opacity', label: 'Opacidade 0-1', ph: '1' }, { key: 'margin', label: 'Margem (externa)', ph: '0' },],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
   text: [{ key: 'text', label: 'Texto', ph: '{{x}}' }, { key: 'size', label: 'Tamanho fonte', ph: '18' }, { key: 'color', label: 'Cor [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura caixa', ph: 'auto' }, { key: 'height', label: 'Altura caixa', ph: 'auto' }, { key: 'id', label: 'Node ID (p/ atualizar)' }, { key: 'callback', label: 'Callback (clicável)' }],
   text_input: [{ key: 'id', label: 'ID do campo (retorna em fields.<id>)', ph: 'senha' }, { key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }],
@@ -113,10 +116,37 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
   return clone
 }
 
+// Code-mode state survives a remount of this component (the detail modal can briefly
+// re-create it while the live HTML edit re-saves the node). Keyed by nodeId.
+const _codeState: Record<string, { on: boolean; draft: string }> = {}
+
 export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onSetParam }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
   const [tabState, setTab] = useState<'tree' | 'render'>('tree')
   const [fullscreen, setFullscreen] = useState(false)
+  const [codeMode, setCodeModeRaw] = useState(() => _codeState[nodeId]?.on ?? false)
+  const [codeDraft, setCodeDraftRaw] = useState(() => _codeState[nodeId]?.draft ?? '')
+  // Persist on every change so a remount restores it.
+  const setCodeMode = (v: boolean | ((m: boolean) => boolean)) => setCodeModeRaw(prev => {
+    const next = typeof v === 'function' ? v(prev) : v
+    _codeState[nodeId] = { on: next, draft: _codeState[nodeId]?.draft ?? codeDraft }
+    return next
+  })
+  const setCodeDraft = (v: string) => { _codeState[nodeId] = { on: _codeState[nodeId]?.on ?? codeMode, draft: v }; setCodeDraftRaw(v) }
+  const [codeErr, setCodeErr] = useState<string | null>(null)
+  const codeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Live HTML: as the author types, parse + apply (debounced 400ms). A parse error
+  // just shows under the box — the last good tree stays applied, nothing is lost.
+  const onCodeChange = (html: string) => {
+    setCodeDraft(html)
+    if (codeTimer.current) clearTimeout(codeTimer.current)
+    codeTimer.current = setTimeout(() => {
+      if (!html.trim()) { setCodeErr(null); return }
+      try { save(normalizeTree(htmlToTree(html))); setCodeErr(null) }
+      catch (err: any) { setCodeErr('HTML inválido: ' + (err?.message ?? err)) }
+    }, 400)
+  }
   // When the host (detail modal) owns the tab switching, it passes forceTab and we
   // hide our own tab bar. Otherwise we manage the tab ourselves.
   const tab = forceTab ?? tabState
@@ -423,6 +453,18 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
                   <option value="grid">Grade (linhas com larguras)</option>
                   <option value="canvas">Livre (posição x,y)</option>
                 </select>
+              ) : (f.key === 'justify' || f.key === 'align') ? (
+                <select
+                  value={selected[f.key] ?? 'center'}
+                  onChange={e => setProp(f.key, e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none"
+                >
+                  <option value="start">Início</option>
+                  <option value="center">Centro</option>
+                  <option value="end">Fim</option>
+                  {f.key === 'justify' && <option value="between">Espaçado (between)</option>}
+                  {f.key === 'align' && <option value="stretch">Esticar (stretch)</option>}
+                </select>
               ) : (f.key === 'width' || f.key === 'height') ? (
                 // Size: px (e.g. 120) OR percent (e.g. 50%). When percent, a reference
                 // selector chooses what the % is OF (screen / panel / parent).
@@ -499,19 +541,73 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
 
   return (
     <div className="text-xs" style={{ minHeight: 300 }}>
-      {/* Tabs — hidden when the host (modal middle column) owns the switching. */}
-      {!forceTab && (
-        <div className="flex gap-1 mb-2">
-          {([['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
-            <button key={k} onClick={() => setTab(k)}
-              className={`px-3 py-1 rounded-t text-[11px] border-b-2 ${tab === k ? 'border-indigo-400 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
-              {lbl}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Top bar: tabs (when we own them) + a Code-mode toggle (always available). */}
+      <div className="flex gap-1 mb-2 items-center">
+        {!forceTab && ([['tree', '🌳 Árvore'], ['render', '👁 Render']] as const).map(([k, lbl]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-3 py-1 rounded-t text-[11px] border-b-2 ${tab === k ? 'border-indigo-400 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+            {lbl}
+          </button>
+        ))}
+        <button onClick={() => { try { setCodeDraft(treeToHtml(toElement(root))) } catch { setCodeDraft('') } setCodeErr(null); setCodeMode(m => !m) }}
+          className={`ml-auto px-2.5 py-1 rounded text-[10px] border ${codeMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}
+          title="Editar a UI como HTML">
+          {'</>'} HTML
+        </button>
+      </div>
 
-      {tab === 'tree' ? (
+      {codeMode ? (
+        <div className="space-y-2">
+          <div className="text-[9px] text-gray-500 leading-snug">
+            Escreva a UI como <b>HTML</b> — aplica ao vivo enquanto digita. Tags: <code>div/section</code> (container),
+            <code>h1..h6/p/span/strong/text</code>, <code>button/icon/img/bar/input</code>.
+            Ex: <code>{'<div style="display:flex; gap:8; background:0.1,0.1,0.15,1">'}</code>.
+          </div>
+          {/* Monaco (HTML, source of truth) + live preview side by side. */}
+          <div className="flex gap-2">
+            <div className="flex-1 min-w-0 rounded-lg overflow-hidden border border-white/10">
+              <Editor
+                height="440px"
+                defaultLanguage="html"
+                theme="vs-dark"
+                value={codeDraft}
+                onChange={v => onCodeChange(v ?? '')}
+                options={{
+                  minimap: { enabled: false }, fontSize: 12, lineNumbers: 'on',
+                  scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2,
+                  automaticLayout: true, padding: { top: 8, bottom: 8 },
+                }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Preview (tela 1280×720, escalada)</div>
+              {/* Render on a scaled 1280×720 screen so percent sizes (width_ref:screen)
+                  resolve like in-game. Sizes are pre-resolved to px to match the renderer. */}
+              <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40" style={{ width: 1280 * 0.34, height: 720 * 0.34 }}>
+                <div style={{ width: 1280, height: 720, transform: 'scale(0.34)', transformOrigin: 'top left',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'radial-gradient(circle at 50% 40%, #2a2f3a 0%, #16181d 70%, #0d0e12 100%)' }}>
+                  <UIPreview tree={resolveSizes(root)} sel={[]} onSelect={() => {}} bare />
+                </div>
+              </div>
+            </div>
+          </div>
+          {codeErr && <div className="text-[10px] text-red-400">{codeErr}</div>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                // Parse HTML → element tree, then normalize to the legacy shape so BOTH
+                // the visual tree editor and the renderer work with it.
+                try { const tree = normalizeTree(htmlToTree(codeDraft)); save(tree); setCodeErr(null); setCodeMode(false) }
+                catch (err: any) { setCodeErr('HTML inválido: ' + (err?.message ?? err)) }
+              }}
+              className="text-[11px] px-3 py-1.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
+              Aplicar
+            </button>
+            <button onClick={() => setCodeMode(false)} className="text-[11px] px-3 py-1.5 rounded bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10">Cancelar</button>
+          </div>
+        </div>
+      ) : tab === 'tree' ? (
         <div className="flex gap-3">
           {/* Palette */}
           <div className="w-32 shrink-0 border border-white/10 rounded-lg p-1.5 bg-black/20">
@@ -581,7 +677,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
           {/* Render the REAL UI (any layout mode), selectable for the inspector. The
               fullscreen view is for screen-positioning + prop editing; child layout
               (reorder/move) stays in the Tree/Canvas tabs. */}
-          <UIPreview tree={root} sel={selPath} onSelect={setSelPath} bare />
+          <UIPreview tree={resolveSizes(root)} sel={selPath} onSelect={setSelPath} bare />
         </GameScreenEditor>
       )}
     </div>

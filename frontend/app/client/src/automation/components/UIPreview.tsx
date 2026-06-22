@@ -8,6 +8,8 @@
 // branch of RenderNode. Templates ({{...}}) are shown literally — the preview can't
 // resolve flow context.
 
+import { normalizeElement } from './elementModel'
+
 type UINode = Record<string, any>
 type Step = { kind: 'child' | 'tab'; i: number }
 
@@ -57,6 +59,28 @@ function toCss(color: any, fallback = 'rgba(255,255,255,1)'): string {
   return fallback
 }
 
+// Map our style props to CSS, matching how the Lua renderer interprets them.
+function cssJustify(j: any): string {
+  switch (j) { case 'start': return 'flex-start'; case 'end': return 'flex-end'; case 'between': return 'space-between'; default: return 'center' }
+}
+function cssAlign(a: any): string {
+  switch (a) { case 'start': return 'flex-start'; case 'end': return 'flex-end'; case 'stretch': return 'stretch'; default: return 'center' }
+}
+function cssColor(v: any): string | undefined {
+  if (v == null) return undefined
+  if (Array.isArray(v)) { const [r = 1, g = 1, b = 1, a = 1] = v; return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a})` }
+  return toCss(v, undefined as any) || undefined
+}
+// px number → px; "50%" → "50%"; else undefined (auto).
+function cssSize(v: any): number | string | undefined {
+  if (v == null || v === '') return undefined
+  if (typeof v === 'number') return v
+  const s = String(v)
+  if (s.includes('%')) return s
+  const n = Number(s)
+  return Number.isNaN(n) ? undefined : n
+}
+
 const samePath = (a: Step[], b: Step[]) =>
   a.length === b.length && a.every((s, i) => s.kind === b[i].kind && s.i === b[i].i)
 
@@ -76,12 +100,17 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
   editor?: boolean  // when true, grid containers draw the cell table + accept cell drops
   onCellDrop?: CellDrop
 }): React.ReactNode {
+  node = normalizeElement(node)   // accept element model { tag, style } too
   if (!node || !node.type) return null
   const isSel = samePath(path, sel)
   const ring = isSel ? '0 0 0 2px #6366f1' : undefined
   const pick = (e: React.MouseEvent) => { e.stopPropagation(); onSelect(path) }
   const t = node.type
-  const isCanvas = node.mode === 'canvas' && (t === 'panel' || t === 'col' || t === 'row')
+  // Canvas = absolute x/y placement. But if NO child declares x/y, treating it as canvas
+  // would stack everything at (0,0) — so fall back to normal (flex) stacking. This makes
+  // a stray display:absolute without coords behave sanely instead of overlapping.
+  const childrenHaveXY = Array.isArray(node.children) && node.children.some((c: any) => c?.x != null || c?.y != null)
+  const isCanvas = node.mode === 'canvas' && childrenHaveXY && (t === 'panel' || t === 'col' || t === 'row')
   // A container with `repeat` is a LIST (loop): mark it with a distinct dashed purple
   // border + a 🔁 badge so it's obvious the first child is a per-item template.
   const isList = !!node.repeat && (t === 'panel' || t === 'col' || t === 'row')
@@ -302,9 +331,16 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
       <div onClick={pick} style={{
         position: 'relative',
         display: 'flex', flexDirection: t === 'col' ? 'column' : 'row',
-        gap, alignItems: 'center', justifyContent: 'center',
-        padding: isList ? '8px 4px 4px' : 2, borderRadius: 4, boxShadow: ring,
-        width: Number(node.width) || undefined, height: Number(node.height) || undefined,
+        gap,
+        // honour the same box-model props the Lua renderer reads (justify/align/
+        // padding/background/opacity/size — incl. percent sizes which CSS takes as-is).
+        justifyContent: cssJustify(node.justify),
+        alignItems: cssAlign(node.align),
+        padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
+        background: cssColor(node.background),
+        opacity: node.opacity != null ? Number(node.opacity) : undefined,
+        borderRadius: 4, boxShadow: ring,
+        width: cssSize(node.width), height: cssSize(node.height),
         outline: listOutline || '1px dashed rgba(255,255,255,0.08)',
       }}>
         {listBadge}

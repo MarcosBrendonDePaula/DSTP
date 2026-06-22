@@ -21,7 +21,7 @@ function resolveSize(
   const m = String(value).match(/^\s*(-?\d+\.?\d*)\s*%\s*$/)
   if (!m) return null
   const pct = Number(m[1])
-  const r = (ref || 'screen').toLowerCase()
+  const r = (ref || 'parent').toLowerCase()
   let base: number | null | undefined
   if (r === 'screen') base = dim === 'w' ? RES_X : RES_Y
   else if (r === 'panel') base = dim === 'w' ? ctx.panel_w : ctx.panel_h
@@ -48,8 +48,9 @@ describe('percent size resolution (mirrors ui_widgets.lua ResolveSize)', () => {
     expect(resolveSize('10%', 'panel', ctx, 'h')).toBe(20)     // 10% of 200
   })
 
-  it('defaults the reference to screen when omitted', () => {
-    expect(resolveSize('100%', undefined, ctx, 'w')).toBe(1280)
+  it('defaults the reference to the PARENT when omitted', () => {
+    expect(resolveSize('100%', undefined, ctx, 'w')).toBe(400)  // parent_w, not screen
+    expect(resolveSize('50%', undefined, ctx, 'h')).toBe(100)   // 50% of parent_h 200
   })
 
   it('returns null when the reference has no known size (renderer keeps its default)', () => {

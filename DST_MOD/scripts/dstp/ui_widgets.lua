@@ -258,7 +258,7 @@ local function ResolveSize(value, ref, ctx, dim)
     local s = tostring(value)
     local pct = tonumber(s:match("^%s*(%-?%d+%.?%d*)%s*%%%s*$"))
     if not pct then return nil end              -- not a "<num>%" string
-    ref = (ref and tostring(ref):lower()) or "screen"
+    ref = (ref and tostring(ref):lower()) or "parent"  -- default: relative to the parent
     local base
     if ref == "screen" then
         base = (dim == "w") and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
@@ -285,41 +285,69 @@ local function LayoutChildren(node, container, ctx, axis)
         local cwidget
         cwidget, cw, ch = RenderNode(childdef, container, ctx)
         if cwidget then
-            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0 })
+            -- CSS margin: outer space around the child along the main axis. Read from the
+            -- element style or the flat prop. Symmetric (single value) for now.
+            local mar = tonumber(childdef.margin) or (childdef.style and tonumber(childdef.style.margin)) or 0
+            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0, margin = mar })
         end
     end
 
-    -- Total extent along the layout axis + max cross extent.
-    local total, cross = 0, 0
+    -- Total extent along the layout axis (sum + gaps + per-child margins) + max cross.
+    local sum, cross = 0, 0
     for i, k in ipairs(kids) do
         if axis == "y" then
-            total = total + k.height
+            sum = sum + k.height + 2 * k.margin
             if k.width > cross then cross = k.width end
         else
-            total = total + k.width
+            sum = sum + k.width + 2 * k.margin
             if k.height > cross then cross = k.height end
         end
-        if i < #kids then total = total + gap end
+        if i < #kids then sum = sum + gap end
     end
 
-    -- Place children centered on the cross axis, stacked on the main axis,
-    -- with the group centered around the container origin (0,0).
+    -- Box model + flex alignment (HTML/CSS-like). Defaults reproduce the legacy
+    -- centered stack, so untouched trees render exactly as before.
+    local pad = tonumber(node.padding) or 0
+    local justify = node.justify or "center"   -- main axis
+    local align = node.align or "center"        -- cross axis
+    -- The container's box on the main axis: a fixed width/height (if set) defines the
+    -- track length for justify; else the track is exactly the content (sum).
+    local fixedMain = axis == "y" and ResolveH(node, ctx) or ResolveW(node, ctx)
+    local track = fixedMain and (fixedMain - 2 * pad) or sum
+    local crossFixed = axis == "y" and ResolveW(node, ctx) or ResolveH(node, ctx)
+    local crossBox = crossFixed and (crossFixed - 2 * pad) or cross
+
+    -- Main-axis start + per-gap spacing for justify (origin centered at 0).
+    local extra = track - sum            -- free space along the main axis
+    local startOff, spread = 0, gap
+    if justify == "start" then startOff = -track / 2
+    elseif justify == "end" then startOff = -track / 2 + extra
+    elseif justify == "between" and #kids > 1 then startOff = -track / 2; spread = gap + extra / (#kids - 1)
+    else startOff = -sum / 2 end          -- center (default): ignore extra, center content
+
+    local function crossPos(sizeCross)
+        if align == "start" then return -crossBox / 2 + sizeCross / 2
+        elseif align == "end" then return crossBox / 2 - sizeCross / 2
+        else return 0 end                 -- center / stretch → centered
+    end
+
     if axis == "y" then
-        local cursor = total / 2
+        -- y grows UP in DST: top is +, so we move DOWN as we advance.
+        local cursor = -startOff
         for _, k in ipairs(kids) do
-            cursor = cursor - k.height / 2
-            k.w:SetPosition(0, cursor, 0)
-            cursor = cursor - k.height / 2 - gap
+            cursor = cursor - k.margin - k.height / 2
+            k.w:SetPosition(crossPos(k.width), cursor, 0)
+            cursor = cursor - k.height / 2 - k.margin - spread
         end
-        return cross, total
+        return crossBox, fixedMain or sum
     else
-        local cursor = -total / 2
+        local cursor = startOff
         for _, k in ipairs(kids) do
-            cursor = cursor + k.width / 2
-            k.w:SetPosition(cursor, 0, 0)
-            cursor = cursor + k.width / 2 + gap
+            cursor = cursor + k.margin + k.width / 2
+            k.w:SetPosition(cursor, crossPos(k.height), 0)
+            cursor = cursor + k.width / 2 + k.margin + spread
         end
-        return total, cross
+        return fixedMain or sum, crossBox
     end
 end
 
@@ -637,6 +665,44 @@ local function MakeDraggable(dragArea, target)
     end
 end
 
+-- Visual box for a container: a tinted square.tex behind the children = CSS
+-- background; an optional larger frame behind that = CSS border. opacity folds into
+-- the bg alpha. No-op when neither background nor border is set, so untouched trees
+-- get nothing extra. `w`/`h` are the container's resolved box size. Inserted at the
+-- BACK so children render on top.
+-- True if any direct child declares an absolute x/y — i.e. canvas placement is intended.
+local function HasChildXY(node)
+    if type(node.children) ~= "table" then return false end
+    for _, c in ipairs(node.children) do
+        if type(c) == "table" and (c.x ~= nil or c.y ~= nil) then return true end
+    end
+    return false
+end
+
+local function AddBox(container, w, h, node)
+    if not (node.background or node.border) and node.opacity == nil then return end
+    local Image = _G.require("widgets/image")
+    if not (w and h and w > 0 and h > 0) then return end
+    local op = tonumber(node.opacity)
+    -- Add bg first then the frame, each MoveToBack — the LAST MoveToBack lands furthest
+    -- back, so the frame ends up behind the bg, both behind the children.
+    if node.background then
+        local c = ResolveColor(node.background)
+        local bg = container:AddChild(Image("images/global.xml", "square.tex"))
+        bg:SetSize(w, h)
+        bg:SetTint(c[1], c[2], c[3], (c[4] or 1) * (op or 1))
+        bg:MoveToBack()
+    end
+    if node.border and type(node.border) == "table" and node.border.color then
+        local bw = tonumber(node.border.width) or 2
+        local bc = ResolveColor(node.border.color)
+        local frame = container:AddChild(Image("images/global.xml", "square.tex"))
+        frame:SetSize(w + bw * 2, h + bw * 2)
+        frame:SetTint(bc[1], bc[2], bc[3], (bc[4] or 1) * (op or 1))
+        frame:MoveToBack()
+    end
+end
+
 RenderNodeImpl = function(node, parent, ctx)
     if not node or not node.type then return nil, 0, 0 end
     local Widget      = _G.require("widgets/widget")
@@ -647,19 +713,29 @@ RenderNodeImpl = function(node, parent, ctx)
 
     if t == "col" or t == "row" then
         local c = parent:AddChild(Widget("col_row"))
-        -- Canvas mode: absolute x,y per child instead of stacking. Needs fixed width/height.
-        if node.mode == "canvas" then
+        -- Canvas mode: absolute x,y per child. But if NO child declares x/y, canvas would
+        -- stack everything at (0,0) — fall back to normal layout so a stray
+        -- display:absolute without coords still lays out sanely.
+        if node.mode == "canvas" and HasChildXY(node) then
             local w, h = CanvasChildren(node, c, ctx)
             return c, w, h
         elseif node.mode == "grid" then
             local w, h = GridChildren(node, c, ctx)
             return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
         end
+        -- If THIS container has a fixed (resolvable) size, expose its CONTENT box as the
+        -- parent reference so children with width_ref:parent / "100%" resolve against it
+        -- (top-down, non-circular). Restore after — auto-size parents keep the old ref.
+        local prevPW, prevPH = ctx.parent_w, ctx.parent_h
+        local selfW, selfH = ResolveW(node, ctx), ResolveH(node, ctx)
+        local pad2 = (tonumber(node.padding) or 0) * 2
+        if selfW then ctx.parent_w = selfW - pad2 end
+        if selfH then ctx.parent_h = selfH - pad2 end
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
-        -- Optional fixed size: when width/height are set, REPORT that size to the parent
-        -- layout (overrides the measured content size). Content still lays out by gap; this
-        -- only changes the slot the container claims. Unset = auto-size (unchanged).
-        return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+        ctx.parent_w, ctx.parent_h = prevPW, prevPH
+        local fw, fh = selfW or w, selfH or h
+        AddBox(c, fw, fh, node)   -- CSS background/border/opacity behind the children
+        return c, fw, fh
 
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
@@ -998,7 +1074,7 @@ RenderNodeImpl = function(node, parent, ctx)
             end
             -- Render any children too (composed nodes), centered as a col (or canvas).
             local content = holder:AddChild(Widget("content"))
-            if node.mode == "canvas" then CanvasChildren(node, content, ctx)
+            if node.mode == "canvas" and HasChildXY(node) then CanvasChildren(node, content, ctx)
             elseif node.mode == "grid" then GridChildren(node, content, ctx)
             else LayoutChildren(node, content, ctx, "y") end
         else
@@ -1080,6 +1156,9 @@ local function NormalizeElement(node)
     out.width_ref = st.width_ref; out.height_ref = st.height_ref
     out.gap = st.gap; out.scale = st.scale
     out.x = st.x; out.y = st.y
+    out.padding = st.padding; out.justify = st.justify; out.align = st.align
+    out.margin = st.margin; out.background = st.background; out.border = st.border
+    out.opacity = st.opacity
     if st.color ~= nil then out.color = st.color end
     if node.tag == "div" then
         local disp = st.display or "flex"
@@ -1128,8 +1207,10 @@ CreateTree = function(cmd)
         local tree = cmd.tree or {}
         ctx.panel_w = tonumber(tree.width)
         ctx.panel_h = tonumber(tree.height)
-        ctx.parent_w = ctx.panel_w
-        ctx.parent_h = ctx.panel_h
+        -- At the ROOT the "parent" is the screen (default ref = parent). Children update
+        -- ctx.parent_w/h as they descend into fixed-size containers (col/row branch).
+        ctx.parent_w = _G.RESOLUTION_X or 1280
+        ctx.parent_h = _G.RESOLUTION_Y or 720
     end
     -- fire(cb, data): send a callback, ALWAYS enriching callback_data with `fields` = every
     -- text_input's current value keyed by its id. So a button click ships the whole form.
