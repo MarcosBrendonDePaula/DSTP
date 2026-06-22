@@ -63,9 +63,9 @@ function defaults(type: string): UINode {
 // any field — including booleans like draggable/closeable — can take a template
 // ({{...}}) instead of a fixed value.
 const FIELDS: Record<string, { key: string; label: string; ph?: string }[]> = {
-  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
-  col: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
-  row: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (fixo)', ph: 'auto' }, { key: 'height', label: 'Altura (fixo)', ph: 'auto' }],
+  panel: [{ key: 'title', label: 'Título' }, { key: 'body', label: 'Corpo (texto)' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'draggable', label: 'Arrastável (true)', ph: 'false' }, { key: 'closeable', label: 'Botão fechar — false p/ ocultar o X', ph: 'true' }],
+  col: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '8' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }, { key: 'tab_label', label: 'Rótulo (se aba)' }],
+  row: [{ key: 'mode', label: 'Disposição' }, { key: 'gap', label: 'Gap', ph: '12' }, { key: 'width', label: 'Largura (px ou %)', ph: 'auto' }, { key: 'height', label: 'Altura (px ou %)', ph: 'auto' }],
   tabs: [{ key: 'active', label: 'Aba inicial', ph: '0' }],
   text: [{ key: 'text', label: 'Texto', ph: '{{x}}' }, { key: 'size', label: 'Tamanho fonte', ph: '18' }, { key: 'color', label: 'Cor [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura caixa', ph: 'auto' }, { key: 'height', label: 'Altura caixa', ph: 'auto' }, { key: 'id', label: 'Node ID (p/ atualizar)' }, { key: 'callback', label: 'Callback (clicável)' }],
   text_input: [{ key: 'id', label: 'ID do campo (retorna em fields.<id>)', ph: 'senha' }, { key: 'callback', label: 'Callback (Enter envia)', ph: 'submit:nome' }, { key: 'placeholder', label: 'Placeholder', ph: 'digite...' }, { key: 'value', label: 'Valor inicial' }, { key: 'size', label: 'Tamanho fonte', ph: '22' }, { key: 'color', label: 'Cor fonte [r,g,b,a]', ph: '[1,1,1,1]' }, { key: 'width', label: 'Largura', ph: '280' }, { key: 'height', label: 'Altura', ph: '36' }, { key: 'max', label: 'Max caracteres' }],
@@ -423,6 +423,35 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
                   <option value="grid">Grade (linhas com larguras)</option>
                   <option value="canvas">Livre (posição x,y)</option>
                 </select>
+              ) : (f.key === 'width' || f.key === 'height') ? (
+                // Size: px (e.g. 120) OR percent (e.g. 50%). When percent, a reference
+                // selector chooses what the % is OF (screen / panel / parent).
+                (() => {
+                  const refKey = f.key + '_ref'
+                  const isPct = String(selected[f.key] ?? '').includes('%')
+                  return (
+                    <div className="flex gap-1">
+                      <input
+                        value={selected[f.key] ?? ''}
+                        onChange={e => setProp(f.key, e.target.value)}
+                        placeholder={f.ph + ' ou 50%'}
+                        className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none placeholder:text-gray-600"
+                      />
+                      {isPct && (
+                        <select
+                          value={selected[refKey] ?? 'screen'}
+                          onChange={e => setProp(refKey, e.target.value)}
+                          title="% em relação a"
+                          className="bg-white/5 border border-white/10 rounded px-1 py-1 text-[10px] text-white focus:border-indigo-400/40 focus:outline-none"
+                        >
+                          <option value="screen">% da Tela</option>
+                          <option value="panel">% do Painel</option>
+                          <option value="parent">% do Pai</option>
+                        </select>
+                      )}
+                    </div>
+                  )
+                })()
               ) : (
                 <input
                   value={selected[f.key] ?? ''}

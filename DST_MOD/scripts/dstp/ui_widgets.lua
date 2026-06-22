@@ -244,6 +244,35 @@ end
 local RenderNode      -- forward decl (recursive) — public wrapper (applies scale)
 local RenderNodeImpl  -- the per-type renderer
 
+-- Resolve a size field that may be a plain pixel number OR a percent string ("50%").
+-- A percent resolves against a REFERENCE of known size, chosen by `ref_field` on the
+-- node (width_ref / height_ref): "screen" → the DST UI resolution; "panel" → the root
+-- panel's size, threaded on ctx.panel_w/panel_h. An unknown/auto-size reference (or a
+-- missing ctx size) returns nil so the caller keeps its existing pixel default — percent
+-- never breaks layout, it only refines it where the reference size is known. `dim` is
+-- "w" or "h". Returns a number or nil.
+local function ResolveSize(value, ref, ctx, dim)
+    if value == nil then return nil end
+    local n = tonumber(value)
+    if n then return n end                      -- plain pixels
+    local s = tostring(value)
+    local pct = tonumber(s:match("^%s*(%-?%d+%.?%d*)%s*%%%s*$"))
+    if not pct then return nil end              -- not a "<num>%" string
+    ref = (ref and tostring(ref):lower()) or "screen"
+    local base
+    if ref == "screen" then
+        base = (dim == "w") and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
+    elseif ref == "panel" then
+        base = (dim == "w") and ctx and ctx.panel_w or (ctx and ctx.panel_h)
+    elseif ref == "parent" then
+        base = (dim == "w") and ctx and ctx.parent_w or (ctx and ctx.parent_h)
+    end
+    if not base or base <= 0 then return nil end -- unknown reference → caller's default
+    return base * pct / 100
+end
+local function ResolveW(node, ctx) return ResolveSize(node.width, node.width_ref, ctx, "w") end
+local function ResolveH(node, ctx) return ResolveSize(node.height, node.height_ref, ctx, "h") end
+
 -- Render every child, then stack them along one axis with `gap`. `axis` is
 -- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
 local function LayoutChildren(node, container, ctx, axis)
@@ -302,8 +331,8 @@ end
 --   py =  H/2 - y        (top edge is +H/2; y grows down → subtract)
 -- Returns (W, H) so the parent reserves the canvas slot.
 local function CanvasChildren(node, container, ctx)
-    local W = tonumber(node.width) or 0
-    local H = tonumber(node.height) or 0
+    local W = ResolveW(node, ctx) or 0
+    local H = ResolveH(node, ctx) or 0
     for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
         local cwidget, cw, ch = RenderNode(childdef, container, ctx)
         if cwidget then
@@ -397,7 +426,7 @@ local function GridChildren(node, container, ctx)
     end
 
     -- Measure: total width = node.width (or the widest natural row), row height = tallest cell.
-    local totalW = tonumber(node.width)
+    local totalW = ResolveW(node, ctx)
     if not totalW then
         -- natural width = max over rows of (sum of cell natural widths + gaps)
         totalW = 0
@@ -418,7 +447,7 @@ local function GridChildren(node, container, ctx)
     -- measured (content) height per row so the grid still renders.
     local rowH = {}
     local gridH = 0
-    local totalH = tonumber(node.height)
+    local totalH = ResolveH(node, ctx)
     if totalH then
         local sumW = 0
         for _, cols in ipairs(rowSpecs) do sumW = sumW + (cols.h and cols.h > 0 and cols.h or 1) end
@@ -624,13 +653,13 @@ RenderNodeImpl = function(node, parent, ctx)
             return c, w, h
         elseif node.mode == "grid" then
             local w, h = GridChildren(node, c, ctx)
-            return c, tonumber(node.width) or w, tonumber(node.height) or h
+            return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
         end
         local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
         -- Optional fixed size: when width/height are set, REPORT that size to the parent
         -- layout (overrides the measured content size). Content still lays out by gap; this
         -- only changes the slot the container claims. Unset = auto-size (unchanged).
-        return c, tonumber(node.width) or w, tonumber(node.height) or h
+        return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
 
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
@@ -710,8 +739,8 @@ RenderNodeImpl = function(node, parent, ctx)
         txt:SetColour(col[1], col[2], col[3], col[4])
         -- A fixed text box: width/height (or the legacy wrap_width/wrap_height) set the
         -- region + enable word-wrap. width is the intuitive alias for wrap_width.
-        local fixW = tonumber(node.width) or tonumber(node.wrap_width)
-        local fixH = tonumber(node.height) or tonumber(node.wrap_height)
+        local fixW = ResolveW(node, ctx) or tonumber(node.wrap_width)
+        local fixH = ResolveH(node, ctx) or tonumber(node.wrap_height)
         if fixW then
             txt:SetRegionSize(fixW, fixH or 60)
             txt:EnableWordWrap(true)
@@ -745,8 +774,8 @@ RenderNodeImpl = function(node, parent, ctx)
         else atlas, tex = ResolveItemAtlas(node.prefab or "log") end
         -- size = square default; width/height override for a rectangular icon.
         local size = tonumber(node.size) or 56
-        local iw = tonumber(node.width) or size
-        local ih = tonumber(node.height) or size
+        local iw = ResolveW(node, ctx) or size
+        local ih = ResolveH(node, ctx) or size
         local img
         -- Build AND size inside the pcall: a missing/invalid .tex makes the engine's
         -- Image construct a widget whose SetSize then errors ("SetSize on bad self") —
@@ -772,7 +801,7 @@ RenderNodeImpl = function(node, parent, ctx)
 
     elseif t == "image" then
         local size = tonumber(node.size) or 64
-        local iw, ih = tonumber(node.width) or size, tonumber(node.height) or size
+        local iw, ih = ResolveW(node, ctx) or size, ResolveH(node, ctx) or size
         local img
         -- Guard build+size together: a bad atlas/tex makes the engine's Image error in
         -- SetSize ("SetSize on bad self"), which must not crash the whole render tree.
@@ -794,8 +823,8 @@ RenderNodeImpl = function(node, parent, ctx)
         return parent:AddChild(Widget("noimage")), iw, ih
 
     elseif t == "button" then
-        local bw = node.width or 160
-        local bh = node.height or 44
+        local bw = (ResolveW(node, ctx) or 160)
+        local bh = (ResolveH(node, ctx) or 44)
         local holder = parent:AddChild(Widget("btn"))
         local btn = holder:AddChild(ImageButton(
             "images/global_redux.xml",
@@ -828,8 +857,8 @@ RenderNodeImpl = function(node, parent, ctx)
         -- screen needed. On Enter the typed string rides the EXISTING ui_callback path as
         -- callback_data (read in a flow as {{trigger.callback_data.value}}).
         local TextEdit = _G.require("widgets/textedit")
-        local iw = node.width or 220
-        local ih = node.height or 36
+        local iw = (ResolveW(node, ctx) or 220)
+        local ih = (ResolveH(node, ctx) or 36)
         local holder = parent:AddChild(Widget("text_input"))
         local bg = holder:AddChild(Image("images/global.xml", "square.tex"))
         bg:SetSize(iw, ih); bg:SetTint(0.05, 0.05, 0.07, 0.85)
@@ -897,8 +926,8 @@ RenderNodeImpl = function(node, parent, ctx)
     elseif t == "bar" then
         -- Coerce all numerics once (ui_builder literal-tree path doesn't num()-coerce, so
         -- a template resolving to a non-number would crash the arithmetic below).
-        local bw = tonumber(node.width) or 200
-        local bh = tonumber(node.height) or 16
+        local bw = ResolveW(node, ctx) or 200
+        local bh = ResolveH(node, ctx) or 16
         local maxv = tonumber(node.max) or 1
         local value = math.max(0, math.min(tonumber(node.value) or 0, maxv))
         local pct = maxv > 0 and (value / maxv) or 0
@@ -933,7 +962,7 @@ RenderNodeImpl = function(node, parent, ctx)
         return holder, bw, bh
 
     elseif t == "spacer" then
-        return parent:AddChild(Widget("spacer")), node.width or 0, node.height or 8
+        return parent:AddChild(Widget("spacer")), (ResolveW(node, ctx) or 0), (ResolveH(node, ctx) or 8)
 
     elseif t == "panel" then
         -- Panel = framed background. Two sizing modes:
@@ -947,7 +976,7 @@ RenderNodeImpl = function(node, parent, ctx)
         -- Coerce width/height: a non-numeric value (ui_builder template) must NOT enter
         -- fixed mode and crash the arithmetic (ph/2-25, pw-40). Only fixed when BOTH
         -- coerce to a number.
-        local fw, fh = tonumber(node.width), tonumber(node.height)
+        local fw, fh = ResolveW(node, ctx), ResolveH(node, ctx)
         local fixed = fw ~= nil and fh ~= nil
         local pw, ph
         local title_txt, body_txt
@@ -1050,6 +1079,16 @@ CreateTree = function(cmd)
     if not root or not cmd.tree then return nil end
     local w = root:AddChild(_G.require("widgets/widget")("dstp_tree_" .. cmd.id))
     local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id, byId = {} }
+    -- Reference sizes for percent sizing. "panel" = the root panel's fixed px size (if
+    -- the author gave it one); "parent" defaults to the panel too at the root (children
+    -- update ctx.parent_w/h as they descend, in a later phase). "screen" is read live.
+    do
+        local tree = cmd.tree or {}
+        ctx.panel_w = tonumber(tree.width)
+        ctx.panel_h = tonumber(tree.height)
+        ctx.parent_w = ctx.panel_w
+        ctx.parent_h = ctx.panel_h
+    end
     -- fire(cb, data): send a callback, ALWAYS enriching callback_data with `fields` = every
     -- text_input's current value keyed by its id. So a button click ships the whole form.
     ctx.fire = function(cb, data)
