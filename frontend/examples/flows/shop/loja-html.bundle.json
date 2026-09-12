@@ -1908,20 +1908,21 @@
             },
             "tree": {
               "title": "Carteira",
-              "width": 200,
-              "height": 84,
+              "width": 170,
+              "height": 64,
               "closeable": false,
+              "gap": 6,
               "children": [
                 {
                   "children": [
                     {
                       "prefab": "goldnugget",
-                      "size": 40,
+                      "size": 26,
                       "type": "icon"
                     },
                     {
                       "id": "saldo_txt",
-                      "size": 30,
+                      "size": 22,
                       "color": [
                         1,
                         0.85,
@@ -1929,6 +1930,17 @@
                         1
                       ],
                       "text": "{{coins.value}}",
+                      "type": "text"
+                    },
+                    {
+                      "size": 13,
+                      "color": [
+                        0.7,
+                        0.7,
+                        0.7,
+                        1
+                      ],
+                      "text": "moedas",
                       "type": "text"
                     }
                   ],
@@ -1938,15 +1950,15 @@
                 },
                 {
                   "callback": "open",
-                  "width": 150,
-                  "height": 36,
+                  "width": 130,
+                  "height": 30,
                   "text": "Abrir Loja",
                   "type": "button"
                 }
               ],
               "type": "panel"
             },
-            "ui_html": "<panel title=\"Carteira\" width=\"200\" height=\"84\" closeable=\"false\">\n  <div style=\"display:flex; direction:row; gap:8; align:center\">\n    <icon prefab=\"goldnugget\" size=\"40\"></icon>\n    <text id=\"saldo_txt\" size=\"30\" color=\"1,0.85,0.2,1\">{{coins.value}}</text>\n  </div>\n  <button callback=\"open\" width=\"150\" height=\"36\">Abrir Loja</button>\n</panel>\n"
+            "ui_html": "<panel title=\"Carteira\" width=\"170\" height=\"64\" closeable=\"false\" gap=\"6\">\n  <div style=\"display:flex; direction:row; gap:8; align:center\">\n    <icon prefab=\"goldnugget\" size=\"26\"></icon>\n    <text id=\"saldo_txt\" size=\"22\" color=\"1,0.85,0.2,1\">{{coins.value}}</text>\n    <text size=\"13\" color=\"0.7,0.7,0.7,1\">moedas</text>\n  </div>\n  <button callback=\"open\" width=\"130\" height=\"30\">Abrir Loja</button>\n</panel>\n"
           }
         }
       ],

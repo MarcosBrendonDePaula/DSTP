@@ -111,4 +111,30 @@ Core.ProcessCommands({
 check("passthrough: 2 non-UI commands executed", #passthrough == 2)
 check("passthrough: joe still got his UI envelope", env("joe") ~= nil)
 
+-- ── CROSS-POLL outbox: two syncs 100 ms apart must NOT :set twice back-to-back ──
+-- In-game (2026-09-12) the login panel's envelope, sent one poll after the wallet's,
+-- never reached the client: two :set() on the same net_string inside one network
+-- tick → the first is overwritten before it replicates. With a world clock available
+-- (TheWorld:DoTaskInTime) the coalescer holds an OUTBOX per player and flushes it
+-- once per `ui_flush_delay`, merging everything that arrived meanwhile.
+reset()
+local scheduled = {}
+mock_G.TheWorld.DoTaskInTime = function(_, delay, fn) scheduled[#scheduled + 1] = { delay = delay, fn = fn }; return { Cancel = function() end } end
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "wallet" } } } })
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "auth" } } } })
+check("outbox: nothing :set before the flush fires", (envelopes["joe"] and envelopes["joe"].sets or 0) == 0)
+check("outbox: ONE flush scheduled for the two polls", #scheduled == 1)
+scheduled[1].fn()
+check("outbox: one :set carrying BOTH creates in order", envelopes["joe"] and envelopes["joe"].sets == 1 and actionsOf("joe") == "create,create"
+    and subs("joe")[1].id == "wallet" and subs("joe")[2].id == "auth")
+-- after the flush a new poll schedules a new flush (not silently dropped)
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "later" } } } })
+check("outbox: next poll schedules a fresh flush", #scheduled == 2)
+scheduled[2].fn()
+check("outbox: second flush delivers the later create", envelopes["joe"].sets == 2 and subs("joe")[1].id == "later")
+local s1 = nil
+-- seq keeps increasing across flushes
+check("outbox: envelope seq is monotonic", env("joe").seq == 2 or env("joe").seq > 1)
+mock_G.TheWorld.DoTaskInTime = nil
+
 return C.report()

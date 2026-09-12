@@ -303,6 +303,26 @@ local function UICommandTargets(cmd)
     return nil
 end
 
+-- Per-player outbox of _dstp_ui sub-commands + the single pending flush task.
+Core.ui_outbox = Core.ui_outbox or {}
+Core.ui_outbox_order = Core.ui_outbox_order or {}
+Core.ui_flush_pending = Core.ui_flush_pending or false
+
+-- Schedule one flush `ui_flush_delay` seconds out (default 0.15 s — longer than a
+-- network tick, so consecutive :set()s never collide). Without a world clock (tests)
+-- or with delay 0 the flush is synchronous.
+local function ScheduleUIFlush()
+    if Core.ui_flush_pending then return end
+    local delay = (Core.config and tonumber(Core.config.ui_flush_delay)) or 0.15
+    local world = Core._G and Core._G.TheWorld
+    if delay > 0 and world and type(world.DoTaskInTime) == "function" then
+        Core.ui_flush_pending = true
+        world:DoTaskInTime(delay, function() Core.FlushUIOutbox() end)
+    else
+        Core.FlushUIOutbox()
+    end
+end
+
 function Core.ProcessCommands(commands)
     if not commands then return end
 
@@ -335,12 +355,34 @@ function Core.ProcessCommands(commands)
         end
     end
 
-    -- Flush ONE envelope per player, stamped with a fresh monotonic seq so the client
-    -- can dedup a replayed net_string value. Always wrap in a batch (even a single sub)
-    -- so the seq lives in one consistent place the client reads.
+    -- Queue into the per-player OUTBOX and flush once per ui_flush_delay (see
+    -- FlushUIOutbox): coalescing within ONE sync is not enough — two syncs 100 ms apart
+    -- each doing :set() on the same net_string inside one network tick lose the first
+    -- (in-game 2026-09-12: the login panel's envelope, one poll after the wallet's,
+    -- never reached the client). The outbox spaces the :set()s and merges meanwhile.
+    local any = false
     for _, uid in ipairs(ui_order) do
         local subs = ui_by_user[uid]
         if #subs > 0 then
+            if not Core.ui_outbox[uid] then Core.ui_outbox[uid] = {}; table.insert(Core.ui_outbox_order, uid) end
+            local box = Core.ui_outbox[uid]
+            for _, s in ipairs(subs) do box[#box + 1] = s end
+            any = true
+        end
+    end
+    if any then ScheduleUIFlush() end
+end
+
+-- Flush the outbox: ONE envelope per player, stamped with a fresh monotonic seq so
+-- the client can dedup a replayed net_string value. Always wrap in a batch (even a
+-- single sub) so the seq lives in one consistent place the client reads.
+function Core.FlushUIOutbox()
+    Core.ui_flush_pending = false
+    local order, box = Core.ui_outbox_order, Core.ui_outbox
+    Core.ui_outbox_order, Core.ui_outbox = {}, {}
+    for _, uid in ipairs(order) do
+        local subs = box[uid]
+        if subs and #subs > 0 then
             local seq = (Core.ui_seq_by_user[uid] or 0) + 1
             Core.ui_seq_by_user[uid] = seq
             Core.ExecuteCommand({ type = "ui_command", data = { userid = uid,
