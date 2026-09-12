@@ -8,6 +8,29 @@
 
 local KIT = {}
 
+-- `require("dstp/<x>")` shim. Mod modules require their siblings by plain `require`
+-- (in-game they are loaded through GLOBAL.require, whose env has it). Under fengari
+-- there is no file system, so serve `dstp/<x>` from the injected MOD_<X> source (cached
+-- per state, like package.loaded). Anything else falls through to fengari's own require.
+local _mod_cache = {}
+local _orig_require = rawget(_G, "require")
+_G.require = function(name)
+  local key = type(name) == "string" and name:match("^dstp/(.+)$")
+  if key then
+    if _mod_cache[key] == nil then
+      local global = "MOD_" .. key:upper()
+      local src = rawget(_G, global)
+      if not src then error("kit: require('" .. name .. "') — inject it as modules." .. global:sub(5)) end
+      local chunk, err = load(src, key .. ".lua")
+      if not chunk then error("load error in " .. key .. ": " .. tostring(err)) end
+      _mod_cache[key] = chunk()
+    end
+    return _mod_cache[key]
+  end
+  if _orig_require then return _orig_require(name) end
+  error("kit: require('" .. tostring(name) .. "') is not available under fengari")
+end
+
 -- Lua 5.1 compat shims. DST runs Lua 5.1 (loadstring/setfenv/unpack are globals);
 -- fengari is Lua 5.3 (they were removed). Mod code that targets 5.1 (e.g. the
 -- `execute` command: loadstring + setfenv) would fail under the test runner without

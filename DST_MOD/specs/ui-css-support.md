@@ -24,11 +24,20 @@ texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`
 | `position: absolute` + `x/y` | ✅ | canvas mode |
 | `flex-direction` | ✅ | row/column |
 | `gap` | ✅ | between children |
-| `justify-content` | ✅ | start/center/end/between |
-| `align-items` | ✅ | start/center/end (stretch ≈ center for now) |
-| `width`/`height` | ✅ | px or `%` (ref: screen/panel/parent) |
+| `justify-content` | ✅ | start/center/end/between/around/evenly (`layout_math.lua`, ported from rts-dom) |
+| `align-items` | ✅ | start/center/end (stretch = start: no imposed size yet) |
+| `width`/`height` | ✅ | px or `%` (ref: screen/panel/parent). A declared size is a MINIMUM — content grows the box, never clips |
 | `padding` | ✅ | shrinks content box |
-| `margin` | 🟡 TODO | per-child outer space — add as a wrapper offset in LayoutChildren |
+| `margin` | ✅ | `margin` (all sides) + `margin_top/right/bottom/left`; a side may be `"auto"` (main axis: absorbs free space before justify; cross axis: beats align) |
+| `flex-grow` | ✅ | `grow` (or `flex`) on a child of a fixed-size container: the slot grows, the child's widget is centered in it (leaf textures are not resized) |
+| `flex-shrink` | ✅ | `shrink` — implemented in the math, but never triggers today because a fixed size is a minimum (nothing overflows) |
+| `min-width`/`max-width` (`*-height` in a column) | ✅ | `min_width`/`max_width`/`min_height`/`max_height` on the MAIN axis, clamp after grow |
+| `flex-wrap`, `align-content`, baseline | ❌ | single line only — nothing in-game needs multi-line flex |
+
+**Where the math lives:** `DST_MOD/scripts/dstp/layout_math.lua` (pure, no widgets) mirrored by
+`frontend/app/shared/automation/layoutMath.ts`; both pinned to
+`layout-math-fixtures.json` by `layout-math.test.ts`. All layout is computed in CSS space
+(top-left origin, y down) and converted to DST space once, by `ToDst`.
 
 ## Visual box (NEXT — to implement)
 

@@ -3,6 +3,8 @@
 // preview renders { tag, style, children } the same way the game does. Legacy nodes
 // (no `tag`) pass through untouched. See DST_MOD/specs/ui-element-model.md.
 
+import { FLEX_ITEM_KEYS } from '../../../../shared/automation/layoutMath'
+
 type UINode = Record<string, any>
 
 const DISPLAY_TO_LEGACY: Record<string, { type: string; mode?: string }> = {
@@ -25,6 +27,7 @@ export function normalizeElement(node: UINode): UINode {
   out.padding = st.padding; out.justify = st.justify; out.align = st.align
   out.margin = st.margin; out.background = st.background; out.border = st.border
   out.opacity = st.opacity; out.z = st.z
+  for (const k of FLEX_ITEM_KEYS) out[k] = st[k]   // flex item props (grow/min/max/margin sides)
   if (st.color != null) out.color = st.color
   if (node.tag === 'div') {
     const disp = st.display || 'flex'
@@ -92,6 +95,7 @@ export function resolveSizes(node: UINode, parentW = SCREEN_W, parentH = SCREEN_
 const STYLE_KEYS = new Set([
   'width', 'height', 'width_ref', 'height_ref', 'gap', 'scale', 'x', 'y',
   'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'color', 'z',
+  ...FLEX_ITEM_KEYS,
 ])
 const CONTAINER_TYPES = new Set(['col', 'row', 'panel'])
 

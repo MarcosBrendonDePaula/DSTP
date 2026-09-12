@@ -4,6 +4,11 @@
 
 local UIWidgets = {}
 
+-- The flex arithmetic (justify/align/margin auto/grow) — a pure module shared with the
+-- panel preview via fixtures. Positions are computed in CSS space and converted to DST
+-- space ONCE (LayoutMath.ToDst); never mix the two conventions in the renderer again.
+local LayoutMath = require("dstp/layout_math")
+
 local _G = nil
 local _seq = -1  -- last processed sequence number (dedup net_string replays)
 
@@ -280,73 +285,99 @@ end
 local function ResolveW(node, ctx) return ResolveSize(node.width, node.width_ref, ctx, "w") end
 local function ResolveH(node, ctx) return ResolveSize(node.height, node.height_ref, ctx, "h") end
 
--- Render every child, then stack them along one axis with `gap`. `axis` is
--- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
+-- A child's box prop, from the flat node OR its element `style` (children reach the
+-- parent's layout RAW — NormalizeElement only runs on them inside RenderNode).
+local function ChildProp(childdef, key)
+    local v = childdef[key]
+    if v == nil and type(childdef.style) == "table" then v = childdef.style[key] end
+    return v
+end
+
+-- One margin side: returns (px, isAuto). "auto" → (nil, true).
+local function MarginSide(childdef, key)
+    local v = ChildProp(childdef, key)
+    if v == "auto" then return nil, true end
+    return tonumber(v), false
+end
+
+-- Render every child, then lay them out along one axis with CSS flex semantics
+-- (justify/align/gap/margin incl. `auto`/grow/min/max) via LayoutMath. `axis` is "y"
+-- (column, top→down) or "x" (row, left→right). Returns the box (w,h) the container
+-- claims. Defaults (justify/align center) reproduce the legacy centered stack.
+--
+-- Everything is computed in CSS space (top-left origin, y DOWN, main/cross axis names)
+-- and converted to DST space (centered, y UP) exactly once, per child, by ToDst — the
+-- old renderer mixed the two conventions per axis and got the row cross axis inverted.
 local function LayoutChildren(node, container, ctx, axis)
     local gap = tonumber(node.gap) or 8
-    local kids = {}
+    local isCol = (axis == "y")
+    local kids, items = {}, {}
     -- children may be a non-table on the ui_builder literal-tree path (an author bound it
     -- to a template that resolved to a non-array); guard so ipairs doesn't crash.
     for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
-        local cw, ch
-        local cwidget
-        cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
         if cwidget then
-            -- CSS margin: outer space around the child along the main axis. Read from the
-            -- element style or the flat prop. Symmetric (single value) for now.
-            local mar = tonumber(childdef.margin) or (childdef.style and tonumber(childdef.style.margin)) or 0
-            -- z = render order (CSS z-index): higher draws on top. Read style or flat prop.
-            local z = tonumber(childdef.z) or (childdef.style and tonumber(childdef.style.z)) or 0
-            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0, margin = mar, z = z, order = #kids })
+            cw, ch = cw or 0, ch or 0
+            -- z = render order (CSS z-index): higher draws on top.
+            local z = tonumber(ChildProp(childdef, "z")) or 0
+            table.insert(kids, { w = cwidget, width = cw, height = ch, z = z, order = #kids })
+            -- CSS box props → a LayoutMath line item. `margin` = all sides; margin_top/
+            -- right/bottom/left override a side and may be "auto"; grow (or `flex`) and
+            -- min/max on the MAIN axis (min_width/max_width for a row, *_height for a col).
+            local mAll = ChildProp(childdef, "margin")
+            local autoAll = (mAll == "auto")
+            local mt, at = MarginSide(childdef, "margin_top")
+            local mb, ab = MarginSide(childdef, "margin_bottom")
+            local ml, al = MarginSide(childdef, "margin_left")
+            local mr, ar = MarginSide(childdef, "margin_right")
+            local item = {
+                main = isCol and ch or cw, cross = isCol and cw or ch,
+                grow = tonumber(ChildProp(childdef, "grow")) or tonumber(ChildProp(childdef, "flex")) or 0,
+                shrink = tonumber(ChildProp(childdef, "shrink")),
+                margin = (not autoAll) and tonumber(mAll) or nil,
+            }
+            if isCol then
+                item.min, item.max = tonumber(ChildProp(childdef, "min_height")), tonumber(ChildProp(childdef, "max_height"))
+                item.marginMainStart, item.marginMainEnd = mt, mb
+                item.marginCrossStart, item.marginCrossEnd = ml, mr
+                item.autoMainStart, item.autoMainEnd = autoAll or at, autoAll or ab
+                item.autoCrossStart, item.autoCrossEnd = autoAll or al, autoAll or ar
+            else
+                item.min, item.max = tonumber(ChildProp(childdef, "min_width")), tonumber(ChildProp(childdef, "max_width"))
+                item.marginMainStart, item.marginMainEnd = ml, mr
+                item.marginCrossStart, item.marginCrossEnd = mt, mb
+                item.autoMainStart, item.autoMainEnd = autoAll or al, autoAll or ar
+                item.autoCrossStart, item.autoCrossEnd = autoAll or at, autoAll or ab
+            end
+            table.insert(items, item)
         end
     end
 
-    -- Total extent along the layout axis (sum + gaps + per-child margins) + max cross.
-    local sum, cross = 0, 0
-    for i, k in ipairs(kids) do
-        if axis == "y" then
-            sum = sum + k.height + 2 * k.margin
-            if k.width > cross then cross = k.width end
-        else
-            sum = sum + k.width + 2 * k.margin
-            if k.height > cross then cross = k.height end
-        end
-        if i < #kids then sum = sum + gap end
-    end
-
-    -- Box model + flex alignment (HTML/CSS-like). Defaults reproduce the legacy
-    -- centered stack, so untouched trees render exactly as before.
     local pad = tonumber(node.padding) or 0
     local justify = node.justify or "center"   -- main axis
     local align = node.align or "center"        -- cross axis
-    -- The container's box on the main axis: a fixed width/height (if set) defines the
-    -- track length for justify; else the track is exactly the content (sum).
-    -- NB: NOT `axis=="y" and ResolveH or ResolveW` — when ResolveH is nil (no height set)
-    -- that chain falls through to ResolveW, wrongly using WIDTH as the main size.
-    local fixedMain = (axis == "y") and ResolveH(node, ctx) or nil
-    if axis ~= "y" then fixedMain = ResolveW(node, ctx) end
-    -- A fixed main size is a MINIMUM (like CSS min-height): if the content is taller
-    -- than the fixed size, the box GROWS to fit instead of pushing children outside.
-    -- So the track (space children lay out in) = max(fixed content box, content sum).
-    local fixedTrack = fixedMain and (fixedMain - 2 * pad) or nil
-    local track = fixedTrack and math.max(fixedTrack, sum) or sum
-    -- same and/or trap: pick the cross dimension explicitly.
-    local crossFixed = (axis == "y") and ResolveW(node, ctx) or nil
-    if axis ~= "y" then crossFixed = ResolveH(node, ctx) end
-    local crossBox = crossFixed and math.max(crossFixed - 2 * pad, cross) or cross
-
-    -- Main-axis start + per-gap spacing for justify (origin centered at 0).
-    local extra = track - sum            -- free space along the main axis
-    local startOff, spread = 0, gap
-    if justify == "start" then startOff = -track / 2
-    elseif justify == "end" then startOff = -track / 2 + extra
-    elseif justify == "between" and #kids > 1 then startOff = -track / 2; spread = gap + extra / (#kids - 1)
-    else startOff = -sum / 2 end          -- center (default): ignore extra, center content
-
-    local function crossPos(sizeCross)
-        if align == "start" then return -crossBox / 2 + sizeCross / 2
-        elseif align == "end" then return crossBox / 2 - sizeCross / 2
-        else return 0 end                 -- center / stretch → centered
+    -- A declared width/height is a MINIMUM (like CSS min-*): content larger than it
+    -- grows the box instead of spilling out. LayoutLine applies that rule.
+    local fixedMain, crossFixed
+    if isCol then fixedMain, crossFixed = ResolveH(node, ctx), ResolveW(node, ctx)
+    else fixedMain, crossFixed = ResolveW(node, ctx), ResolveH(node, ctx) end
+    local res = LayoutMath.LayoutLine(items, {
+        track = fixedMain and (fixedMain - 2 * pad) or nil,
+        cross = crossFixed and (crossFixed - 2 * pad) or nil,
+        gap = gap, justify = justify, align = align,
+    })
+    -- The content box (W×H in CSS space) is centered on the container origin.
+    local W, H
+    if isCol then W, H = res.used.cross, res.used.main else W, H = res.used.main, res.used.cross end
+    for i, k in ipairs(kids) do
+        local p = res.items[i]
+        local x, y, w, h
+        if isCol then x, y, w, h = p.cross, p.main, k.width, p.size
+        else x, y, w, h = p.main, p.cross, p.size, k.height end
+        -- A grown slot (flex-grow) centers the child's measured widget in it — the
+        -- widget itself is not resized (leaf textures keep their size).
+        local dx, dy = LayoutMath.ToDst(x, y, w, h, W, H)
+        k.w:SetPosition(dx, dy, 0)
     end
 
     -- z-index: re-stack children by z (stable: ties keep document order). DST draws in
@@ -362,30 +393,17 @@ local function LayoutChildren(node, container, ctx, axis)
     end
 
     if LAYOUT_DEBUG then
-        Log(string.format("  layout axis=%s justify=%s align=%s pad=%d track=%d sum=%d cross=%d fixedMain=%s crossFixed=%s kids=%d",
-            axis, tostring(justify), tostring(align), pad, math.floor(track), math.floor(sum), math.floor(cross), tostring(fixedMain), tostring(crossFixed), #kids))
-        for i, k in ipairs(kids) do Log(string.format("    kid[%d] %dx%d margin=%d", i, math.floor(k.width), math.floor(k.height), k.margin)) end
+        Log(string.format("  layout axis=%s justify=%s align=%s pad=%d content=%dx%d fixedMain=%s crossFixed=%s kids=%d",
+            axis, tostring(justify), tostring(align), pad, math.floor(W), math.floor(H), tostring(fixedMain), tostring(crossFixed), #kids))
+        for i, k in ipairs(kids) do
+            local p = res.items[i]
+            Log(string.format("    kid[%d] %dx%d css main=%.1f cross=%.1f slot=%.1f", i, math.floor(k.width), math.floor(k.height), p.main, p.cross, p.size))
+        end
     end
 
-    if axis == "y" then
-        -- y grows UP in DST: top is +, so we move DOWN as we advance.
-        local cursor = -startOff
-        for _, k in ipairs(kids) do
-            cursor = cursor - k.margin - k.height / 2
-            k.w:SetPosition(crossPos(k.width), cursor, 0)
-            cursor = cursor - k.height / 2 - k.margin - spread
-        end
-        -- Report the actual box: grown to fit content if the fixed size was smaller.
-        return crossBox, math.max(fixedMain or 0, track)
-    else
-        local cursor = startOff
-        for _, k in ipairs(kids) do
-            cursor = cursor + k.margin + k.width / 2
-            k.w:SetPosition(cursor, crossPos(k.height), 0)
-            cursor = cursor + k.width / 2 + k.margin + spread
-        end
-        return math.max(fixedMain or 0, track), crossBox
-    end
+    -- Report the actual box: grown to fit content if the fixed size was smaller.
+    if isCol then return W, math.max(fixedMain or 0, H) end
+    return math.max(fixedMain or 0, W), H
 end
 
 -- Canvas mode: place each child at its own absolute x,y (px in game space) relative to
@@ -405,8 +423,8 @@ local function CanvasChildren(node, container, ctx)
             -- (matches the editor). DST widgets are centered on their own origin, so the
             -- widget's CENTER must land at corner + half its own size. Container origin is
             -- its center → left edge = -W/2, top edge = +H/2 (y grows up).
-            local x = tonumber(childdef.x) or 0
-            local y = tonumber(childdef.y) or 0
+            local x = tonumber(ChildProp(childdef, "x")) or 0   -- flat prop OR element style
+            local y = tonumber(ChildProp(childdef, "y")) or 0
             cw, ch = cw or 0, ch or 0
             cwidget:SetPosition(-W / 2 + x + cw / 2, H / 2 - y - ch / 2, 0)
         end
@@ -711,7 +729,8 @@ end
 local function HasChildXY(node)
     if type(node.children) ~= "table" then return false end
     for _, c in ipairs(node.children) do
-        if type(c) == "table" and (c.x ~= nil or c.y ~= nil) then return true end
+        -- flat x/y OR element-model style.x/y (children are still raw here)
+        if type(c) == "table" and (ChildProp(c, "x") ~= nil or ChildProp(c, "y") ~= nil) then return true end
     end
     return false
 end
@@ -1217,7 +1236,13 @@ local function NormalizeElement(node)
     out.x = st.x; out.y = st.y
     out.padding = st.padding; out.justify = st.justify; out.align = st.align
     out.margin = st.margin; out.background = st.background; out.border = st.border
-    out.opacity = st.opacity
+    out.opacity = st.opacity; out.z = st.z
+    -- flex item props (read by the parent's LayoutChildren via ChildProp)
+    out.grow = st.grow; out.flex = st.flex; out.shrink = st.shrink
+    out.min_width = st.min_width; out.max_width = st.max_width
+    out.min_height = st.min_height; out.max_height = st.max_height
+    out.margin_top = st.margin_top; out.margin_right = st.margin_right
+    out.margin_bottom = st.margin_bottom; out.margin_left = st.margin_left
     if st.color ~= nil then out.color = st.color end
     if node.tag == "div" then
         local disp = st.display or "flex"

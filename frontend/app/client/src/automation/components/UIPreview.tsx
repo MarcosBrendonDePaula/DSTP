@@ -120,7 +120,8 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
   // Canvas = absolute x/y placement. But if NO child declares x/y, treating it as canvas
   // would stack everything at (0,0) — so fall back to normal (flex) stacking. This makes
   // a stray display:absolute without coords behave sanely instead of overlapping.
-  const childrenHaveXY = Array.isArray(node.children) && node.children.some((c: any) => c?.x != null || c?.y != null)
+  // flat x/y OR element-model style.x/y (children are raw here; normalized when rendered)
+  const childrenHaveXY = Array.isArray(node.children) && node.children.some((c: any) => c?.x != null || c?.y != null || c?.style?.x != null || c?.style?.y != null)
   const isCanvas = node.mode === 'canvas' && childrenHaveXY && (t === 'panel' || t === 'col' || t === 'row')
   // A container with `repeat` is a LIST (loop): mark it with a distinct dashed purple
   // border + a 🔁 badge so it's obvious the first child is a per-item template.

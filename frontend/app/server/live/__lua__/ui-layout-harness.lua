@@ -122,4 +122,90 @@ UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "z2", tree = {
 } })
 check("z=0 tree does not reorder children", #MOVE_ORDER == 0)
 
+-- ── CSS semantics of justify/align/margin/grow (the layout_math port) ─────────
+-- Text widgets measure 100x20 (GetRegionSize stub). Positions are the widget CENTER in
+-- DST space (y UP). Helper: the Text widget whose ctor string is `name`.
+local function textPos(name)
+    for _, w in ipairs(created) do
+        if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == name then return rawget(w, "pos") end
+    end
+end
+local function fmt(p) return p and string.format("(%.1f,%.1f)", p[1], p[2]) or "nil" end
+
+-- row + align:start = TOP (CSS flex-start on the cross axis of a row). The old
+-- crossPos used the column formula for both axes and put it at the BOTTOM (y<0).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "al1", tree = {
+    type = "row", align = "start", height = 100, gap = 0, children = {
+        { type = "text", text = "RS" }, { type = "text", text = "RS2" } },
+} })
+local rs = textPos("RS")
+check("row align=start puts the child at the TOP (y>0) " .. fmt(rs), rs and rs[2] > 0)
+-- row + align:end = BOTTOM
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "al2", tree = {
+    type = "row", align = "end", height = 100, gap = 0, children = { { type = "text", text = "RE" } },
+} })
+local re = textPos("RE")
+check("row align=end puts the child at the BOTTOM (y<0) " .. fmt(re), re and re[2] < 0)
+-- col + align:start = LEFT (unchanged), align:end = RIGHT
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "al3", tree = {
+    type = "col", align = "start", width = 300, gap = 0, children = { { type = "text", text = "CS" } },
+} })
+local cs = textPos("CS")
+check("col align=start puts the child at the LEFT (x<0) " .. fmt(cs), cs and cs[1] < 0)
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "al4", tree = {
+    type = "col", align = "end", width = 300, gap = 0, children = { { type = "text", text = "CE" } },
+} })
+local ce = textPos("CE")
+check("col align=end puts the child at the RIGHT (x>0) " .. fmt(ce), ce and ce[1] > 0)
+
+-- margin_left:"auto" on the 2nd child of a fixed-width row pushes it to the far right,
+-- even though justify is the default center. Row 400 wide, two 100-wide texts:
+-- M1 at the left edge (center x = -150), M2 at the right edge (center x = +150).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "ma", tree = {
+    type = "row", width = 400, gap = 0, children = {
+        { type = "text", text = "M1" }, { type = "text", text = "M2", margin_left = "auto" } },
+} })
+local m1, m2 = textPos("M1"), textPos("M2")
+check("margin_left=auto pushes the 2nd child to the right edge " .. fmt(m1) .. " " .. fmt(m2),
+    m1 and m2 and math.abs(m1[1] + 150) < 0.5 and math.abs(m2[1] - 150) < 0.5)
+
+-- grow:1 on the 1st child of a fixed-width row gives it the free space: row 400, two
+-- 100-wide texts, gap 0 → slot1 = 300 (center x = -50), slot2 = 100 (center x = +150).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "gr", tree = {
+    type = "row", width = 400, gap = 0, justify = "start", children = {
+        { type = "text", text = "G1", grow = 1 }, { type = "text", text = "G2" } },
+} })
+local g1, g2 = textPos("G1"), textPos("G2")
+check("grow=1 child takes the free space " .. fmt(g1) .. " " .. fmt(g2),
+    g1 and g2 and math.abs(g1[1] + 50) < 0.5 and math.abs(g2[1] - 150) < 0.5)
+
+-- justify:evenly in a fixed-width row: 400 wide, two 100-wide → free 200, 3 gaps of
+-- 66.67 → E1 spans 66.67..166.67 (center 116.67 → -83.33 from the middle), E2 mirrors.
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "je", tree = {
+    type = "row", width = 400, gap = 0, justify = "evenly", children = {
+        { type = "text", text = "E1" }, { type = "text", text = "E2" } },
+} })
+local e1, e2 = textPos("E1"), textPos("E2")
+check("justify=evenly spaces the children evenly " .. fmt(e1) .. " " .. fmt(e2),
+    e1 and e2 and math.abs(e1[1] + 83.33) < 0.5 and math.abs(e2[1] - 83.33) < 0.5)
+
+-- Element-model children with style.x/y under display:absolute are placed by them
+-- (HasChildXY must read style too, not only the flat x/y).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "abs", tree = {
+    tag = "div", style = { display = "absolute", width = 300, height = 200 }, children = {
+        { tag = "text", text = "AX", style = { x = 50, y = 30 } } },
+} })
+local ax = textPos("AX")
+-- top-left (50,30) of a 100x20 text in a 300x200 box → center (-150+50+50, 100-30-10) = (-50, 60)
+check("display:absolute child with style.x/y is placed at its coords " .. fmt(ax),
+    ax and math.abs(ax[1] + 50) < 0.5 and math.abs(ax[2] - 60) < 0.5)
+
 return C.report()
