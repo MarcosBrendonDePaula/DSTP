@@ -69,6 +69,42 @@ describe('htmlToTree', () => {
     expect(htmlToTree('<h1 size="50">Big</h1>').size).toBe(50)
   })
 
+  it('coerces "true"/"false" attributes to booleans (closeable="false" must not be a truthy string)', () => {
+    const t = htmlToTree('<panel title="Loja" closeable="false" draggable="true"><text>x</text></panel>')
+    expect(t.closeable).toBe(false)
+    expect(t.draggable).toBe(true)
+  })
+
+  it('<tabs>: children with tab_label become tabs[{label, child}] (what the renderer reads)', () => {
+    const t = htmlToTree('<tabs><div tab_label="Comprar"><text>a</text></div><div tab_label="Vender"><text>b</text></div></tabs>')
+    expect(t.tag).toBe('tabs')
+    expect(t.children).toBeUndefined()
+    expect(t.tabs).toHaveLength(2)
+    expect(t.tabs[0].label).toBe('Comprar')
+    expect(t.tabs[0].child.tag).toBe('div')
+    expect(t.tabs[1].label).toBe('Vender')
+    expect(t.tabs[1].child.children[0].text).toBe('b')
+  })
+
+  it('round-trips tabs: tree → html → tree keeps the tab labels', () => {
+    const tree = { tag: 'tabs', tabs: [{ label: 'A', child: { tag: 'div', children: [{ tag: 'text', text: 'a' }] } }, { label: 'B', child: { tag: 'div', children: [{ tag: 'text', text: 'b' }] } }] }
+    const html = treeToHtml(tree)
+    expect(html).toContain('tab_label="A"')
+    const back = htmlToTree(html)
+    expect(back.tabs.map((t: any) => t.label)).toEqual(['A', 'B'])
+  })
+
+  it('flat size attrs survive normalization when style lacks them (<panel width="200">)', () => {
+    const t = normalizeElement(htmlToTree('<panel title="Carteira" width="200" height="84" gap="8"><text>x</text></panel>'))
+    expect(t.type).toBe('panel')
+    expect(t.width).toBe(200)
+    expect(t.height).toBe(84)
+    expect(t.gap).toBe(8)
+    // and style still wins over a flat attr
+    const s = normalizeElement(htmlToTree('<div width="10" style="width:300"></div>'))
+    expect(s.width).toBe('300')
+  })
+
   it('throws on empty input', () => {
     expect(() => htmlToTree('')).toThrow()
   })

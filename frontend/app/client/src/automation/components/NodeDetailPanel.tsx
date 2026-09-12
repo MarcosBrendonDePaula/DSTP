@@ -919,6 +919,8 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
                 pctX={(node.data as any)?.params?.pct_x ?? ''}
                 pctY={(node.data as any)?.params?.pct_y ?? ''}
                 onSetParam={(kv) => onUpdateData?.(node.id, { ...(node.data as any), params: { ...((node.data as any)?.params || {}), ...kv } })}
+                html={(node.data as any)?.ui_html}
+                onHtmlChange={(h) => onUpdateData?.(node.id, { ...(node.data as any), ui_html: h })}
               />
             ) : (
               <div className="space-y-3">

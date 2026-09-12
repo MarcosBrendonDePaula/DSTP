@@ -72,13 +72,28 @@ function elementToNode(el: Element): UINode {
     if (val === '' || val === 'undefined' || val === 'null') continue  // ignore junk
     if (name === 'style') { const st = parseStyle(val); if (Object.keys(st).length) node.style = st; continue }
     if (COLOR_KEYS.has(name)) { node[name] = parseColor(val); continue }
+    // booleans: closeable="false" / draggable="true" / password="true" must reach the
+    // renderer as real booleans (Lua's `node.closeable ~= false` treats the STRING
+    // "false" as truthy → the close button showed on an unclosable panel).
+    if (val === 'true' || val === 'false') { node[name] = val === 'true'; continue }
     // numeric-ish bare attrs (size, width, height, value, max) stay strings unless clean numbers
     node[name] = (!val.includes('%') && !Number.isNaN(Number(val))) ? Number(val) : val
   }
   // children: element children → nodes; for text leaves, the inner text → `text` prop
   const childEls = Array.from(el.children)
   if (childEls.length) {
-    node.children = childEls.map(elementToNode)
+    const kids = childEls.map(elementToNode)
+    if (tag === 'tabs') {
+      // <tabs> authored as children (each tagged tab_label) → the renderer's shape:
+      // tabs: [{ label, child }]. Without this a <tabs> in HTML rendered nothing.
+      node.tabs = kids.map((c, i) => {
+        const label = String(c.tab_label ?? c.title ?? `Aba ${i + 1}`)
+        delete c.tab_label
+        return { label, child: c }
+      })
+    } else {
+      node.children = kids
+    }
   } else if (TEXT_TAGS.has(tag)) {
     const txt = (el.textContent || '').trim()
     if (txt && node.text == null) node.text = txt
@@ -118,7 +133,10 @@ export function treeToHtml(node: UINode, indent = 0): string {
   }
   if (node.style && Object.keys(node.style).length) attrs.unshift(`style="${styleToString(node.style)}"`)
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}>`
-  const kids = Array.isArray(node.children) ? node.children : []
+  // tabs → children tagged with tab_label (the inverse of htmlToTree's <tabs> rule)
+  const kids: UINode[] = Array.isArray(node.tabs)
+    ? node.tabs.map((t: any) => ({ ...(t.child || { tag: 'div' }), tab_label: t.label }))
+    : Array.isArray(node.children) ? node.children : []
   if (!kids.length) return `${pad}${open}${innerText}</${tag}>`
   const inner = kids.map((c: UINode) => treeToHtml(c, indent + 1)).join('\n')
   return `${pad}${open}\n${inner}\n${pad}</${tag}>`

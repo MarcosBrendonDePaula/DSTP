@@ -1210,7 +1210,15 @@ RenderNodeImpl = function(node, parent, ctx)
             local ccw, cch = 0, 0
             if node.mode == "canvas" and HasChildXY(node) then CanvasChildren(node, content, ctx)
             elseif node.mode == "grid" then GridChildren(node, content, ctx)
-            else ccw, cch = LayoutChildren(node, content, ctx, "y") end
+            else
+                -- Lay the children out in the panel's CONTENT box (pw-40 × ph-40), not in
+                -- the panel's own box: LayoutChildren reads the node's width/height as the
+                -- track, so handing it the panel node made the content report the FULL
+                -- panel width, and the "+40 grow" below inflated every fixed panel by 40px
+                -- (a 200x84 wallet rendered 240x124).
+                local inner = setmetatable({ width = pw - 40, height = ph - 40, width_ref = nil, height_ref = nil }, { __index = node })
+                ccw, cch = LayoutChildren(inner, content, ctx, "y")
+            end
             ctx.parent_w, ctx.parent_h = prevPW, prevPH
             -- The fixed size is a MINIMUM: grow the panel so its content never spills out.
             pw = math.max(pw, (ccw or 0) + 40)
@@ -1289,20 +1297,15 @@ local function NormalizeElement(node)
     for k, v in pairs(node) do
         if k ~= "tag" and k ~= "style" then out[k] = v end
     end
-    -- map the box-model style onto the flat props the legacy renderer reads
-    out.width = st.width; out.height = st.height
-    out.width_ref = st.width_ref; out.height_ref = st.height_ref
-    out.gap = st.gap; out.scale = st.scale
-    out.x = st.x; out.y = st.y
-    out.padding = st.padding; out.justify = st.justify; out.align = st.align
-    out.margin = st.margin; out.background = st.background; out.border = st.border
-    out.opacity = st.opacity; out.z = st.z
-    -- flex item props (read by the parent's LayoutChildren via ChildProp)
-    out.grow = st.grow; out.flex = st.flex; out.shrink = st.shrink
-    out.min_width = st.min_width; out.max_width = st.max_width
-    out.min_height = st.min_height; out.max_height = st.max_height
-    out.margin_top = st.margin_top; out.margin_right = st.margin_right
-    out.margin_bottom = st.margin_bottom; out.margin_left = st.margin_left
+    -- map the box-model style onto the flat props the legacy renderer reads. A key set
+    -- in `style` wins; a flat attribute (<panel width="200">) is KEPT when style lacks
+    -- it (mirrors elementModel.ts — assigning nil here wiped HTML width/height/gap attrs).
+    for _, k in ipairs({ "width", "height", "width_ref", "height_ref", "gap", "scale", "x", "y",
+                         "padding", "justify", "align", "margin", "background", "border", "opacity", "z",
+                         "grow", "flex", "shrink", "min_width", "max_width", "min_height", "max_height",
+                         "margin_top", "margin_right", "margin_bottom", "margin_left" }) do
+        if st[k] ~= nil then out[k] = st[k] end
+    end
     if st.color ~= nil then out.color = st.color end
     if node.tag == "div" then
         local disp = st.display or "flex"

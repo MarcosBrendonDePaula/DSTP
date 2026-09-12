@@ -19,15 +19,13 @@ export function normalizeElement(node: UINode): UINode {
   const st = node.style || {}
   const out: UINode = {}
   for (const k of Object.keys(node)) if (k !== 'tag' && k !== 'style') out[k] = node[k]
-  // box-model style → flat props the legacy renderer/preview read
-  out.width = st.width; out.height = st.height
-  out.width_ref = st.width_ref; out.height_ref = st.height_ref
-  out.gap = st.gap; out.scale = st.scale
-  out.x = st.x; out.y = st.y
-  out.padding = st.padding; out.justify = st.justify; out.align = st.align
-  out.margin = st.margin; out.background = st.background; out.border = st.border
-  out.opacity = st.opacity; out.z = st.z
-  for (const k of FLEX_ITEM_KEYS) out[k] = st[k]   // flex item props (grow/min/max/margin sides)
+  // box-model style → flat props the legacy renderer/preview read. A key set in
+  // `style` wins; a flat attribute (<panel width="200">) is KEPT when style lacks it
+  // (it used to be wiped by `out.width = st.width`, so HTML width/height/gap attrs
+  // silently disappeared).
+  const pick = (k: string) => { if (st[k] !== undefined) out[k] = st[k] }
+  for (const k of ['width', 'height', 'width_ref', 'height_ref', 'gap', 'scale', 'x', 'y',
+    'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'z', ...FLEX_ITEM_KEYS]) pick(k)
   if (st.color != null) out.color = st.color
   if (node.tag === 'div') {
     const disp = st.display || 'flex'

@@ -120,12 +120,15 @@ function update(root: UINode, fn: (r: UINode) => void): UINode {
 // re-create it while the live HTML edit re-saves the node). Keyed by nodeId.
 const _codeState: Record<string, { on: boolean; draft: string }> = {}
 
-export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onSetParam }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void }) {
+// `html` = the node's stored HTML source (data.ui_html) when the UI was authored as
+// HTML; the code editor opens on it (instead of re-generating HTML from the tree) and
+// `onHtmlChange` persists edits, so the HTML is the source of truth for that node.
+export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onSetParam, html, onHtmlChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void; html?: string; onHtmlChange?: (html: string) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
   const [tabState, setTab] = useState<'tree' | 'render'>('tree')
   const [fullscreen, setFullscreen] = useState(false)
-  const [codeMode, setCodeModeRaw] = useState(() => _codeState[nodeId]?.on ?? false)
-  const [codeDraft, setCodeDraftRaw] = useState(() => _codeState[nodeId]?.draft ?? '')
+  const [codeMode, setCodeModeRaw] = useState(() => _codeState[nodeId]?.on ?? !!html)
+  const [codeDraft, setCodeDraftRaw] = useState(() => _codeState[nodeId]?.draft ?? html ?? '')
   // Persist on every change so a remount restores it.
   const setCodeMode = (v: boolean | ((m: boolean) => boolean)) => setCodeModeRaw(prev => {
     const next = typeof v === 'function' ? v(prev) : v
@@ -143,7 +146,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
     if (codeTimer.current) clearTimeout(codeTimer.current)
     codeTimer.current = setTimeout(() => {
       if (!html.trim()) { setCodeErr(null); return }
-      try { save(normalizeTree(htmlToTree(html))); setCodeErr(null) }
+      try { save(normalizeTree(htmlToTree(html))); setCodeErr(null); onHtmlChange?.(html) }
       catch (err: any) { setCodeErr('HTML inválido: ' + (err?.message ?? err)) }
     }, 400)
   }
@@ -549,7 +552,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
             {lbl}
           </button>
         ))}
-        <button onClick={() => { try { setCodeDraft(treeToHtml(toElement(root))) } catch { setCodeDraft('') } setCodeErr(null); setCodeMode(m => !m) }}
+        <button onClick={() => { try { setCodeDraft(html || treeToHtml(toElement(root))) } catch { setCodeDraft('') } setCodeErr(null); setCodeMode(m => !m) }}
           className={`ml-auto px-2.5 py-1 rounded text-[10px] border ${codeMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}
           title="Editar a UI como HTML">
           {'</>'} HTML

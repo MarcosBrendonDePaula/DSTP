@@ -208,4 +208,19 @@ local ax = textPos("AX")
 check("display:absolute child with style.x/y is placed at its coords " .. fmt(ax),
     ax and math.abs(ax[1] + 50) < 0.5 and math.abs(ax[2] - 60) < 0.5)
 
+-- Element-model node with FLAT size attrs and no style (what <panel width="200"
+-- height="84"> parses to): NormalizeElement must keep them, not wipe them with the
+-- (absent) style values. The panel then renders in fixed mode → bg Image 200x84.
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "flat", tree = {
+    tag = "panel", title = "Carteira", width = 200, height = 84, closeable = false, children = {
+        { tag = "text", text = "x" } },
+} })
+local has200x84 = false
+for _, w in ipairs(created) do
+    local sz = rawget(w, "size")
+    if w.kind == "Image" and type(sz) == "table" and sz[1] == 200 and sz[2] == 84 then has200x84 = true end
+end
+check("element panel with flat width/height (no style) renders fixed 200x84", has200x84)
+
 return C.report()
