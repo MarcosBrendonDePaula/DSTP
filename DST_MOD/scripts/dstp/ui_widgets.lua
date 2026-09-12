@@ -580,20 +580,80 @@ local function GridChildren(node, container, ctx)
     return totalW, gridH
 end
 
+-- ── Local data bindings ───────────────────────────────────────────────────────
+-- `node.bind = { <prop> = "<path>" }` is evaluated on the CLIENT, every frame, by whoever
+-- owns the tree (today: follow widgets, env = { entity = <inst> }) and patched in place
+-- through the node's Register patch — no backend round-trip. Paths are DATA, not code:
+--   entity.name | entity.prefab | entity.hp | entity.hp_max | entity.hp_pct |
+--   entity.has_hp | entity.distance | entity.<field>  (a plain number/string/boolean
+--   field on the inst, e.g. any dstp_* netvar cache — see modmain BINDINGS)
+-- A path that resolves to nil leaves the prop untouched (last good value stays).
+local function BindLookup(path, env)
+    if type(path) ~= "string" then return path end          -- literal value
+    local root, key = path:match("^(%w+)%.([%w_]+)$")
+    if not root then return nil end
+    local obj = env[root]
+    if obj == nil then return nil end
+    if root == "entity" then
+        local ent = obj
+        if key == "name" then
+            local ok, nm = _G.pcall(function() return ent.GetDisplayName and ent:GetDisplayName() end)
+            return (ok and nm) or ent.name or ent.prefab
+        elseif key == "prefab" then return ent.prefab
+        elseif key == "hp" then return ent.dstp_hp
+        elseif key == "hp_max" then return ent.dstp_hp_max
+        elseif key == "has_hp" then return ent.dstp_hp ~= nil and (ent.dstp_hp_max or 0) > 0
+        elseif key == "hp_pct" then
+            if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then return ent.dstp_hp / ent.dstp_hp_max end
+            return nil
+        elseif key == "distance" then
+            local p = _G.ThePlayer
+            if p and p.Transform and ent.Transform then
+                local px, _, pz = p.Transform:GetWorldPosition()
+                local ex, _, ez = ent.Transform:GetWorldPosition()
+                return math.sqrt((ex - px) * (ex - px) + (ez - pz) * (ez - pz))
+            end
+            return nil
+        end
+    end
+    local v = obj[key]
+    local t = type(v)
+    if t == "number" or t == "string" or t == "boolean" then return v end
+    return nil
+end
+
+-- Evaluate every bound node of a tree against `env` and patch only what changed.
+local function ApplyBindings(ctx, env)
+    if not ctx.bound then return end
+    for _, b in ipairs(ctx.bound) do
+        local props, changed = {}, false
+        for prop, path in pairs(b.bind) do
+            local v = BindLookup(path, env)
+            if v ~= nil and v ~= b.last[prop] then props[prop] = v; b.last[prop] = v; changed = true end
+        end
+        if changed then
+            local ok, err = _G.pcall(b.patch, props)
+            if not ok then Log("bind patch failed: " .. tostring(err)) end
+        end
+    end
+end
+
 -- Register an addressable node: ctx.byId[id] = { widget, patch }. `patch` is a
 -- per-type closure that applies prop updates in place. `visible` is handled
--- generically here (Show/Hide). This is what makes ui_set work on any node.
+-- generically here (Show/Hide). This is what makes ui_set work on any node — and
+-- what `bind` patches through locally (ctx.bound) when the tree owner ticks.
 local function Register(ctx, node, widget, patch)
+    local full = function(props)
+        if props.visible ~= nil and widget.inst:IsValid() then
+            if props.visible then widget:Show() else widget:Hide() end
+        end
+        if patch then patch(props) end
+    end
+    if type(node.bind) == "table" and ctx.bound then
+        table.insert(ctx.bound, { bind = node.bind, patch = full, last = {} })
+    end
     if not (node.id and ctx.byId) then return end
-    ctx.byId[node.id] = {
-        widget = widget,
-        patch = function(props)
-            if props.visible ~= nil and widget.inst:IsValid() then
-                if props.visible then widget:Show() else widget:Hide() end
-            end
-            if patch then patch(props) end
-        end,
-    }
+    ctx.byId[node.id] = { widget = widget, patch = full }
 end
 
 -- Make a text/icon/image node clickable if it carries a callback (debounced 0.5s).
@@ -1425,33 +1485,36 @@ local function FindFollowTarget(follow)
     return best
 end
 
-local function CreateFollow(cmd)
-    local player = _G.ThePlayer
-    if not player or not player.HUD or not player.HUD.controls then return nil end
+-- The visual of ONE follower, built inside `w`. Two shapes:
+--   * cmd.tree  — a template rendered through the generic tree renderer; its `bind`
+--                 props are re-evaluated every frame against { entity = ent } (the
+--                 flow draws the bar, the client feeds it — no round-trip).
+--   * legacy    — a bar + optional label. The bar is HIDDEN while the entity has no
+--                 HP data (no dstp_hp netvar and no health replica): a bar that can't
+--                 know the value must not show a full one.
+-- Returns { update = fn(ent) }.
+local function BuildFollowVisual(w, cmd)
+    local Image = _G.require("widgets/image")
+    local Text  = _G.require("widgets/text")
 
-    local Widget = _G.require("widgets/widget")
-    local Image  = _G.require("widgets/image")
-    local Text   = _G.require("widgets/text")
+    if type(cmd.tree) == "table" then
+        local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id,
+                      byId = {}, bound = {},
+                      parent_w = _G.RESOLUTION_X or 1280, parent_h = _G.RESOLUTION_Y or 720 }
+        ctx.fire = function(cb, data)
+            if cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, data) end
+        end
+        RenderNode(cmd.tree, w, ctx)
+        return { update = function(ent) ApplyBindings(ctx, { entity = ent }) end, ctx = ctx }
+    end
 
-    local follow = cmd.follow or {}
     local bw = cmd.width or 80
     local bh = cmd.height or 10
-    local offset_y = follow.offset_y or 60
-
-    -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
-    local w = player.HUD.controls:AddChild(Widget("dstp_follow_" .. cmd.id))
-    w:SetScaleMode(_G.SCALEMODE_PROPORTIONAL)
-    w:SetMaxPropUpscale(_G.MAX_HUD_SCALE or 1)
-    w:MoveToFront()
-
-    -- progress bar
     local bgc = ResolveColor(cmd.bg_color or {0.1, 0.1, 0.1, 0.8})
     local bg = w:AddChild(Image("images/global.xml", "square.tex"))
     bg:SetSize(bw, bh); bg:SetTint(bgc[1], bgc[2], bgc[3], bgc[4])
     local fgc = ResolveColor(cmd.color or {0.9, 0.2, 0.2, 1})
     local fg = w:AddChild(Image("images/global.xml", "square.tex"))
-    -- setBarPct receives a 0..1 fraction directly (mob health is only available
-    -- client-side as a percent for entities that replicate it).
     local function setBarPct(pct)
         pct = math.max(0, math.min(pct or 1, 1))
         local fw = math.max(1, bw * pct)
@@ -1466,9 +1529,126 @@ local function CreateFollow(cmd)
         label:SetPosition(0, bh + 6)
     end
 
-    -- Per-frame reposition + track the entity's health PERCENT (the only thing
-    -- the client reliably knows for replicated mobs).
-    local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label }
+    local barShown, lastname = true, nil
+    local function showBar(v)
+        if v == barShown then return end
+        barShown = v
+        if v then bg:Show(); fg:Show() else bg:Hide(); fg:Hide() end
+    end
+    return { update = function(ent)
+        -- Live health: DSTP's own netvar cache (dstp_hp/dstp_hp_max, see modmain
+        -- BINDINGS) first; the health replica as a fallback (works for players).
+        local pct = nil
+        if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then
+            pct = ent.dstp_hp / ent.dstp_hp_max
+        else
+            local h = ent.replica and ent.replica.health
+            if h and h.GetPercent then
+                local ok, p = _G.pcall(function() return h:GetPercent() end)
+                if ok and type(p) == "number" then pct = p end
+            end
+        end
+        if pct then setBarPct(pct); showBar(true) else showBar(false) end
+        if label and label.inst:IsValid() and ent.GetDisplayName then
+            local nm = ent:GetDisplayName()
+            if nm and nm ~= lastname then label:SetString(nm); lastname = nm end
+        end
+    end }
+end
+
+-- Every entity around the player that a `mode="all"` follow should track: within
+-- `radius`, matching `prefabs` (list) / `prefab` (one) / `tags` (any of), and — with
+-- `require_hp` — only those carrying the HP netvar cache (so no bar ever lies).
+local function FindNearby(follow)
+    local player = _G.ThePlayer
+    if not (player and player.Transform) then return {} end
+    local px, py, pz = player.Transform:GetWorldPosition()
+    local radius = tonumber(follow.radius) or tonumber(follow.max_dist) or 30
+    local prefabs = nil
+    if type(follow.prefabs) == "table" and #follow.prefabs > 0 then
+        prefabs = {}
+        for _, p in ipairs(follow.prefabs) do prefabs[tostring(p)] = true end
+    elseif follow.prefab then
+        prefabs = { [tostring(follow.prefab)] = true }
+    end
+    local oneof = nil
+    if type(follow.tags) == "table" and #follow.tags > 0 then oneof = follow.tags
+    elseif not prefabs then oneof = { "_combat", "monster", "animal", "hostile", "epic" } end
+    local ents = _G.TheSim:FindEntities(px, py, pz, radius, nil, { "INLIMBO", "FX", "player", "playerghost" }, oneof)
+    local out = {}
+    for _, ent in ipairs(ents) do
+        if ent ~= player and ent:IsValid() and not ent:HasTag("player")
+           and ((not prefabs) or prefabs[ent.prefab])
+           and ((not follow.require_hp) or (ent.dstp_hp ~= nil and (ent.dstp_hp_max or 0) > 0)) then
+            out[#out + 1] = ent
+        end
+    end
+    return out
+end
+
+local function CreateFollow(cmd)
+    local player = _G.ThePlayer
+    if not player or not player.HUD or not player.HUD.controls then return nil end
+    local Widget = _G.require("widgets/widget")
+    local follow = cmd.follow or {}
+    local offset_y = follow.offset_y or 60
+
+    -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
+    local function newHolder(name)
+        local w = player.HUD.controls:AddChild(Widget(name))
+        w:SetScaleMode(_G.SCALEMODE_PROPORTIONAL)
+        w:SetMaxPropUpscale(_G.MAX_HUD_SCALE or 1)
+        w:MoveToFront()
+        return w
+    end
+    local function place(w, ent)
+        local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
+        w:SetPosition(sx, sy + offset_y, 0)
+    end
+
+    if follow.mode == "all" then
+        -- One follower per entity in range, keyed by GUID: created on enter, killed on
+        -- leave/invalid. The scan (FindEntities) runs every `scan_every` frames; the
+        -- reposition + bind refresh runs every frame. All local — the flow sent ONE
+        -- command and the client does the rest.
+        local scanEvery = math.max(1, tonumber(follow.scan_every) or 10)
+        local holder = newHolder("dstp_follow_" .. cmd.id)
+        local entry = { widget = holder, type = "follow", group = cmd.group, followers = {} }
+        local frame = 0
+        local function drop(guid)
+            local f = entry.followers[guid]
+            if not f then return end
+            if f.widget.inst:IsValid() then f.widget:Kill() end
+            entry.followers[guid] = nil
+        end
+        entry.task = player:DoPeriodicTask(0, function()
+            frame = frame + 1
+            if frame == 1 or frame % scanEvery == 0 then
+                local seen = {}
+                for _, ent in ipairs(FindNearby(follow)) do
+                    local guid = ent.GUID or ent
+                    seen[guid] = true
+                    if not entry.followers[guid] then
+                        local w = holder:AddChild(Widget("dstp_follow_" .. cmd.id .. ":" .. tostring(guid)))
+                        entry.followers[guid] = { widget = w, ent = ent, visual = BuildFollowVisual(w, cmd) }
+                    end
+                end
+                for guid, _ in pairs(entry.followers) do
+                    if not seen[guid] then drop(guid) end
+                end
+            end
+            for guid, f in pairs(entry.followers) do
+                if not (f.ent and f.ent:IsValid()) then drop(guid)
+                else place(f.widget, f.ent); f.visual.update(f.ent) end
+            end
+        end)
+        return entry
+    end
+
+    -- Single target (guid / prefab / nearest / combat_target).
+    local w = newHolder("dstp_follow_" .. cmd.id)
+    local visual = BuildFollowVisual(w, cmd)
+    local entry = { widget = w, type = "follow", group = cmd.group }
     local lost = 0
     local task
     local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
@@ -1489,25 +1669,8 @@ local function CreateFollow(cmd)
         end
         lost = 0
         w:Show()
-        -- Live health. DST doesn't replicate mob HP, so DSTP injects its own
-        -- netvar (dstp_hp/dstp_hp_max, see modmain) that the client reads here.
-        -- Fall back to the player health replica (works for players).
-        if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then
-            setBarPct(ent.dstp_hp / ent.dstp_hp_max)
-        else
-            local h = ent.replica and ent.replica.health
-            if h and h.GetPercent then
-                local ok, pct = _G.pcall(function() return h:GetPercent() end)
-                if ok and type(pct) == "number" then setBarPct(pct) end
-            end
-        end
-        -- keep the label on the current target's name (dynamic modes)
-        if label and label.inst:IsValid() and ent.GetDisplayName then
-            local nm = ent:GetDisplayName()
-            if nm and nm ~= entry._lastname then label:SetString(nm); entry._lastname = nm end
-        end
-        local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
-        w:SetPosition(sx, sy + offset_y, 0)
+        visual.update(ent)
+        place(w, ent)
     end)
     entry.task = task
     return entry

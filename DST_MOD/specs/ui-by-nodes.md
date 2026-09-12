@@ -44,8 +44,17 @@ generic prop/action covers it:
   client-side (Show/Hide), no round-trip.
 - **Follow a world entity** — `ui_track` (`follow` block). Modes: `guid`,
   `prefab` (nearest matching), `nearest`, `combat_target` (the player's current
-  combat target, with nearest-creature fallback). Reads `inst.dstp_hp` for real
-  mob health (see constraints doc).
+  combat target, with nearest-creature fallback), and **`all`** (one follower per
+  entity within `radius` matching `prefabs`/`tags`; enter/leave handled
+  client-side, `require_hp` skips entities without the HP netvar). Reads
+  `inst.dstp_hp` for real mob health (see constraints doc).
+- **Per-entity template + local `bind`** — wire `ui_*` children under `ui_track`
+  and they become the follower's tree, rendered once per entity. Any node may carry
+  `bind` (`value=entity.hp; max=entity.hp_max`, `text=entity.name`); the client
+  re-evaluates it every frame against the tracked entity and patches through the
+  same `Register` path `ui_set` uses — no backend round-trip. Paths:
+  `entity.name|prefab|hp|hp_max|hp_pct|has_hp|distance|<any dstp_* netvar>`.
+  Example: `examples/flows/mob-lifebars-nearby.dstp.json`.
 
 **Principle:** if a new UI needs new Lua, the renderer isn't generic enough —
 the missing capability should become a prop/action, not a special widget type.

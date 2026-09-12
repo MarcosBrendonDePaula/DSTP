@@ -91,6 +91,31 @@ const NUMERIC_PARAM_KEYS = new Set([
 ])
 const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop', 'visible'])
 
+// A UI node's `bind` param → { prop: path }. Accepts a JSON object, an object already,
+// or the shorthand 'prop=path; prop2=path2' (also newline-separated). Empty → undefined.
+export function parseBind(v: any): Record<string, string> | undefined {
+  if (v == null || v === '') return undefined
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const o: Record<string, string> = {}
+    for (const [k, x] of Object.entries(v)) if (typeof x === 'string' && x.trim()) o[k] = x.trim()
+    return Object.keys(o).length ? o : undefined
+  }
+  if (typeof v !== 'string') return undefined
+  const s = v.trim()
+  if (!s) return undefined
+  if (s.startsWith('{')) {
+    try { return parseBind(JSON.parse(s)) } catch { return undefined }
+  }
+  const o: Record<string, string> = {}
+  for (const part of s.split(/[;\n]+/)) {
+    const i = part.indexOf('=')
+    if (i < 0) continue
+    const k = part.slice(0, i).trim(), path = part.slice(i + 1).trim()
+    if (k && path) o[k] = path
+  }
+  return Object.keys(o).length ? o : undefined
+}
+
 function coerceParam(key: string, v: any): any {
   if (typeof v !== 'string') return v
   const t = v.trim()
@@ -438,7 +463,7 @@ export class FlowEngine {
       },
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
       log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
-      runFlowAction: () => this.runFlowAction(serverId, node, context),
+      runFlowAction: (extra) => this.runFlowAction(serverId, node, context, extra),
       executeHttpRequest: () => this.executeHttpRequest(node, context),
       executeSetVariable: () => this.executeSetVariable(node, context),
       executeScript: () => this.executeScript(node, context, serverId),
@@ -1005,6 +1030,10 @@ export class FlowEngine {
     // ui_set, and a callback makes ANY node clickable (emits ui_callback).
     if (p.node_id) out.id = String(p.node_id)
     if (p.callback) out.callback = String(r(p.callback))
+    // `bind` = props the CLIENT re-evaluates every frame against local data (e.g. the
+    // entity a follower tracks): '{"value":"entity.hp"}' or 'value=entity.hp; text=entity.name'.
+    const bind = parseBind(p.bind)
+    if (bind) out.bind = bind
 
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
@@ -1238,7 +1267,7 @@ export class FlowEngine {
 
   // ─── Game action executor ──────────────────────────
 
-  private runFlowAction(serverId: string, node: FlowNode, context: Record<string, any>) {
+  private runFlowAction(serverId: string, node: FlowNode, context: Record<string, any>, extra?: Record<string, any>) {
     const actionType = node.data.action_type
     if (!actionType) return
 
@@ -1246,6 +1275,7 @@ export class FlowEngine {
     for (const [key, val] of Object.entries(node.data.params || {})) {
       actionData[key] = coerceParam(key, this.resolveValue(val, context))
     }
+    if (extra) Object.assign(actionData, extra)
 
     // UI widget actions: convert to ui_command for per-player delivery
     if (actionType.startsWith('ui_')) {
@@ -1316,19 +1346,37 @@ export class FlowEngine {
         // HUD that follows a world entity (e.g. health bar over a boss).
         // The mod resolves the entity client-side and repositions each tick.
         // Delivered as a normal widget create with a `follow` block the mod reads.
+        // A comma/space/JSON list param → string[] (prefabs, tags).
+        const list = (v: any): string[] | undefined => {
+          if (Array.isArray(v)) return v.map(String).filter(Boolean)
+          if (typeof v !== 'string' || !v.trim()) return undefined
+          const s = v.trim()
+          if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(String) } catch { /* fall through */ } }
+          return s.split(/[\s,;]+/).filter(Boolean)
+        }
+        const flag = (v: any) => v === true || v === 'true' || v === 1 || v === '1'
         cmd = {
           action: 'create',
           id: actionData.id || `track_${Date.now()}`,
           type: actionData.widget || 'progress_bar',
           follow: {
-            mode: actionData.mode || undefined,  // 'combat_target' = segue quem você ataca
+            // 'all' = one follower per entity in range; 'combat_target' = segue quem você ataca
+            mode: actionData.mode || undefined,
             prefab: actionData.prefab || undefined,
+            prefabs: list(actionData.prefabs),
+            tags: list(actionData.tags),
             guid: actionData.guid ? Number(actionData.guid) : undefined,
-            nearest: actionData.nearest === true || actionData.nearest === 'true',
+            nearest: flag(actionData.nearest),
             offset_y: Number(actionData.offset_y) || 60,
             max_dist: Number(actionData.max_dist) || 0,
+            radius: Number(actionData.radius) || undefined,
+            require_hp: flag(actionData.require_hp) || undefined,
+            scan_every: Number(actionData.scan_every) || undefined,
             bind: actionData.bind || undefined,
           },
+          // per-entity template (from the ui_* children wired under the node); the
+          // client renders it per follower and evaluates its `bind` props locally.
+          tree: actionData.template || undefined,
           label: actionData.label,
           width: Number(actionData.width) || 80,
           height: Number(actionData.height) || 10,

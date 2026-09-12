@@ -311,11 +311,21 @@ local BIND_SOURCES = {
 -- The active bindings. Mob-HP is the first binding.
 -- Applied in a fixed id-sorted order so netvar declaration order matches.
 local BINDINGS = {
-    { id = "hp", source = "health", as = "dstp_hp", net = "ushortint" },
+    -- uint, not ushortint: Toadstool Misery has 99999 HP and a 16-bit clamp at 65535
+    -- made a full bar read 65%.
+    { id = "hp", source = "health", as = "dstp_hp", net = "uint" },
 }
 
 table.sort(BINDINGS, function(a, b) return a.id < b.id end)
-local function clamp16(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
+-- Clamp to the netvar's range: 16-bit for ushortint, 32-bit for uint.
+local NET_MAX = { ushortint = 65535, uint = 4294967295 }
+local function clampNet(v, net)
+    v = math.floor(v or 0)
+    local hi = NET_MAX[net] or 65535
+    if v < 0 then v = 0 end
+    if v > hi then v = hi end
+    return v
+end
 
 AddPrefabPostInitAny(function(inst)
     if inst.prefab == nil or inst:HasTag("player") then return end
@@ -334,7 +344,7 @@ AddPrefabPostInitAny(function(inst)
                 local function push()
                     local cur, max = src.read(inst)
                     if cur == nil then return end
-                    nv:set(clamp16(cur)); nvmax:set(clamp16(max))
+                    nv:set(clampNet(cur, b.net)); nvmax:set(clampNet(max, b.net))
                 end
                 inst:DoTaskInTime(0, function()
                     local comp = inst.components and inst.components[src.hook.comp]

@@ -1,0 +1,52 @@
+{
+  "name": "Lifebars — barra de vida REAL sobre todos os monstros perto do player",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_spawn", "alias": "p" }
+    },
+    {
+      "id": "track",
+      "type": "ui_track",
+      "position": { "x": 360, "y": 0 },
+      "data": {
+        "action_type": "ui_track",
+        "params": {
+          "userid": "{{p.userid}}",
+          "id": "mob_lifebars",
+          "mode": "all",
+          "prefabs": "spider, spider_warrior, hound, firehound, icehound, pigman, merm, tentacle, deerclops, bearger, moose, dragonfly",
+          "radius": "25",
+          "require_hp": "true",
+          "offset_y": "55"
+        }
+      }
+    },
+    {
+      "id": "tpl",
+      "type": "ui_col",
+      "position": { "x": 720, "y": 0 },
+      "data": { "params": { "gap": "2", "align": "center" } }
+    },
+    {
+      "id": "name",
+      "type": "ui_text",
+      "position": { "x": 1040, "y": -60 },
+      "data": { "params": { "text": "?", "size": "14", "color": "[1,1,1,1]", "bind": "text=entity.name" } }
+    },
+    {
+      "id": "hp",
+      "type": "ui_bar",
+      "position": { "x": 1040, "y": 40 },
+      "data": { "params": { "value": "1", "max": "1", "width": "70", "height": "8", "color": "[0.9,0.2,0.2,1]", "bind": "value=entity.hp; max=entity.hp_max" } }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_track", "source": "trg", "target": "track" },
+    { "id": "e_track_tpl", "source": "track", "target": "tpl" },
+    { "id": "e_tpl_name", "source": "tpl", "target": "name" },
+    { "id": "e_tpl_hp", "source": "tpl", "target": "hp" }
+  ]
+}

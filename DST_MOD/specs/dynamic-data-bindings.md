@@ -1,4 +1,12 @@
-# Dynamic Data Bindings — proposal (DRAFT, not implemented)
+# Dynamic Data Bindings — server→client replication (IMPLEMENTED: interpreter + `health`)
+
+> Status (2026-09-12): the binding interpreter in `modmain.lua` (`BIND_SOURCES` /
+> `BINDINGS`, prefab-gated, id-sorted, declared identically both sides) is live with
+> the `health` source (`dstp_hp`/`dstp_hp_max`, `net_uint`). The client CONSUMES
+> these through the UI `bind` prop (`ui-by-nodes.md`, "Per-entity template + local
+> bind") — `entity.hp`, `entity.hp_max` or any `entity.dstp_*` field. What is still
+> a proposal below is pushing the binding SET from the backend; today it is fixed at
+> mod load, by design (see "Bindings are fixed at mod load").
 
 ## The problem
 

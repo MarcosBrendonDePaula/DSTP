@@ -11,8 +11,8 @@ export const meta: NodeMeta = {
   accent: 'text-blue-400',
   category: 'Acoes',
   subgroup: "Interface",
-  description: "Cria HUD que segue uma entidade próxima",
-  aiDescription: "Dedicated node for the ui_track game action.",
+  description: "HUD que segue entidades: uma (prefab/alvo de combate) ou TODAS num raio (modo all). Ligue nós ui_* como filhos para desenhar o template por entidade; use `bind` neles (ex.: value=entity.hp) para o cliente atualizar sozinho.",
+  aiDescription: "HUD widget following world entities. mode='all' tracks every entity in `radius` matching `prefabs`/`tags` (one follower each, created/destroyed client-side as they enter/leave); other modes follow one target (prefab / nearest / combat_target). ui_* children wired under this node become the per-entity template; their `bind` props (e.g. value=entity.hp, max=entity.hp_max, text=entity.name) are re-evaluated locally every frame. Set require_hp=true to skip entities without the HP netvar.",
   kind: 'action',
   params: [
     {
@@ -26,8 +26,33 @@ export const meta: NodeMeta = {
       "placeholder": "boss_hp"
     },
     {
+      "key": "mode",
+      "label": "Modo (all | prefab | combat_target | vazio=mais próx.)",
+      "placeholder": "all"
+    },
+    {
+      "key": "prefabs",
+      "label": "Prefabs (modo all, lista)",
+      "placeholder": "spider, hound, deerclops"
+    },
+    {
+      "key": "tags",
+      "label": "Tags (modo all, qualquer uma)",
+      "placeholder": "monster, hostile"
+    },
+    {
+      "key": "radius",
+      "label": "Raio (modo all)",
+      "placeholder": "30"
+    },
+    {
+      "key": "require_hp",
+      "label": "Só entidades com HP replicado (true/false)",
+      "placeholder": "true"
+    },
+    {
       "key": "prefab",
-      "label": "Prefab alvo (vazio=mais próx.)",
+      "label": "Prefab alvo (modo único; vazio=mais próx.)",
       "placeholder": "deerclops"
     },
     {

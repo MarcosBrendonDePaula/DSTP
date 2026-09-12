@@ -11,6 +11,7 @@ export const ui = function UIBarNode({ id, data, selected }: any) {
       {field('Rótulo (dentro)', data.params?.label ?? '', v => set('label', v), '')}
       {field('Cor [r,g,b,a]', data.params?.color ?? '', v => set('color', v), '[0.2,0.9,0.2,1]')}
       {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), 'hp_bar')}
+      {field('Bind (prop=entity.campo)', data.params?.bind ?? '', v => set('bind', v), 'value=entity.hp; max=entity.hp_max')}
     </UIBox>
   )
 }

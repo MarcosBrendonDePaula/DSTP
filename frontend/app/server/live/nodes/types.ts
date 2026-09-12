@@ -65,7 +65,9 @@ export interface NodeRunContext {
   pushCommand: (type: string, data: any) => void
   /** Write a debug line to the server log, with secrets masked. */
   log: (message: string) => void
-  runFlowAction: () => void
+  /** Run the node's game action. `extra` is merged into the resolved params
+   *  (e.g. ui_track passes the template tree built from its ui_* children). */
+  runFlowAction: (extra?: Record<string, any>) => void
   executeHttpRequest: () => Promise<any>
   executeSetVariable: () => any
   executeScript: () => Promise<any>

@@ -6,6 +6,30 @@ version's notes into the Steam "Change Notes" field.
 The mod talks to the DSTP backend through the relay
 (https://github.com/MarcosBrendonDePaula/dstp-relay).
 
+## [Unreleased]
+
+### Added
+- **`ui_track` mode `all`** — one HUD follower per entity in `radius` matching
+  `prefabs`/`tags`, created when the entity enters range and destroyed when it
+  leaves, all client-side from a single command. `require_hp` skips entities
+  without the HP netvar so no bar ever shows a fake 100%.
+- **Per-entity templates with local `bind`** — a follower can render any UI tree
+  (the `ui_*` children wired under the `ui_track` node). Nodes carry
+  `bind = { prop = "entity.<field>" }` (`name`, `prefab`, `hp`, `hp_max`,
+  `hp_pct`, `has_hp`, `distance`, or any `dstp_*` netvar cache) and the client
+  re-evaluates them every frame — the flow draws the bar, the game feeds it.
+- **`layout_math.lua`** — the flex arithmetic (justify start/end/center/between/
+  around/evenly, align, `margin` incl. `auto`, `grow`/`flex`, `shrink`, min/max)
+  as a pure module ported from rts-dom, mirrored in the panel and pinned to one
+  fixture table. Layout is computed in CSS space and converted to DST space once.
+
+### Fixed
+- `row` + `align:start` placed children at the BOTTOM (cross axis inverted).
+- `display:absolute` ignored element-model children whose x/y live in `style`.
+- Legacy single-target follow showed a full bar for entities with no HP data;
+  the bar is now hidden until HP is known.
+- HP netvar is `uint` (was `ushortint`): Toadstool Misery's 99999 HP read 65%.
+
 ## [0.6.0]
 
 ### Added
