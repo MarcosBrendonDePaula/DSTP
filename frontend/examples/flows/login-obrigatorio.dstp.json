@@ -1,0 +1,105 @@
+{
+  "name": "Login obrigatório — registro/login na entrada; o player fica travado até autenticar",
+  "nodes": [
+    { "id": "spawn", "type": "trigger", "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_spawn", "alias": "p" } },
+
+    { "id": "freeze", "type": "player_state", "position": { "x": 320, "y": 0 },
+      "data": { "params": { "userid": "{{p.userid}}", "attribute": "speed", "mode": "set", "value": "0" } } },
+
+    { "id": "acc", "type": "memory", "position": { "x": 640, "y": 0 },
+      "data": { "action": "read", "alias": "acc", "params": { "key": "pass:{{p.userid}}" } } },
+
+    { "id": "has_acc", "type": "condition", "position": { "x": 960, "y": 0 },
+      "data": { "field": "{{acc.value}}", "operator": "exists", "value": "" } },
+
+    { "id": "ui_login", "type": "ui_builder", "position": { "x": 1300, "y": -120 },
+      "data": {
+        "params": { "userid": "{{p.userid}}", "id": "auth", "anchor": "center" },
+        "tree": {
+          "type": "panel", "title": "Login", "closeable": false, "min_width": 360, "gap": 10,
+          "children": [
+            { "type": "text", "text": "Digite sua senha para jogar", "size": 18 },
+            { "type": "text_input", "id": "pwd", "placeholder": "senha", "password": true, "width": 240, "height": 36, "callback": "do_login", "clear_on_submit": true },
+            { "type": "button", "text": "Entrar", "callback": "do_login", "width": 160 },
+            { "type": "text", "text": "Enter no campo tambem funciona", "size": 12, "color": [0.7, 0.7, 0.7, 1] }
+          ]
+        }
+      } },
+
+    { "id": "ui_register", "type": "ui_builder", "position": { "x": 1300, "y": 140 },
+      "data": {
+        "params": { "userid": "{{p.userid}}", "id": "auth", "anchor": "center" },
+        "tree": {
+          "type": "panel", "title": "Registro", "closeable": false, "min_width": 360, "gap": 10,
+          "children": [
+            { "type": "text", "text": "Primeira vez aqui. Crie uma senha:", "size": 18 },
+            { "type": "text_input", "id": "pwd", "placeholder": "nova senha (min. 4)", "password": true, "width": 240, "height": 36, "callback": "do_register", "clear_on_submit": true },
+            { "type": "button", "text": "Registrar", "callback": "do_register", "width": 160 }
+          ]
+        }
+      } },
+
+    { "id": "cb", "type": "trigger", "position": { "x": 0, "y": 520 },
+      "data": { "event_type": "ui_callback", "alias": "cb" } },
+
+    { "id": "is_register", "type": "condition", "position": { "x": 320, "y": 440 },
+      "data": { "field": "{{cb.callback}}", "operator": "equals", "value": "do_register" } },
+
+    { "id": "pwd_len", "type": "transform", "position": { "x": 640, "y": 440 },
+      "data": { "alias": "plen", "params": { "operation": "length", "value": "{{cb.callback_data.fields.pwd}}" } } },
+
+    { "id": "pwd_ok", "type": "condition", "position": { "x": 960, "y": 440 },
+      "data": { "field": "{{plen.value}}", "operator": "greater_than", "value": "3" } },
+
+    { "id": "save", "type": "memory", "position": { "x": 1300, "y": 380 },
+      "data": { "action": "write", "params": { "key": "pass:{{cb.userid}}", "value": "{{cb.callback_data.fields.pwd}}" } } },
+
+    { "id": "reg_short", "type": "action", "position": { "x": 1300, "y": 520 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{cb.userid}}", "text": "Senha muito curta (minimo 4 caracteres)", "duration": "4" } } },
+
+    { "id": "is_login", "type": "condition", "position": { "x": 320, "y": 700 },
+      "data": { "field": "{{cb.callback}}", "operator": "equals", "value": "do_login" } },
+
+    { "id": "acc2", "type": "memory", "position": { "x": 640, "y": 700 },
+      "data": { "action": "read", "alias": "acc2", "params": { "key": "pass:{{cb.userid}}" } } },
+
+    { "id": "match", "type": "condition", "position": { "x": 960, "y": 700 },
+      "data": { "field": "{{cb.callback_data.fields.pwd}}", "operator": "equals", "value": "{{acc2.value}}" } },
+
+    { "id": "wrong", "type": "action", "position": { "x": 1300, "y": 800 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{cb.userid}}", "text": "Senha incorreta", "duration": "3" } } },
+
+    { "id": "close", "type": "action", "position": { "x": 1640, "y": 560 },
+      "data": { "action_type": "ui_destroy", "params": { "userid": "{{cb.userid}}", "id": "auth" } } },
+
+    { "id": "unfreeze", "type": "player_state", "position": { "x": 1960, "y": 560 },
+      "data": { "params": { "userid": "{{cb.userid}}", "attribute": "speed", "mode": "set", "value": "1" } } },
+
+    { "id": "welcome", "type": "action", "position": { "x": 2280, "y": 560 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{cb.userid}}", "text": "Bem-vindo, {{cb.name}}! Pode jogar.", "duration": "4" } } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "spawn", "target": "freeze" },
+    { "id": "e2", "source": "freeze", "target": "acc" },
+    { "id": "e3", "source": "acc", "target": "has_acc" },
+    { "id": "e4", "source": "has_acc", "target": "ui_login", "sourceHandle": "true" },
+    { "id": "e5", "source": "has_acc", "target": "ui_register", "sourceHandle": "false" },
+
+    { "id": "e6", "source": "cb", "target": "is_register" },
+    { "id": "e7", "source": "is_register", "target": "pwd_len", "sourceHandle": "true" },
+    { "id": "e8", "source": "pwd_len", "target": "pwd_ok" },
+    { "id": "e9", "source": "pwd_ok", "target": "save", "sourceHandle": "true" },
+    { "id": "e10", "source": "pwd_ok", "target": "reg_short", "sourceHandle": "false" },
+    { "id": "e11", "source": "save", "target": "close" },
+
+    { "id": "e12", "source": "cb", "target": "is_login" },
+    { "id": "e13", "source": "is_login", "target": "acc2", "sourceHandle": "true" },
+    { "id": "e14", "source": "acc2", "target": "match" },
+    { "id": "e15", "source": "match", "target": "close", "sourceHandle": "true" },
+    { "id": "e16", "source": "match", "target": "wrong", "sourceHandle": "false" },
+
+    { "id": "e17", "source": "close", "target": "unfreeze" },
+    { "id": "e18", "source": "unfreeze", "target": "welcome" }
+  ]
+}
