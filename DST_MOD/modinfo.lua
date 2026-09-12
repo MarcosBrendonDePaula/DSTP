@@ -61,6 +61,30 @@ configuration_options = {
         default = 5,
     },
     {
+        name = "SLOT_COUNT",
+        label = "Data slots por entidade",
+        hover = "Quantos netvars genéricos (slots) cada entidade da lista recebe. Os fluxos escolhem em tempo real o que cada slot carrega (HP, fome, temperatura, combustível...) — replicado por frame, sem reload. Custo: ~200 bytes de memória por slot por entidade. Precisa ser igual no servidor e nos clientes (o DST sincroniza esta config).",
+        options = {
+            {description = "0 (desligado)", data = 0},
+            {description = "4", data = 4},
+            {description = "8", data = 8},
+            {description = "10 (padrão)", data = 10},
+            {description = "16", data = 16},
+        },
+        default = 10,
+    },
+    {
+        name = "SLOT_PRESET",
+        label = "Entidades com data slots",
+        hover = "Quais prefabs recebem os slots (lista em scripts/dstp/slot_prefabs.lua). 'Mobs' = criaturas e chefes. 'Mobs + estruturas' inclui fogueiras, baús, máquinas, plantas e paredes.",
+        options = {
+            {description = "Desligado", data = "off"},
+            {description = "Mobs (padrão)", data = "mobs"},
+            {description = "Mobs + estruturas", data = "mobs_structures"},
+        },
+        default = "mobs",
+    },
+    {
         name = "DEBUG_LOGS",
         label = "Debug Logs",
         hover = "Mostrar logs detalhados do DSTP no console do servidor. Desative em produção para manter o log limpo.",

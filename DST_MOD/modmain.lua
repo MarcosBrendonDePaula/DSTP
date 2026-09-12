@@ -20,6 +20,15 @@ local function DebugLog(...)
 end
 local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
+-- Netvar SLOT POOL (scripts/dstp/data_feed.lua): SLOT_COUNT generic net_floats on every
+-- prefab of the chosen preset (scripts/dstp/slot_prefabs.lua). Both values come from
+-- the mod config, which DST syncs from the server to every client — so both sides
+-- declare exactly the same slots at PostInit (the positional rule). The MEANING of a
+-- slot is assigned at runtime by flows (data_feed node); only this shape is fixed.
+local SLOT_COUNT = tonumber(GetModConfigData("SLOT_COUNT")) or 10
+local SLOT_PRESET = GetModConfigData("SLOT_PRESET") or "mobs"
+local SLOT_PREFABS = GLOBAL.require("dstp/slot_prefabs").presets[SLOT_PRESET] or {}
+
 -- Client-side UI widget manager (loaded on client only)
 local UIWidgets = nil
 local DataFeed = nil   -- client half of scripts/dstp/data_feed.lua (lazy)
@@ -147,7 +156,7 @@ AddPrefabPostInit("player_classified", function(inst)
             if not s or s == "" then return end
             if not DataFeed then
                 DataFeed = GLOBAL.require("dstp/data_feed")
-                DataFeed.Init({ GLOBAL = GLOBAL })
+                DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
             end
             local ok, packet = GLOBAL.pcall(GLOBAL.json.decode, s)
             if ok and type(packet) == "table" then DataFeed.Apply(packet) end
@@ -249,6 +258,7 @@ dstp.Init(env, {
     poll_interval = POLL_INTERVAL,
     debug_logs = GetModConfigData("DEBUG_LOGS") == true,
     allow_execute = GetModConfigData("ALLOW_EXECUTE") == true,
+    slot_count = SLOT_COUNT,
     events = {
         players = GetModConfigData("EVT_PLAYERS") ~= false,
         chat = GetModConfigData("EVT_CHAT") ~= false,
@@ -377,6 +387,28 @@ AddPrefabPostInitAny(function(inst)
                 local as, asmax = b.as, b.as .. "_max"
                 inst:ListenForEvent(as .. "_dirty", function() inst[as] = inst["_b_" .. as]:value() end)
                 inst:ListenForEvent(asmax .. "_dirty", function() inst[asmax] = inst["_b_" .. asmax]:value() end)
+            end
+        end
+    end
+
+    -- Slot pool: SLOT_COUNT generic net_floats, declared identically on both sides for
+    -- every prefab of the preset. Server: data_feed writes them. Client: each dirty
+    -- event hands (slot, value) to data_feed, which decodes it via the slot map.
+    if SLOT_COUNT > 0 and SLOT_PREFABS[inst.prefab] then
+        inst._dstp_slot = {}
+        for i = 1, SLOT_COUNT do
+            inst._dstp_slot[i] = GLOBAL.net_float(inst.GUID, "dstp.slot" .. i, "dstp_slot" .. i .. "_dirty")
+        end
+        if not isServer then
+            for i = 1, SLOT_COUNT do
+                local idx = i
+                inst:ListenForEvent("dstp_slot" .. idx .. "_dirty", function()
+                    if not DataFeed then
+                        DataFeed = GLOBAL.require("dstp/data_feed")
+                        DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
+                    end
+                    DataFeed.OnSlot(inst, idx, inst._dstp_slot[idx]:value())
+                end)
             end
         end
     end

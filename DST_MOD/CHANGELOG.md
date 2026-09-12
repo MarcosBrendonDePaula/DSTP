@@ -19,6 +19,16 @@ The mod talks to the DSTP backend through the relay
   or any plain `component.field`. Prefabs and fields are chosen at runtime — no
   netvar, no reload. Per-feed cap (30, hard 60), send only on change, feeds of one
   player merged into one packet, entities keyed by network id. `feed_stop` ends it.
+- **Netvar slot pool — "dynamic netvars" the safe way.** `SLOT_COUNT` generic
+  `net_float`s (mod config, default 10) are declared on every prefab of the
+  `SLOT_PRESET` list (`slot_prefabs.lua`: mobs / mobs+structures), identically on
+  both sides at PostInit. `data_feed` assigns their MEANING at runtime (slot i =
+  field, first-requested first, survivors keep their index), writes them per tick
+  (the engine deltas them per frame, 4 bytes on change) and ships the slot map in
+  the JSON packet; the client decodes slot dirty events into `inst.dstp_<field>`.
+  Fields that don't fit still ride JSON. So HP, hunger, temperature or any
+  `component.field` of any preset prefab can be replicated PER FRAME on a flow's
+  request, with no reload.
 - **`ui_track` mode `all`** — one HUD follower per entity in `radius` matching
   `prefabs`/`tags`, created when the entity enters range and destroyed when it
   leaves, all client-side from a single command. `require_hp` skips entities

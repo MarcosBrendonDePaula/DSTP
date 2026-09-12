@@ -21,8 +21,19 @@
 -- send-only-on-change rule. Fields are DATA, not code: a whitelist of readers plus
 -- plain `component.field` reads (numbers/strings/booleans only, no method calls).
 --
+-- THE SLOT POOL — "dynamic netvars", the safe way. modmain declares SLOT_COUNT generic
+-- `net_float`s (`inst._dstp_slot[i]`) on every entity of a preset prefab list
+-- (slot_prefabs.lua), identical on both sides at PostInit — so the positional rule
+-- holds. This module assigns their MEANING at runtime: slot i = field, first-requested
+-- first, survivors keep their index when others free up. Slot-carried fields are
+-- written to the netvar (the engine deltas them PER FRAME, 4 bytes on change) and
+-- left OUT of the JSON packet; the packet carries the slot map so the client can
+-- decode slot dirty events into inst.dstp_<field>. Fields that don't fit (no free
+-- slot, entity without slots, string values) still ride the JSON path. So the fast
+-- path is dynamic too, bounded only by the pool size.
+--
 -- Mechanic-module pattern (see CLAUDE.md): all state lives here; modmain only
--- declares the net_string + the client listener; client.lua only calls Init.
+-- declares the net_string/slots + the client listeners; client.lua only calls Init.
 
 local M = {}
 
@@ -36,6 +47,59 @@ local feeds = {}
 local HARD_CAP = 60
 local DEFAULT_CAP = 30
 local MIN_INTERVAL = 0.2
+
+-- Slot pool (server truth). slotMap[i] = { name=, kind="number"|"bool" } or nil.
+local SLOT_COUNT = 0
+local slotMap = {}
+local slotIndex = {}      -- name → i (derived)
+local firstSeen = {}      -- field name → request sequence (stable, deterministic order)
+local seenSeq = 0
+local BOOL_FIELDS = { burning = true, frozen = true, sleeping = true }
+
+function M.ConfigureSlots(n)
+    SLOT_COUNT = math.max(0, math.floor(tonumber(n) or 0))
+end
+
+local function kindOf(field) return BOOL_FIELDS[field] and "bool" or "number" end
+
+-- Recompute the map from every active spec: survivors keep their index; freed slots
+-- are refilled in first-request order. Called on every Start/Stop.
+local function reassignSlots()
+    slotIndex = {}
+    if SLOT_COUNT <= 0 then slotMap = {}; return end
+    local wanted = {}
+    for _, st in pairs(feeds) do
+        for _, spec in pairs(st.specs) do
+            for _, f in ipairs(spec.fields) do wanted[f] = true end
+        end
+    end
+    local newMap, taken = {}, {}
+    for i = 1, SLOT_COUNT do
+        local e = slotMap[i]
+        if e and e.name ~= "" and wanted[e.name] then newMap[i] = e; taken[e.name] = true end
+    end
+    local order = {}
+    for f in pairs(wanted) do if not taken[f] then order[#order + 1] = f end end
+    table.sort(order, function(a, b) return (firstSeen[a] or 0) < (firstSeen[b] or 0) end)
+    for _, f in ipairs(order) do
+        for i = 1, SLOT_COUNT do
+            if newMap[i] == nil then newMap[i] = { name = f, kind = kindOf(f) }; break end
+        end
+    end
+    slotMap = newMap
+    for i, e in pairs(slotMap) do slotIndex[e.name] = i end
+end
+
+-- The map as shipped to clients: a dense array (holes → empty name) so JSON stays an array.
+local function slotMapForWire()
+    local out, last = {}, 0
+    for i = 1, SLOT_COUNT do if slotMap[i] then last = i end end
+    for i = 1, last do
+        local e = slotMap[i]
+        out[i] = e and { name = e.name, kind = e.kind } or { name = "", kind = "number" }
+    end
+    return out
+end
 
 -------------------------------------------------
 -- Readers (server)
@@ -138,18 +202,32 @@ local function scan(player, spec)
     return out
 end
 
--- Build the merged packet for a player: { radius=<max feed radius>, ents={ [netid]={field=value} } }
+-- Build the merged packet for a player: { radius=<max feed radius>, slots=<map>,
+-- ents={ [netid]={field=value} } }. Slot-carried fields are written to the entity's
+-- netvar slot instead of the row (the engine replicates them per frame).
 function M.Snapshot(player, specs)
     local packet = { radius = 0, ents = {} }
+    if SLOT_COUNT > 0 then packet.slots = slotMapForWire() end
     for _, spec in pairs(specs) do
         if spec.radius > packet.radius then packet.radius = spec.radius end
         for _, ent in ipairs(scan(player, spec)) do
             local id = netid(ent)
             if id ~= nil then
                 local row = packet.ents[id] or {}
+                local slots = ent._dstp_slot
                 for _, f in ipairs(spec.fields) do
                     local v = M.Read(ent, f)
-                    if v ~= nil then row[f] = v end
+                    if v ~= nil then
+                        local i = slotIndex[f]
+                        local nv = (i and type(slots) == "table") and slots[i] or nil
+                        if nv and type(v) ~= "string" then
+                            local enc = v
+                            if type(v) == "boolean" then enc = v and 1 or 0 end
+                            if nv:value() ~= enc then nv:set(enc) end
+                        else
+                            row[f] = v
+                        end
+                    end
                 end
                 packet.ents[id] = row
             end
@@ -222,6 +300,9 @@ function M.Start(player, spec)
         interval = math.max(MIN_INTERVAL, tonumber(spec.interval) or 0.5),
         max = math.min(HARD_CAP, math.max(1, tonumber(spec.max) or DEFAULT_CAP)),
     }
+    for _, f in ipairs(fields) do
+        if not firstSeen[f] then seenSeq = seenSeq + 1; firstSeen[f] = seenSeq end
+    end
     local st = feeds[player.userid]
     if not st then
         st = { player = player, specs = {} }
@@ -230,6 +311,7 @@ function M.Start(player, spec)
     st.player = player
     st.specs[id] = s
     st.lastSig = nil          -- force a packet on the next tick
+    reassignSlots()
     ensureTask(st, player.userid)
     return true
 end
@@ -243,20 +325,55 @@ function M.Stop(player, id)
     if next(st.specs) == nil then
         stopTask(st); feeds[player.userid] = nil
     end
+    reassignSlots()
 end
 
 function M.StopAll(player)
     if not (player and player.userid) then return end
     local st = feeds[player.userid]
     if st then stopTask(st); feeds[player.userid] = nil end
+    reassignSlots()
 end
+
+-- The current slot map (server truth) — for tests/panel introspection.
+function M.SlotMap() return slotMapForWire() end
 
 -------------------------------------------------
 -- Apply (client)
 -------------------------------------------------
--- packet = { radius=, ents = { [netid or "netid"] = { field = value } } }. Resolves
--- netids against the client's own entities around ThePlayer and writes each field as
--- inst.dstp_<field> — the names the UI `bind` props and follow widgets read.
+-- Client copy of the slot map (arrives inside every packet).
+local clientMap = {}
+function M.ResetClient() clientMap = {} end
+
+local function decodeSlot(kind, v)
+    if kind == "bool" then return v ~= nil and v ~= 0 and v ~= false end
+    return v
+end
+
+-- Re-expose every parked slot value of `inst` through the current map.
+local function applySlots(inst)
+    local raw = inst._dstp_slotraw
+    if type(raw) ~= "table" then return end
+    for i, v in pairs(raw) do
+        local e = clientMap[i]
+        if e and e.name ~= "" then inst["dstp_" .. e.name] = decodeSlot(e.kind, v) end
+    end
+end
+
+-- Client: a slot netvar went dirty. Park the raw value (the map may not have arrived
+-- yet) and expose it as inst.dstp_<field> when the map knows slot i.
+function M.OnSlot(inst, i, v)
+    if type(inst) ~= "table" then return end
+    inst._dstp_slotraw = inst._dstp_slotraw or {}
+    inst._dstp_slotraw[i] = v
+    local e = clientMap[i]
+    if e and e.name ~= "" then inst["dstp_" .. e.name] = decodeSlot(e.kind, v) end
+end
+
+-- packet = { radius=, slots=, ents = { [netid or "netid"] = { field = value } } }.
+-- Resolves netids against the client's own entities around ThePlayer and writes each
+-- field as inst.dstp_<field> — the names the UI `bind` props and follow widgets read.
+-- A new slot map re-decodes the parked slot values of every entity in range.
 function M.Apply(packet)
     if type(packet) ~= "table" or type(packet.ents) ~= "table" then return 0 end
     local player = _G.ThePlayer
@@ -268,6 +385,13 @@ function M.Apply(packet)
     for _, ent in ipairs(ents) do
         local id = netid(ent)
         if id ~= nil then byNet[id] = ent end
+    end
+    if type(packet.slots) == "table" then
+        clientMap = {}
+        for i, e in ipairs(packet.slots) do
+            if type(e) == "table" then clientMap[i] = { name = tostring(e.name or ""), kind = e.kind or "number" } end
+        end
+        for _, ent in ipairs(ents) do applySlots(ent) end
     end
     local applied = 0
     for key, row in pairs(packet.ents) do
@@ -290,11 +414,13 @@ local function defaultSend(player, packet)
     if ok and json then pc._dstp_feed:set(json) end
 end
 
--- env = { GLOBAL, core (server only: registers feed_start/feed_stop), send (test hook) }
+-- env = { GLOBAL, core (server only: registers feed_start/feed_stop), send (test hook),
+--         slot_count (the pool size modmain declared — MUST match both sides) }
 function M.Init(env)
     _G = env.GLOBAL
     core = env.core
     send = env.send or defaultSend
+    if env.slot_count ~= nil then M.ConfigureSlots(env.slot_count) end
     if core and core.RegisterCommand then
         core.RegisterCommand("feed_start", function(data)
             local player = data and data.userid and core.FindPlayer(data.userid)

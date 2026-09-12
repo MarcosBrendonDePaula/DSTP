@@ -14,6 +14,17 @@
 > care which path fed them. Netvar = per-frame, cheap, fixed set (HP of common mobs).
 > Feed = 0.2–1 s latency, bandwidth ∝ entities in range (capped, send-on-change), ANY
 > whitelisted field or plain `component.field`, chosen at runtime. Node: `data_feed`.
+>
+> **And the SLOT POOL closes the gap** (same day): `SLOT_COUNT` generic `net_float`s
+> (mod config, synced server→clients, default 10) on every prefab of `SLOT_PRESET`
+> (`slot_prefabs.lua`), declared identically both sides — the positional rule holds
+> because the SHAPE is fixed; only the MEANING (slot i = field) is assigned at
+> runtime by `data_feed`, which ships the slot map in its packet. Slot-carried fields
+> replicate per frame like a hand-written netvar; the rest ride JSON. This is as
+> "dynamic netvar" as the engine allows: pool size and prefab preset per world, any
+> field at runtime. Why not "send the list, then declare"? Ordering — an entity may be
+> constructed on the client before the list arrives, and then server/client declare
+> different netvars on the same entity (the stream-corruption crash).
 
 ## The problem
 

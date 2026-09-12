@@ -142,4 +142,80 @@ check("client Apply writes booleans too", cSpider.dstp_burning == false)
 Feed.Apply({ radius = 25, ents = { ["5001"] = { hp = 7 } } })
 check("client Apply accepts string netid keys (JSON)", cSpider.dstp_hp == 7)
 
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- SLOT POOL — "dynamic netvars" the safe way. modmain declares N generic net_floats
+-- (`inst._dstp_slot[i]`) on a preset prefab list, identical both sides at PostInit;
+-- data_feed assigns MEANING to the slots at runtime (slot i = field), writes them
+-- per tick (the engine deltas them per frame), ships the slot map in the JSON packet,
+-- and the client decodes slot dirty events into inst.dstp_<field>. Fields that don't
+-- fit (no free slot, entity without slots, string values) still go through JSON.
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function mkSlot()
+    local s = { v = nil }
+    s.set = function(self, v) self.v = v end
+    s.value = function(self) return self.v end
+    return s
+end
+local function addSlots(e, n) e._dstp_slot = {}; for i = 1, n do e._dstp_slot[i] = mkSlot() end; return e end
+
+-- presets data module (what modmain gates the slot declaration by)
+local SlotPrefabs = KIT.load(MOD_SLOT_PREFABS, "slot_prefabs.lua")
+check("slot_prefabs: presets off/mobs/mobs_structures exist",
+    type(SlotPrefabs.presets) == "table" and SlotPrefabs.presets.off and SlotPrefabs.presets.mobs and SlotPrefabs.presets.mobs_structures)
+check("slot_prefabs: 'mobs' has spider, 'mobs_structures' has firepit too",
+    SlotPrefabs.presets.mobs.spider == true and SlotPrefabs.presets.mobs_structures.firepit == true and SlotPrefabs.presets.mobs.firepit == nil)
+check("slot_prefabs: 'off' is empty", next(SlotPrefabs.presets.off) == nil)
+
+-- fresh module state for the slot scenario
+sent = {}; tasks = {}
+Feed.ConfigureSlots(2)
+local sp = addSlots(mkEnt(8001, "spider", { health = { currenthealth = 25, maxhealth = 100 }, temperature = { GetCurrent = function() return 12 end },
+                                            burnable = { IsBurning = function() return true end } }), 2)
+local hd = mkEnt(8002, "hound", { health = { currenthealth = 40, maxhealth = 150 } })   -- NO slots (not in preset)
+NEAR = { sp, hd }
+
+-- 1) fields beyond the pool, and entities without slots, fall back to JSON
+registered.feed_start({ userid = "KU_1", id = "A", prefabs = { "spider", "hound" }, radius = 20, fields = { "hp", "hp_max", "temperature" } })
+tick(1)
+local p1 = sent[#sent].packet
+check("slot map assigned in request order, capped at the pool size (2)",
+    p1.slots and #p1.slots == 2 and p1.slots[1].name == "hp" and p1.slots[2].name == "hp_max" and p1.slots[1].kind == "number")
+check("slot-carried fields are WRITTEN to the entity's netvar slots", sp._dstp_slot[1].v == 25 and sp._dstp_slot[2].v == 100)
+check("slot-carried fields are NOT repeated in the JSON row", p1.ents[8001] and p1.ents[8001].hp == nil and p1.ents[8001].hp_max == nil)
+check("field with no free slot (temperature) still travels by JSON", p1.ents[8001] and p1.ents[8001].temperature == 12)
+check("entity WITHOUT slots gets everything by JSON", p1.ents[8002] and p1.ents[8002].hp == 40 and p1.ents[8002].hp_max == 150)
+
+-- 2) slot values delta per tick; unchanged JSON → no packet even though slots were re-set
+sp.components.health.currenthealth = 10
+tick(1)
+check("slot rewritten with the new value", sp._dstp_slot[1].v == 10)
+check("a slot-only change does NOT produce a JSON packet (the engine deltas the slot)", #sent == 1)
+
+-- 3) stable map: a new field waits for a free slot; freeing slots reassigns without moving survivors
+registered.feed_start({ userid = "KU_1", id = "B", prefabs = { "spider" }, radius = 20, fields = { "burning" } })
+tick(1)
+check("no free slot → burning goes by JSON meanwhile", sent[#sent].packet.ents[8001].burning == true)
+registered.feed_stop({ userid = "KU_1", id = "A" })
+tick(1)
+local p3 = sent[#sent].packet
+check("after feed A stops, 'burning' takes the freed slot 1 with kind=bool",
+    p3.slots and p3.slots[1] and p3.slots[1].name == "burning" and p3.slots[1].kind == "bool" and p3.slots[2] == nil)
+check("bool encoded as 1/0 in the slot", sp._dstp_slot[1].v == 1)
+registered.feed_stop({ userid = "KU_1", id = "B" })
+
+-- 4) CLIENT: slot dirty events decode through the map; events before the map are queued
+local cSp = addSlots(mkEnt(8001, "spider"), 2)
+NEAR = { cSp }
+Feed.ResetClient()
+Feed.OnSlot(cSp, 1, 42)                       -- arrives BEFORE any map is known
+check("slot value before the map is parked, not exposed", cSp.dstp_hp == nil)
+Feed.Apply({ radius = 20, slots = { { name = "hp", kind = "number" }, { name = "burning", kind = "bool" } }, ents = {} })
+check("map arrival applies the parked slot value (dstp_hp = 42)", cSp.dstp_hp == 42)
+Feed.OnSlot(cSp, 2, 1)
+check("bool slot decodes 1 → true", cSp.dstp_burning == true)
+Feed.OnSlot(cSp, 2, 0)
+check("bool slot decodes 0 → false", cSp.dstp_burning == false)
+Feed.OnSlot(cSp, 1, 7)
+check("later slot dirty updates the field directly", cSp.dstp_hp == 7)
+
 return C.report()

@@ -121,7 +121,7 @@ function DSTP.Init(mod_env, mod_config)
 
     -- Data feed (flow-defined server→client entity data over _dstp_feed). Registers
     -- the feed_start / feed_stop commands on core.
-    DataFeed.Init({ GLOBAL = _G, core = Core })
+    DataFeed.Init({ GLOBAL = _G, core = Core, slot_count = mod_config.slot_count })
 
     -- Inject the core into every submodule. Order: collectors before http (http
     -- needs them); chat before/with events (chat populates core.MaybeNotifyOwnerSetup
