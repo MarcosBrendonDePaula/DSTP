@@ -25,7 +25,9 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 -- the mod config, which DST syncs from the server to every client — so both sides
 -- declare exactly the same slots at PostInit (the positional rule). The MEANING of a
 -- slot is assigned at runtime by flows (data_feed node); only this shape is fixed.
-local SLOT_COUNT = tonumber(GetModConfigData("SLOT_COUNT")) or 0
+-- NB: `tonumber` is NOT in the mod environment (only via GLOBAL) — a bare call here
+-- killed the dedicated server at mod load (2026-09-12). Guarded by modmain-env.test.ts.
+local SLOT_COUNT = GLOBAL.tonumber(GetModConfigData("SLOT_COUNT")) or 0
 local SLOT_PRESET = GetModConfigData("SLOT_PRESET") or "mobs"
 local SLOT_PREFABS = GLOBAL.require("dstp/slot_prefabs").presets[SLOT_PRESET] or {}
 
