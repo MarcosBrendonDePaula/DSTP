@@ -11,7 +11,8 @@ const DISPLAY_TO_LEGACY: Record<string, { type: string; mode?: string }> = {
   flex: { type: 'col' },
   grid: { type: 'col', mode: 'grid' },
   block: { type: 'col' },
-  absolute: { type: 'panel', mode: 'canvas' },
+  // a plain canvas container — not `panel` (frame + close button, background dropped)
+  absolute: { type: 'col', mode: 'canvas' },
 }
 
 export function normalizeElement(node: UINode): UINode {

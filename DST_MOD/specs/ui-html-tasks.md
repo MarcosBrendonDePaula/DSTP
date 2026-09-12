@@ -42,9 +42,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [ ] `GridChildren` rewritten on it; legacy `cols` / `grid_rows` keep working
 - Tests: fixtures + harness
 
-### 5. `display: absolute` as a plain canvas container
-- [ ] `absolute` maps to `col` + `mode:canvas` (not `panel` — no frame, no X); `style.background` honoured there
-- [ ] preview mirror + `ui-element-model.test.ts`
+### 5. `display: absolute` as a plain canvas container — DONE 2026-09-12
+- [x] `absolute` maps to `col` + `mode:canvas` (not `panel` — no frame, no X); `AddBox` now also runs on the canvas and grid branches, so `style.background`/`border` are honoured there
+- [x] TS mirror (`elementModel.ts`) + `ui-element-model.test.ts`; harness: no close button, background drawn, child at `style.x/y`
 
 ### 6. HTML round-trip hygiene
 - [ ] `treeToHtml` escapes `<`, `&`, `"` in text and attributes

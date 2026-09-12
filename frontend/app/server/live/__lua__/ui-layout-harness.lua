@@ -300,4 +300,21 @@ check("text valign='top' → SetVAlign(ANCHOR_TOP=2)", t1 and rawget(t1, "valign
 check("text with a width gets a region + word wrap", t1 and rawget(t1, "region") and rawget(t1, "region")[1] == 200 and rawget(t1, "wrap") == true)
 check("legacy 'ANCHOR_RIGHT' still resolves", t2 and rawget(t2, "halign") == mock_G.ANCHOR_RIGHT)
 
+-- ── task 5: display:absolute is a plain CANVAS container — no panel frame, no close
+--            button, and its background/children x,y are honoured ──
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "abs2", tree = {
+    tag = "div", style = { display = "absolute", width = 300, height = 200, background = { 1, 0, 0, 1 } },
+    children = { { tag = "text", text = "AB", style = { x = 50, y = 30 } } },
+} })
+local closeBtns, sq, ab = 0, 0, nil
+for _, w in ipairs(created) do
+    if w.kind == "ImageButton" and w.ctorArgs and w.ctorArgs[2] == "close.tex" then closeBtns = closeBtns + 1 end
+    if w.kind == "Image" and w.ctorArgs and w.ctorArgs[2] == "square.tex" then sq = sq + 1 end
+    if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == "AB" then ab = rawget(w, "pos") end
+end
+check("display:absolute draws NO panel close button", closeBtns == 0)
+check("display:absolute draws its style.background (square.tex)", sq >= 1)
+check("display:absolute child at style.x/y → (-50,60) " .. f2(ab), ab and math.abs(ab[1] + 50) < 0.5 and math.abs(ab[2] - 60) < 0.5)
+
 return C.report()

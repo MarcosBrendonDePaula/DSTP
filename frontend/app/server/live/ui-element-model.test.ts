@@ -10,7 +10,7 @@ const DISPLAY_TO_LEGACY: Record<string, { type: string; mode?: string }> = {
   flex: { type: 'col' },
   grid: { type: 'col', mode: 'grid' },
   block: { type: 'col' },
-  absolute: { type: 'panel', mode: 'canvas' },
+  absolute: { type: 'col', mode: 'canvas' },
 }
 
 function normalizeElement(node: any): any {
@@ -57,9 +57,9 @@ describe('NormalizeElement (element model → legacy)', () => {
     expect(n.type).toBe('col'); expect(n.mode).toBe('grid'); expect(n.cols).toBe(3)
   })
 
-  it('div absolute → panel + mode canvas', () => {
+  it('div absolute → col + mode canvas (a plain canvas container — NOT a panel with frame + X)', () => {
     const n = normalizeElement({ tag: 'div', style: { display: 'absolute', width: 300, height: 200 } })
-    expect(n.type).toBe('panel'); expect(n.mode).toBe('canvas'); expect(n.width).toBe(300)
+    expect(n.type).toBe('col'); expect(n.mode).toBe('canvas'); expect(n.width).toBe(300)
   })
 
   it('div with no display defaults to flex/col', () => {

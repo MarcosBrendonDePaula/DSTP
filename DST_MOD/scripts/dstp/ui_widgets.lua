@@ -880,10 +880,13 @@ RenderNodeImpl = function(node, parent, ctx)
         -- display:absolute without coords still lays out sanely.
         if node.mode == "canvas" and HasChildXY(node) then
             local w, h = CanvasChildren(node, c, ctx)
+            AddBox(c, w, h, node)   -- background/border/opacity behind the placed children
             return c, w, h
         elseif node.mode == "grid" then
             local w, h = GridChildren(node, c, ctx)
-            return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+            local fw, fh = ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+            AddBox(c, fw, fh, node)
+            return c, fw, fh
         end
         -- If THIS container has a fixed (resolvable) size, expose its CONTENT box as the
         -- parent reference so children with width_ref:parent / "100%" resolve against it
@@ -1335,7 +1338,9 @@ local DISPLAY_TO_LEGACY = {
     flex = { type = "col" },      -- direction decides col vs row
     grid = { type = "col", mode = "grid" },
     block = { type = "col" },
-    absolute = { type = "panel", mode = "canvas" },
+    -- a plain canvas container (children at x/y): NOT `panel` — that drew a frame
+    -- and a close button on every display:absolute div and dropped its background.
+    absolute = { type = "col", mode = "canvas" },
 }
 local function NormalizeElement(node)
     if type(node) ~= "table" or node.tag == nil then return node end
