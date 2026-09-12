@@ -139,6 +139,10 @@ check("template bar bound to entity.hp/hp_max (50/100 of 60px = 30) got " .. tos
     fA ~= nil and barFillWidth(fA) == 30)
 check("follower positioned at screen pos + offset_y (spider A at x=2 → 660, y=360+50)",
     fA ~= nil and fA.pos ~= nil and fA.pos[1] == 660 and fA.pos[2] == 410)
+-- Screen coords only map 1:1 when the follower is a DIRECT child of HUD.controls. As a
+-- child of a proportionally-scaled holder, SetPosition(sx, sy) is multiplied by the
+-- holder's scale (1.5x on 1080p) and the bar lands far from the mob (seen in-game).
+check("follower is a direct child of HUD.controls (not of a scaled holder)", fA ~= nil and fA.parent == hudRoot)
 
 -- HP changes → bar follows on the next tick, no rebuild (same widget object)
 spA.dstp_hp = 25

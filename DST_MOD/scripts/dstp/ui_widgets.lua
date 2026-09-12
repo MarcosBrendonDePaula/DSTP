@@ -1634,7 +1634,13 @@ local function CreateFollow(cmd)
                     local guid = ent.GUID or ent
                     seen[guid] = true
                     if not entry.followers[guid] then
-                        local w = holder:AddChild(Widget("dstp_follow_" .. cmd.id .. ":" .. tostring(guid)))
+                        -- Each follower is its OWN HUD child (newHolder), NOT a child of
+                        -- `holder`: GetScreenPos coords only map 1:1 on a direct child of
+                        -- HUD.controls. Under a proportionally-scaled parent the position
+                        -- gets multiplied by that scale (1.5x on 1080p) and the bar lands
+                        -- far from the mob — seen in-game. `holder` stays only as the
+                        -- entry's anchor for DestroyWidget; followers are killed explicitly.
+                        local w = newHolder("dstp_follow_" .. cmd.id .. ":" .. tostring(guid))
                         entry.followers[guid] = { widget = w, ent = ent, visual = BuildFollowVisual(w, cmd) }
                     end
                 end
@@ -1818,7 +1824,14 @@ function UIWidgets.DestroyWidget(cmd)
     -- left unable to move if the tree is destroyed mid-edit.
     ReleaseTextFields(entry)
 
-    -- Kill the widget tree
+    -- Kill the widget tree (+ per-entity followers of a mode=all follow, which live
+    -- directly on the HUD rather than under entry.widget)
+    if entry.followers then
+        for _, f in pairs(entry.followers) do
+            if f.widget and f.widget.inst:IsValid() then f.widget:Kill() end
+        end
+        entry.followers = {}
+    end
     if entry.widget and entry.widget.inst:IsValid() then
         entry.widget:Kill()
     end

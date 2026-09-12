@@ -1,0 +1,107 @@
+{
+  "name": "TESTE — digite !hud no chat: barras de vida + números de dano nos mobs perto de você",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" }
+    },
+    {
+      "id": "cond",
+      "type": "condition",
+      "position": { "x": 320, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "!hud" }
+    },
+    {
+      "id": "feed",
+      "type": "data_feed",
+      "position": { "x": 640, "y": -80 },
+      "data": {
+        "params": {
+          "operation": "start",
+          "userid": "{{chat.userid}}",
+          "id": "hud",
+          "prefabs": "spider, spider_warrior, hound, pigman, beefalo, rabbit, crow, robin, butterfly, deerclops, bearger",
+          "fields": "hp, hp_max, temperature",
+          "events": "hit, burn, death",
+          "radius": "25",
+          "interval": "0.4"
+        }
+      }
+    },
+    {
+      "id": "track",
+      "type": "ui_track",
+      "position": { "x": 960, "y": -80 },
+      "data": {
+        "action_type": "ui_track",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "id": "hud_lifebars",
+          "mode": "all",
+          "prefabs": "spider, spider_warrior, hound, pigman, beefalo, rabbit, crow, robin, butterfly, deerclops, bearger",
+          "radius": "25",
+          "require_hp": "true",
+          "offset_y": "55"
+        }
+      }
+    },
+    {
+      "id": "tpl",
+      "type": "ui_col",
+      "position": { "x": 1300, "y": -80 },
+      "data": { "params": { "gap": "2", "align": "center" } }
+    },
+    {
+      "id": "name",
+      "type": "ui_text",
+      "position": { "x": 1620, "y": -160 },
+      "data": { "params": { "text": "?", "size": "14", "color": "[1,1,1,1]", "bind": "text=entity.name" } }
+    },
+    {
+      "id": "hp",
+      "type": "ui_bar",
+      "position": { "x": 1620, "y": -70 },
+      "data": { "params": { "value": "1", "max": "1", "width": "70", "height": "8", "color": "[0.9,0.2,0.2,1]", "bind": "value=entity.hp; max=entity.hp_max" } }
+    },
+    {
+      "id": "temp",
+      "type": "ui_text",
+      "position": { "x": 1620, "y": 20 },
+      "data": { "params": { "text": "", "size": "12", "color": "[0.7,0.85,1,1]", "bind": "text=entity.dstp_temperature" } }
+    },
+    {
+      "id": "rules",
+      "type": "action",
+      "position": { "x": 960, "y": 140 },
+      "data": {
+        "action_type": "rule_install",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "rules": "[{\"id\":\"dmg_number\",\"when\":{\"event\":\"entity_event\",\"conditions\":[{\"field\":\"event.kind\",\"op\":\"equals\",\"value\":\"hit\"}]},\"do\":[{\"action\":\"show_widget\",\"id\":\"dmg_{{event.guid}}_{{event.seq}}\",\"type\":\"label\",\"text\":\"-{{event.amount}}\",\"color\":[1,0.3,0.3,1],\"follow\":{\"guid\":\"{{event.guid}}\",\"offset_y\":90},\"ttl\":0.8}]},{\"id\":\"burn_flash\",\"when\":{\"event\":\"entity_event\",\"conditions\":[{\"field\":\"event.kind\",\"op\":\"equals\",\"value\":\"burn\"}]},\"do\":[{\"action\":\"show_widget\",\"id\":\"burn_{{event.guid}}\",\"type\":\"label\",\"text\":\"PEGOU FOGO\",\"color\":[1,0.6,0.1,1],\"follow\":{\"guid\":\"{{event.guid}}\",\"offset_y\":110},\"ttl\":1.5}]}]"
+        }
+      }
+    },
+    {
+      "id": "ok",
+      "type": "action",
+      "position": { "x": 1300, "y": 140 },
+      "data": {
+        "action_type": "ui_notification",
+        "params": { "userid": "{{chat.userid}}", "text": "HUD de teste ligado: barras + dano nos mobs perto de voce", "duration": "4" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_cond", "source": "trg", "target": "cond" },
+    { "id": "e_cond_feed", "source": "cond", "target": "feed", "sourceHandle": "true" },
+    { "id": "e_feed_track", "source": "feed", "target": "track" },
+    { "id": "e_track_tpl", "source": "track", "target": "tpl" },
+    { "id": "e_tpl_name", "source": "tpl", "target": "name" },
+    { "id": "e_tpl_hp", "source": "tpl", "target": "hp" },
+    { "id": "e_tpl_temp", "source": "tpl", "target": "temp" },
+    { "id": "e_track_rules", "source": "track", "target": "rules" },
+    { "id": "e_rules_ok", "source": "rules", "target": "ok" }
+  ]
+}
