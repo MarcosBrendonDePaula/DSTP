@@ -58,6 +58,19 @@ Core.ProcessCommands({
 })
 check("co-tick: both subs kept", actionsOf("joe") == "rules_install,state_set")
 
+-- ── ui_command subs must ALSO lose the backend seq (in-game 2026-09-12: the login
+-- panel's create carried seq <= the wallet's and UIWidgets' per-command dedup dropped
+-- it silently). Same-ms / out-of-order seqs must not matter inside an envelope. ──
+reset()
+Core.ProcessCommands({
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "create", type = "tree", id = "wallet", seq = 500 } } },
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "create", type = "tree", id = "auth", seq = 500 } } },
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "batch", seq = 400, commands = { { action = "set", id = "x", seq = 400 } } } } },
+})
+check("ui subs: all three kept", actionsOf("joe") == "create,create,set")
+check("ui subs: NO sub carries a seq", subs("joe")[1].seq == nil and subs("joe")[2].seq == nil and subs("joe")[3].seq == nil)
+check("ui subs: ids intact", subs("joe")[1].id == "wallet" and subs("joe")[2].id == "auth")
+
 -- ── Broadcast + per-player overlap: install_rules_all + per-player ui_command ──
 reset()
 Core.ProcessCommands({

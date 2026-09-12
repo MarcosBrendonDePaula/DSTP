@@ -248,7 +248,12 @@ AddPrefabPostInit("player_classified", function(inst)
                     _dstp_ui_seq = cmd.seq
                 end
                 if cmd.commands then
-                    for _, sub in ipairs(cmd.commands) do dispatch(sub) end
+                    -- Belt and braces: a sub must never carry a seq (the envelope's is the
+                    -- dedup key); UIWidgets/RulesEngine would otherwise drop it silently.
+                    for _, sub in ipairs(cmd.commands) do
+                        if type(sub) == "table" then sub.seq = nil end
+                        dispatch(sub)
+                    end
                 end
             else
                 -- A lone (non-batch) command — route directly.

@@ -341,12 +341,24 @@ function Core.ProcessCommands(commands)
                 local uid = tgt.userid
                 if not ui_by_user[uid] then ui_by_user[uid] = {}; table.insert(ui_order, uid) end
                 local c = tgt.sub
+                -- Drop the backend's per-command seq from EVERY sub (the envelope seq is
+                -- the only dedup key). A sub that kept its Date.now() seq was silently
+                -- dropped by UIWidgets' per-command dedup whenever it was <= an earlier
+                -- sub's (same ms, or out of push order) — in-game 2026-09-12: the login
+                -- panel never showed while the wallet did. Shallow copy: never mutate the
+                -- command the backend handed us.
+                local function strip(s)
+                    if type(s) ~= "table" or s.seq == nil then return s end
+                    local o = {}
+                    for k, v in pairs(s) do if k ~= "seq" then o[k] = v end end
+                    return o
+                end
                 -- Flatten a nested batch (an already-batched ui_command) so subs live
                 -- at one level in the player's envelope.
                 if c.action == "batch" and type(c.commands) == "table" then
-                    for _, s in ipairs(c.commands) do table.insert(ui_by_user[uid], s) end
+                    for _, s in ipairs(c.commands) do table.insert(ui_by_user[uid], strip(s)) end
                 else
-                    table.insert(ui_by_user[uid], c)
+                    table.insert(ui_by_user[uid], strip(c))
                 end
             end
         else
