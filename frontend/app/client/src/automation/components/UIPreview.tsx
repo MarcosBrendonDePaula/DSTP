@@ -360,6 +360,8 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
           alignItems: node.align_items || node.align || 'start',
         } : {}),
         padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
+        // overflow:scroll with a fixed height = a scrolling viewport (Lua: TrueScrollArea)
+        ...(node.overflow === 'scroll' && Number(node.height) ? { overflowY: 'auto' as const, overflowX: 'hidden' as const } : {}),
         background: cssColor(node.background),
         // border: { width, color } or a bare width (default colour), like the Lua AddBox
         border: node.border != null && node.border !== false

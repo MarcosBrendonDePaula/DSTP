@@ -60,7 +60,7 @@ texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`
 | `font-size` | ✅ | Text size |
 | `text-align` / `vertical-align` | ✅ | `halign`/`valign` = left/center/right, top/middle/bottom (SetHAlign/SetVAlign); needs a `width` to have a region to align in |
 | `line-height` | ❌ | parsed (`line_height`) but the DST Text widget has no line-height API — ignored |
-| `overflow` / scroll | ❌ | no clip/scroll container in this set |
+| `overflow: scroll` (+ fixed `height`) | ✅ | `TrueScrollArea` scissored viewport + scrollbar; `scroll_step` = wheel step. `overflow:hidden` alone still ❌ |
 | `z-index` | 🟡 | child order + MoveToFront; no arbitrary stacking context |
 | `cursor`, `hover`, `:focus` (CSS) | 🟡 | hover/focus exist as ENGINE behavior (clickable/focus), not as style selectors |
 

@@ -58,9 +58,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [-] a separate `ui_focus`: on the DST HUD focus and hover are the same signal for mouse users; not worth a second event
 - Tests: `ui-hover.test.ts` (overlay + button gain/lose → events, hover-only overlay has no click; rules condition on id/hovered → dom_toggle), parser keeps `hover` boolean
 
-### 8. Scrollable list: `overflow: scroll` + `height`
-- [ ] `div` with `overflow:scroll` and a fixed height renders through DST `ScrollableList` (or a clipped viewport + wheel handler)
-- Tests: harness (children beyond the height are parented to the scroller)
+### 8. Scrollable list: `overflow: scroll` + `height` — DONE 2026-09-12 (needs in-game validation)
+- [x] a `col`/`row` with `overflow="scroll"` (CSS `overflow:scroll`) and a fixed `height` whose content is taller renders through Klei's `TrueScrollArea` (scissored viewport + wheel/drag scrollbar on the right): the children are laid out in an orphan content widget handed as `context.widget`, scissor = the box, `context.offset.y` puts the content top at the viewport top, `scroll_step` (default 40) = `scroll_per_click`. Fitting content or no fixed height → plain container. Preview: `overflow-y:auto`
+- [ ] in-game check: wheel scrolling needs the area to hold focus (its `bg` is `blank.tex`, which Klei relies on) and `SetScissor` on the HUD at proportional scale — validate with `#uitest`
+- Tests: `ui-scroll.test.ts` (scissor/offset/size, content parenting, fitting + no-height cases), parser keeps `overflow`
 
 ### 9. HTML is the default authoring mode (owner's decision 2026-09-12) — DONE 2026-09-12 (palette + modal); code removal pending
 - [x] `ui_builder` opens in HTML mode by default: `meta.defaults` seeds `ui_html` (`<panel title="Painel">…</panel>`) + the matching `tree`; a client test parses the HTML and asserts equality, so the two can't drift. The detail modal opens straight on the `</> Editor HTML` tab
@@ -85,4 +86,4 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - Tests: engine e2e (script → html → ui_builder → tree pushed), parser round-trip under Bun (no browser DOMParser)
 
 ## Won't do (engine limits — see `ui-css-support.md`)
-- [-] web fonts, arbitrary `border-radius`, gradients, `rotate`, `transition`/`animation` as style, real box-shadow, generic `overflow:hidden` clipping — no primitive in the Klei widget set
+- [-] web fonts, arbitrary `border-radius`, gradients, `rotate`, `transition`/`animation` as style, real box-shadow, generic `overflow:hidden` clipping (plain clipping without scroll — `overflow:scroll` IS supported since task 8) — no primitive in the Klei widget set

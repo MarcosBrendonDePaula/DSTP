@@ -962,11 +962,33 @@ RenderNodeImpl = function(node, parent, ctx)
         local contentW = (selfW or ctx.parent_w)   -- inherit parent width when auto
         if contentW then ctx.parent_w = contentW - pad2 end
         if selfH then ctx.parent_h = selfH - pad2 end
-        local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
+        -- overflow:scroll (task 8): lay the children out in an ORPHAN content widget so
+        -- it can be handed to Klei's TrueScrollArea (a scissored viewport + wheel/drag
+        -- scrollbar) when the content is taller than the fixed height. No scroll needed
+        -- (auto height, or it fits) → the content is simply parented to `c`.
+        local scroll = (node.overflow == "scroll") and selfH ~= nil
+        local inner = scroll and Widget("scroll_content") or c
+        local w, h = LayoutChildren(node, inner, ctx, t == "col" and "y" or "x")
         ctx.parent_w, ctx.parent_h = prevPW, prevPH
         -- Reported width: own fixed width, else the measured content (keeps auto-grow
         -- so a small box doesn't silently stretch to the whole screen).
         local fw, fh = selfW or w, selfH or h
+        if scroll then
+            if h > selfH + 0.5 then
+                -- Our content is centred on (0,0) (children span -h/2..+h/2, y up); the
+                -- viewport is the box (-fw/2..fw/2, -selfH/2..selfH/2). Offset the content so
+                -- its TOP sits at the viewport's top; scrolling adds to y (moves it up).
+                local TrueScrollArea = _G.require("widgets/truescrollarea")
+                local area = c:AddChild(TrueScrollArea(
+                    { widget = inner, offset = { x = 0, y = selfH / 2 - h / 2 }, size = { w = fw, height = h } },
+                    { x = -fw / 2, y = -selfH / 2, width = fw, height = selfH },
+                    { scroll_per_click = tonumber(node.scroll_step) or 40 }))
+                area:SetPosition(0, 0, 0)
+                if LAYOUT_DEBUG then Log(string.format("scroll id=%s viewport %dx%d content %d", tostring(node.id or "?"), math.floor(fw), math.floor(selfH), math.floor(h))) end
+            else
+                c:AddChild(inner)
+            end
+        end
         if LAYOUT_DEBUG then
             Log(string.format("%s id=%s -> box %dx%d (selfW=%s selfH=%s measured %dx%d) parent=%sx%s kids=%d",
                 t, tostring(node.id or "?"), math.floor(fw), math.floor(fh),

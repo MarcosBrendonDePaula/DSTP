@@ -189,3 +189,9 @@ describe('hover attribute (task 7)', () => {
     expect(normalizeElement(htmlToTree('<text id="tip" hover="true">x</text>'))).toMatchObject({ type: 'text', id: 'tip', hover: true })
   })
 })
+
+describe('overflow:scroll (task 8)', () => {
+  it('style overflow:scroll + height normalizes to overflow/height props', () => {
+    expect(normalizeElement(htmlToTree('<div style="overflow:scroll; height:120; width:200"></div>'))).toMatchObject({ overflow: 'scroll', height: 120, width: 200 })
+  })
+})
