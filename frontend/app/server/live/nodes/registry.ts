@@ -33,6 +33,8 @@ import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/
 import { handler as callComponentHandler } from '@shared/automation/nodes/data/player/call_component/exec'
 import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
 import { handler as landClaimHandler } from '@shared/automation/nodes/data/world/land_claim/exec'
+import { meta as dataFeedMeta } from '@shared/automation/nodes/data/world/data_feed/meta'
+import { handler as dataFeedHandler } from '@shared/automation/nodes/data/world/data_feed/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
 import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
@@ -237,6 +239,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: playerStateMeta, handler: playerStateHandler },
   { meta: callComponentMeta, handler: callComponentHandler },
   { meta: landClaimMeta, handler: landClaimHandler },
+  { meta: dataFeedMeta, handler: dataFeedHandler },
   { meta: memoryMeta, handler: memoryHandler },
   { meta: listFlowsMeta, handler: listFlowsHandler },
   { meta: httpMeta, handler: httpHandler },

@@ -1,0 +1,77 @@
+{
+  "name": "Lifebars via Data Feed — HP e temperatura de QUALQUER prefab, escolhidos no fluxo (sem reload do mod)",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_spawn", "alias": "p" }
+    },
+    {
+      "id": "feed",
+      "type": "data_feed",
+      "position": { "x": 340, "y": 0 },
+      "data": {
+        "params": {
+          "operation": "start",
+          "userid": "{{p.userid}}",
+          "id": "mobs",
+          "prefabs": "spider, hound, pigman, beefalo, koalefant_summer, deerclops, bearger",
+          "fields": "hp, hp_max, temperature",
+          "radius": "25",
+          "interval": "0.4",
+          "max": "30"
+        }
+      }
+    },
+    {
+      "id": "track",
+      "type": "ui_track",
+      "position": { "x": 680, "y": 0 },
+      "data": {
+        "action_type": "ui_track",
+        "params": {
+          "userid": "{{p.userid}}",
+          "id": "mob_lifebars",
+          "mode": "all",
+          "prefabs": "spider, hound, pigman, beefalo, koalefant_summer, deerclops, bearger",
+          "radius": "25",
+          "require_hp": "true",
+          "offset_y": "55"
+        }
+      }
+    },
+    {
+      "id": "tpl",
+      "type": "ui_col",
+      "position": { "x": 1020, "y": 0 },
+      "data": { "params": { "gap": "2", "align": "center" } }
+    },
+    {
+      "id": "name",
+      "type": "ui_text",
+      "position": { "x": 1340, "y": -80 },
+      "data": { "params": { "text": "?", "size": "14", "color": "[1,1,1,1]", "bind": "text=entity.name" } }
+    },
+    {
+      "id": "hp",
+      "type": "ui_bar",
+      "position": { "x": 1340, "y": 10 },
+      "data": { "params": { "value": "1", "max": "1", "width": "70", "height": "8", "color": "[0.9,0.2,0.2,1]", "bind": "value=entity.hp; max=entity.hp_max" } }
+    },
+    {
+      "id": "temp",
+      "type": "ui_text",
+      "position": { "x": 1340, "y": 100 },
+      "data": { "params": { "text": "", "size": "12", "color": "[0.7,0.85,1,1]", "bind": "text=entity.dstp_temperature" } }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_feed", "source": "trg", "target": "feed" },
+    { "id": "e_feed_track", "source": "feed", "target": "track" },
+    { "id": "e_track_tpl", "source": "track", "target": "tpl" },
+    { "id": "e_tpl_name", "source": "tpl", "target": "name" },
+    { "id": "e_tpl_hp", "source": "tpl", "target": "hp" },
+    { "id": "e_tpl_temp", "source": "tpl", "target": "temp" }
+  ]
+}

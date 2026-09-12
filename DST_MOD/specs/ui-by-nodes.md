@@ -53,8 +53,13 @@ generic prop/action covers it:
   `bind` (`value=entity.hp; max=entity.hp_max`, `text=entity.name`); the client
   re-evaluates it every frame against the tracked entity and patches through the
   same `Register` path `ui_set` uses — no backend round-trip. Paths:
-  `entity.name|prefab|hp|hp_max|hp_pct|has_hp|distance|<any dstp_* netvar>`.
+  `entity.name|prefab|hp|hp_max|hp_pct|has_hp|distance|<any dstp_* field>`.
   Example: `examples/flows/mob-lifebars-nearby.dstp.json`.
+- **Any server field, chosen by the flow** — the `data_feed` node (mod
+  `data_feed.lua`) ships fields like `hunger`, `temperature`, `fuel`, `burning` or a
+  plain `component.field` of the entities around a player as `inst.dstp_<field>`,
+  so `bind: text=entity.dstp_temperature` just works. No netvar, no reload. Example:
+  `examples/flows/mob-lifebars-feed.dstp.json`.
 
 **Principle:** if a new UI needs new Lua, the renderer isn't generic enough —
 the missing capability should become a prop/action, not a special widget type.

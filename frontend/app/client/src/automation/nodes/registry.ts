@@ -34,6 +34,8 @@ import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/
 import { ui as callComponentUi } from '@shared/automation/nodes/data/player/call_component/ui'
 import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
 import { ui as landClaimUi } from '@shared/automation/nodes/data/world/land_claim/ui'
+import { meta as dataFeedMeta } from '@shared/automation/nodes/data/world/data_feed/meta'
+import { ui as dataFeedUi } from '@shared/automation/nodes/data/world/data_feed/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
 import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
@@ -258,6 +260,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: playerStateMeta, ui: playerStateUi },
   { meta: callComponentMeta, ui: callComponentUi },
   { meta: landClaimMeta, ui: landClaimUi },
+  { meta: dataFeedMeta, ui: dataFeedUi },
   { meta: memoryMeta, ui: memoryUi },
   { meta: listFlowsMeta, ui: listFlowsUi },
   { meta: httpMeta, ui: httpUi },

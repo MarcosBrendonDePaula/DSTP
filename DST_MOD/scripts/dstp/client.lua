@@ -74,6 +74,7 @@ local Chat = require("dstp/chat")
 local SelfTest = require("dstp/selftest")
 -- In-game VISUAL UI smoke test (admin via #uitest). Creates real HUD widgets.
 local UITest = require("dstp/uitest")
+local DataFeed = require("dstp/data_feed")
 
 -- Game event listeners moved to dstp/events (per-player/world/weather/boss/grief).
 -- Bodies unchanged; gated by core.evt_config. Wired via Events.RegisterGameEvents in
@@ -117,6 +118,10 @@ function DSTP.Init(mod_env, mod_config)
         GLOBAL = _G, debug_logs = config.debug_logs,
     })
     Core.LandClaims = LandClaims  -- share with core (commands will read it from there)
+
+    -- Data feed (flow-defined server→client entity data over _dstp_feed). Registers
+    -- the feed_start / feed_stop commands on core.
+    DataFeed.Init({ GLOBAL = _G, core = Core })
 
     -- Inject the core into every submodule. Order: collectors before http (http
     -- needs them); chat before/with events (chat populates core.MaybeNotifyOwnerSetup

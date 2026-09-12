@@ -9,6 +9,16 @@ The mod talks to the DSTP backend through the relay
 ## [Unreleased]
 
 ### Added
+- **Data feed (`data_feed.lua`) — the generic server→client data path.** A flow
+  sends `feed_start { userid, id, prefabs|tags, radius, fields, interval, max }`
+  and the server ships the chosen fields of the entities around that player over
+  ONE `net_string` (`player_classified._dstp_feed`, declared once); the client
+  writes them as `inst.dstp_<field>` — what UI `bind` props and `ui_track`
+  templates read. Fields: `hp`, `hp_max`, `hunger`, `sanity`, `temperature`,
+  `fuel`, `moisture`, `burning`, `frozen`, `sleeping` (+ `_max` where it applies)
+  or any plain `component.field`. Prefabs and fields are chosen at runtime — no
+  netvar, no reload. Per-feed cap (30, hard 60), send only on change, feeds of one
+  player merged into one packet, entities keyed by network id. `feed_stop` ends it.
 - **`ui_track` mode `all`** — one HUD follower per entity in `radius` matching
   `prefabs`/`tags`, created when the entity enters range and destroyed when it
   leaves, all client-side from a single command. `require_hp` skips entities

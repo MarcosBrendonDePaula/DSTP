@@ -4,9 +4,16 @@
 > `BINDINGS`, prefab-gated, id-sorted, declared identically both sides) is live with
 > the `health` source (`dstp_hp`/`dstp_hp_max`, `net_uint`). The client CONSUMES
 > these through the UI `bind` prop (`ui-by-nodes.md`, "Per-entity template + local
-> bind") — `entity.hp`, `entity.hp_max` or any `entity.dstp_*` field. What is still
-> a proposal below is pushing the binding SET from the backend; today it is fixed at
-> mod load, by design (see "Bindings are fixed at mod load").
+> bind") — `entity.hp`, `entity.hp_max` or any `entity.dstp_*` field. The binding SET
+> of NETVARS stays fixed at mod load, by design (see "Bindings are fixed at mod load").
+>
+> **The dynamic path is `data_feed.lua`** (mod, 2026-09-12): a flow starts a per-player
+> feed (`feed_start`: prefabs/tags, radius, fields, interval) and the server ships the
+> chosen fields over ONE net_string (`_dstp_feed`) declared once; the client writes them
+> as `inst.dstp_<field>`, the same names the netvar path uses, so UI `bind` props don't
+> care which path fed them. Netvar = per-frame, cheap, fixed set (HP of common mobs).
+> Feed = 0.2–1 s latency, bandwidth ∝ entities in range (capped, send-on-change), ANY
+> whitelisted field or plain `component.field`, chosen at runtime. Node: `data_feed`.
 
 ## The problem
 

@@ -22,6 +22,7 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
 -- Client-side UI widget manager (loaded on client only)
 local UIWidgets = nil
+local DataFeed = nil   -- client half of scripts/dstp/data_feed.lua (lazy)
 -- Client-side rules engine (loaded on client only)
 local RulesEngine = nil
 -- Last _dstp_ui envelope seq we processed. The net_string replays its last value on
@@ -107,6 +108,11 @@ AddPrefabPostInit("player_classified", function(inst)
     -- sets the same JSON array on every player; the client rebuilds its TheInput filter.
     inst._dstp_keys = GLOBAL.net_string(inst.GUID, "dstp.keys", "dstp_keys_dirty")
 
+    -- Data feed (server → client): flow-chosen fields of nearby entities, one JSON
+    -- packet per player (scripts/dstp/data_feed.lua). Declared once here; the SET of
+    -- fields/prefabs is dynamic — that is the whole point (no per-field netvars).
+    inst._dstp_feed = GLOBAL.net_string(inst.GUID, "dstp.feed", "dstp_feed_dirty")
+
     -- Client: show PM in chat / auto-open URLs
     if not GLOBAL.TheWorld.ismastersim then
         inst:ListenForEvent("dstp_pm_dirty", function()
@@ -133,6 +139,18 @@ AddPrefabPostInit("player_classified", function(inst)
                     "default", false, true, nil
                 )
             end
+        end)
+
+        -- Client: apply a data-feed packet → inst.dstp_<field> on the matching entities
+        inst:ListenForEvent("dstp_feed_dirty", function()
+            local s = inst._dstp_feed:value()
+            if not s or s == "" then return end
+            if not DataFeed then
+                DataFeed = GLOBAL.require("dstp/data_feed")
+                DataFeed.Init({ GLOBAL = GLOBAL })
+            end
+            local ok, packet = GLOBAL.pcall(GLOBAL.json.decode, s)
+            if ok and type(packet) == "table" then DataFeed.Apply(packet) end
         end)
 
         -- Client: process UI widget commands from backend
