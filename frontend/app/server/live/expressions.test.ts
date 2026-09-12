@@ -171,10 +171,17 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition({ field: 'count', operator: 'exists' }, ctx)).toBe(true) // 0 is present
   })
 
-  it('exists is false for an unresolved field', () => {
-    // Unresolved templates resolve to their literal text, which is non-null, so
-    // exists on a truly-absent plain key checks the resolved value:
-    expect(evaluateCondition({ field: 'nope', operator: 'exists' }, ctx)).toBe(true)
+  it('exists is false for an unresolved field / template (the literal "{{x}}" is not a value)', () => {
+    // Unresolved templates resolve to their literal text. That text must NOT count as
+    // "exists" — in-game a login flow read `memory` (value null) and `{{acc.value}}`
+    // resolved to the literal "{{acc.value}}", so `exists` opened the Login panel for a
+    // player who had never registered.
+    expect(evaluateCondition({ field: 'nope', operator: 'exists' }, ctx)).toBe(false)
+    expect(evaluateCondition({ field: '{{acc.value}}', operator: 'exists' }, { acc: { value: null } })).toBe(false)
+    expect(evaluateCondition({ field: '{{acc.value}}', operator: 'exists' }, {})).toBe(false)
+    expect(evaluateCondition({ field: '{{acc.value}}', operator: 'exists' }, { acc: { value: 'abc' } })).toBe(true)
+    expect(evaluateCondition({ field: '{{acc.value}}', operator: 'exists' }, { acc: { value: 0 } })).toBe(true)
+    expect(evaluateCondition({ field: '{{acc.value}}', operator: 'exists' }, { acc: { value: '' } })).toBe(true)
   })
 
   it('unknown operator passes (true)', () => {
