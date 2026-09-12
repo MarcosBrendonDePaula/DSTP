@@ -350,6 +350,10 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         alignItems: cssAlign(node.align),
         padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
         background: cssColor(node.background),
+        // border: { width, color } or a bare width (default colour), like the Lua AddBox
+        border: node.border != null && node.border !== false
+          ? `${typeof node.border === 'object' ? (Number(node.border.width) || 2) : (Number(node.border) || 2)}px solid ${cssColor(typeof node.border === 'object' ? node.border.color : undefined) ?? 'rgba(255,255,255,0.6)'}`
+          : undefined,
         opacity: node.opacity != null ? Number(node.opacity) : undefined,
         borderRadius: 4, boxShadow: ring,
         // % width = exact (fills parent); px width = MINIMUM (grows to fit content,

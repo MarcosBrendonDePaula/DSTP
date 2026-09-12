@@ -312,10 +312,28 @@ local function LayoutChildren(node, container, ctx, axis)
     local gap = tonumber(node.gap) or 8
     local isCol = (axis == "y")
     local kids, items = {}, {}
+    -- align:stretch — a child with NO explicit cross size is rendered at the container's
+    -- cross CONTENT size (CSS stretch). Needs the container's cross size to be known;
+    -- an auto-sized container can't stretch (nothing to stretch to).
+    local stretchTo = nil
+    if node.align == "stretch" then
+        local crossFixed = isCol and ResolveW(node, ctx) or ResolveH(node, ctx)
+        if crossFixed then stretchTo = crossFixed - 2 * (tonumber(node.padding) or 0) end
+    end
     -- children may be a non-table on the ui_builder literal-tree path (an author bound it
     -- to a template that resolved to a non-array); guard so ipairs doesn't crash.
     for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
-        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        local def = childdef
+        if stretchTo and type(childdef) == "table" then
+            local crossKey = isCol and "width" or "height"
+            if ChildProp(childdef, crossKey) == nil then
+                -- shallow copy (not a proxy: NormalizeElement walks pairs()) with the size imposed
+                def = {}
+                for k, v in pairs(childdef) do def[k] = v end
+                def[crossKey] = stretchTo
+            end
+        end
+        local cwidget, cw, ch = RenderNode(def, container, ctx)
         if cwidget then
             cw, ch = cw or 0, ch or 0
             -- z = render order (CSS z-index): higher draws on top.
@@ -809,9 +827,16 @@ local function AddBox(container, w, h, node)
         bg:SetTint(c[1], c[2], c[3], (c[4] or 1) * (op or 1))
         bg:MoveToBack()
     end
-    if node.border and type(node.border) == "table" and node.border.color then
-        local bw = tonumber(node.border.width) or 2
-        local bc = ResolveColor(node.border.color)
+    -- border: { width, color } or a bare width (HTML `border:2`); colour defaults.
+    if node.border ~= nil and node.border ~= false then
+        local bw, bc
+        if type(node.border) == "table" then
+            bw = tonumber(node.border.width) or 2
+            bc = ResolveColor(node.border.color or { 1, 1, 1, 0.6 })
+        else
+            bw = tonumber(node.border) or 2
+            bc = ResolveColor({ 1, 1, 1, 0.6 })
+        end
         local frame = container:AddChild(Image("images/global.xml", "square.tex"))
         frame:SetSize(w + bw * 2, h + bw * 2)
         frame:SetTint(bc[1], bc[2], bc[3], (bc[4] or 1) * (op or 1))

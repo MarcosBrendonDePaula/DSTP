@@ -223,4 +223,44 @@ for _, w in ipairs(created) do
 end
 check("element panel with flat width/height (no style) renders fixed 200x84", has200x84)
 
+-- ── task 1: border with only a width (HTML `border:2`) draws a frame; align:stretch ──
+-- A col 200x60 (pad 0) with border=2 → a square.tex frame sized 204x64 behind the bg.
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "bd", tree = {
+    type = "col", width = 200, height = 60, gap = 0, background = { 0, 0, 0, 0.5 }, border = 2,
+    children = { { type = "text", text = "b" } },
+} })
+local frame204 = false
+for _, w in ipairs(created) do
+    local sz = rawget(w, "size")
+    if w.kind == "Image" and type(sz) == "table" and sz[1] == 204 and sz[2] == 64 then frame204 = true end
+end
+check("border given as a bare width draws a frame image box+2*width (204x64)", frame204)
+
+-- align:stretch — a bar with NO width inside a col of width 300 (pad 10) fills the
+-- content box: its bg image becomes 280 wide (instead of the bar's default 200).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "st", tree = {
+    type = "col", width = 300, padding = 10, align = "stretch", gap = 0,
+    children = { { type = "bar", value = 1, max = 1, height = 12 } },
+} })
+local bar280 = false
+for _, w in ipairs(created) do
+    local sz = rawget(w, "size")
+    if w.kind == "Image" and type(sz) == "table" and sz[1] == 280 and sz[2] == 12 then bar280 = true end
+end
+check("align=stretch: a bar without width fills the col content box (280 wide)", bar280)
+-- a child WITH its own width is not stretched
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "st2", tree = {
+    type = "col", width = 300, padding = 10, align = "stretch", gap = 0,
+    children = { { type = "bar", value = 1, max = 1, width = 120, height = 12 } },
+} })
+local bar120 = false
+for _, w in ipairs(created) do
+    local sz = rawget(w, "size")
+    if w.kind == "Image" and type(sz) == "table" and sz[1] == 120 and sz[2] == 12 then bar120 = true end
+end
+check("align=stretch leaves a child with an explicit width alone (120)", bar120)
+
 return C.report()

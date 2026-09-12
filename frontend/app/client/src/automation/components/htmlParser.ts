@@ -57,6 +57,21 @@ function parseStyle(s: string): UINode {
     else if (NUM_STYLE.has(k) && !raw.includes('%') && !Number.isNaN(Number(raw))) raw = Number(raw)
     out[k] = raw
   }
+  // border → the renderer's { width, color } table. Forms: `border: 2 1,0,0,1`
+  // (width then r,g,b,a), `border: 3` (width only, default colour), or the split
+  // `border-width` / `border-color` keys.
+  if (out.border != null || out['border-width'] != null || out['border-color'] != null) {
+    const b: Record<string, any> = {}
+    if (typeof out.border === 'string') {
+      const [w, ...rest] = out.border.trim().split(/\s+/)
+      if (!Number.isNaN(Number(w))) b.width = Number(w)
+      if (rest.length) { const c = parseColor(rest.join('')); if (Array.isArray(c)) b.color = c }
+    } else if (typeof out.border === 'number') b.width = out.border
+    if (out['border-width'] != null && !Number.isNaN(Number(out['border-width']))) b.width = Number(out['border-width'])
+    if (out['border-color'] != null) { const c = parseColor(String(out['border-color'])); if (Array.isArray(c)) b.color = c }
+    delete out['border-width']; delete out['border-color']
+    if (Object.keys(b).length) out.border = b; else delete out.border
+  }
   return out
 }
 

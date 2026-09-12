@@ -105,6 +105,14 @@ describe('htmlToTree', () => {
     expect(s.width).toBe('300')
   })
 
+  it('border style forms → { width, color } (the renderer\'s shape)', () => {
+    expect(htmlToTree('<div style="border:2 1,0,0,1"></div>').style.border).toEqual({ width: 2, color: [1, 0, 0, 1] })
+    expect(htmlToTree('<div style="border:3"></div>').style.border).toEqual({ width: 3 })
+    expect(htmlToTree('<div style="border-width:2; border-color:0,1,0,1"></div>').style.border).toEqual({ width: 2, color: [0, 1, 0, 1] })
+    // normalizes to the flat prop the Lua AddBox reads
+    expect(normalizeElement(htmlToTree('<div style="border:2 1,0,0,1"></div>')).border).toEqual({ width: 2, color: [1, 0, 0, 1] })
+  })
+
   it('throws on empty input', () => {
     expect(() => htmlToTree('')).toThrow()
   })
