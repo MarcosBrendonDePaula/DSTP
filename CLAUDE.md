@@ -119,9 +119,10 @@ cd frontend && bun run db:studio    # Open Drizzle Studio
 # Lua syntax check
 bun -e "require('luaparse').parse(require('fs').readFileSync('DST_MOD/scripts/dstp/client.lua','utf8'),{luaVersion:'5.1'})"
 
-# Copy mod to DST (do this after any Lua change)
-cp DST_MOD/scripts/dstp/*.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/scripts/dstp/"
-cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/"
+# The game loads the mod STRAIGHT from this repo: `mods/DSTP` in the DST install
+# (D:\SteamLibrary\steamapps\common\Don't Starve Together) is a directory junction to
+# DST_MOD/. No copy step — edit DST_MOD/ and restart the world. Recreate if broken:
+#   cmd /c mklink /J "<dst>\mods\DSTP" "<repo>\DST_MOD"
 ```
 
 ## DST Modding Tools (Klei)
