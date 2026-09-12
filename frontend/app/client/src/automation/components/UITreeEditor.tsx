@@ -138,6 +138,8 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
   const setCodeDraft = (v: string) => { _codeState[nodeId] = { on: _codeState[nodeId]?.on ?? codeMode, draft: v }; setCodeDraftRaw(v) }
   const [codeErr, setCodeErr] = useState<string | null>(null)
   const codeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // HTML-mode preview zoom: 0.34 = the whole 1280×720 screen fits; larger = scrollable close-up.
+  const [previewZoom, setPreviewZoom] = useState(0.34)
 
   // Live HTML: as the author types, parse + apply (debounced 400ms). A parse error
   // just shows under the box — the last good tree stays applied, nothing is lost.
@@ -583,14 +585,26 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
               />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">Preview (tela 1280×720, escalada)</div>
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[9px] uppercase tracking-wide text-gray-500 mr-auto">Preview (tela 1280×720, escalada)</span>
+                {/* zoom: the scaled screen keeps its 1280×720 virtual space; above "fit" the
+                    box scrolls so you can look at a corner close up */}
+                {[0.34, 0.5, 0.75, 1].map(z => (
+                  <button key={z} onClick={() => setPreviewZoom(z)} title={`Zoom ${Math.round(z * 100)}%`}
+                    className={`px-1.5 py-0.5 rounded text-[9px] border ${previewZoom === z ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-gray-500 border-white/10 hover:bg-white/10'}`}>
+                    {z === 0.34 ? 'fit' : `${Math.round(z * 100)}%`}
+                  </button>
+                ))}
+              </div>
               {/* Render on a scaled 1280×720 screen so percent sizes (width_ref:screen)
                   resolve like in-game. Sizes are pre-resolved to px to match the renderer. */}
-              <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40" style={{ width: 1280 * 0.34, height: 720 * 0.34 }}>
-                <div style={{ width: 1280, height: 720, transform: 'scale(0.34)', transformOrigin: 'top left',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'radial-gradient(circle at 50% 40%, #2a2f3a 0%, #16181d 70%, #0d0e12 100%)' }}>
-                  <UIPreview tree={resolveSizes(root)} sel={[]} onSelect={() => {}} bare />
+              <div className="rounded-lg border border-white/10 bg-black/40" style={{ width: 1280 * 0.34, height: 720 * 0.34, overflow: previewZoom > 0.34 ? 'auto' : 'hidden' }}>
+                <div style={{ width: 1280 * previewZoom, height: 720 * previewZoom }}>
+                  <div style={{ width: 1280, height: 720, transform: `scale(${previewZoom})`, transformOrigin: 'top left',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'radial-gradient(circle at 50% 40%, #2a2f3a 0%, #16181d 70%, #0d0e12 100%)' }}>
+                    <UIPreview tree={resolveSizes(root)} sel={[]} onSelect={() => {}} bare />
+                  </div>
                 </div>
               </div>
             </div>
