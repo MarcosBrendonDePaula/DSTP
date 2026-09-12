@@ -69,6 +69,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - Tests: `uiBuilderDefaults.client.test.ts` (HTML ↔ tree), `catalogSerializer.test.ts` (legacy excluded)
 
 ### 10. Micro-DOM: tree manipulation as rule actions (client-side, data not code)
+- [x] `cb:` wildcard handles (2026-09-12): a tree button declared `callback="prefix:*"` exposes the handle `cb:prefix:*`, and ANY runtime click `prefix:<rest>` (buttons from `dom_append` / script HTML) starts the flow there with `{{trigger.callback_rest}}`; exact names win over the wildcard; the generic `ui_callback` trigger still catches everything. Test: `ui-callback-wildcard.test.ts`
 - [ ] rules_engine actions `dom_set { id, props }`, `dom_append { parent, html | node }`, `dom_remove { id }`, `dom_toggle { id }` → `UIWidgets.SetProps` / a new `AppendChild` / `RemoveNode` on the addressable tree (`byId`), re-laying the parent
 - [ ] `dom_append` accepts an HTML string (parsed on the BACKEND at rule-install time into a node — the client never parses HTML)
 - [ ] no client-side Lua/JS: the "script area" is the backend `script` node producing HTML for `ui_builder`; the client only interprets data (decision recorded 2026-09-12; see `dynamic-data-bindings.md` on why client Lua is out)

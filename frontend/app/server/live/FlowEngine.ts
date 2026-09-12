@@ -15,14 +15,27 @@ import { executeAIAgent } from './ai/executeAIAgent'
 import { getNodeEntry } from './nodes/registry'
 import type { NodeRunContext } from './nodes/types'
 
-// Does a ui_builder tree declare this callback anywhere? (used to route ui_callback to the
-// node's `cb:<callback>` output handle). Walks children + tab children.
-function uiTreeHasCallback(tree: any, callback: string): boolean {
-  if (!tree || typeof tree !== 'object') return false
-  if (String(tree.callback ?? '') === callback) return true
-  if (Array.isArray(tree.children) && tree.children.some((c: any) => uiTreeHasCallback(c, callback))) return true
-  if (Array.isArray(tree.tabs) && tree.tabs.some((t: any) => uiTreeHasCallback(t?.child, callback))) return true
-  return false
+// Which callback declared in a ui_builder tree does this fired callback belong to?
+// (used to route ui_callback to the node's `cb:<declared>` output handle). A declared
+// name is exact, OR a wildcard `prefix:*` that catches every `prefix:<rest>` — the way
+// to wire buttons that only exist at runtime (dom_append / script-generated HTML).
+// Returns the declared name (the handle suffix) + the wildcard rest, or null.
+// Walks children + tab children; an exact match wins over a wildcard.
+function uiTreeMatchCallback(tree: any, callback: string): { declared: string; rest?: string } | null {
+  let wild: { declared: string; rest: string } | null = null
+  const walk = (t: any): boolean => {
+    if (!t || typeof t !== 'object') return false
+    const d = t.callback == null ? '' : String(t.callback)
+    if (d === callback) return true
+    if (!wild && d.endsWith(':*') && callback.startsWith(d.slice(0, -1)) && callback.length > d.length - 1) {
+      wild = { declared: d, rest: callback.slice(d.length - 1) }
+    }
+    if (Array.isArray(t.children) && t.children.some(walk)) return true
+    if (Array.isArray(t.tabs) && t.tabs.some((x: any) => walk(x?.child))) return true
+    return false
+  }
+  if (walk(tree)) return { declared: callback }
+  return wild
 }
 
 // ─── Host interface ──────────────────────────────────
@@ -230,17 +243,19 @@ export class FlowEngine {
       if (event.type === 'ui_callback') {
         const cb = String(event.data?.callback ?? '')
         if (cb) {
-          const startHandle = `cb:${cb}`
           for (const node of flow.nodes as FlowNode[]) {
             if (node.type !== 'ui_builder') continue
-            if (!uiTreeHasCallback((node.data as any)?.tree, cb)) continue
+            const m = uiTreeMatchCallback((node.data as any)?.tree, cb)
+            if (!m) continue
+            const startHandle = `cb:${m.declared}`
             // ONLY act as an entry point when the matching `cb:<callback>` handle is actually
             // WIRED to something. Otherwise a flow that handles ui_callback via a manual
             // trigger (e.g. the shop) would fire twice. No wire → not an entry here.
             const wired = (flow.edges as FlowEdge[]).some(e => e.source === node.id && e.sourceHandle === startHandle)
             if (!wired) continue
             const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
-            const ev = { ...event, _startHandle: startHandle }
+            // a wildcard handle also exposes what came after the prefix ({{trigger.callback_rest}})
+            const ev = { ...event, _startHandle: startHandle, data: m.rest != null ? { ...event.data, callback_rest: m.rest } : event.data }
             if (analysis.isSimple) this.executeFlow(flow, node, ev, server_id)
             else this.executeStatefulBranch(flow, node, ev, server_id, analysis)
           }
