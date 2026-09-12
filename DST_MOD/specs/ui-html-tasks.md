@@ -30,10 +30,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [x] TS mirror `layoutLines` + 7 fixtures; parser maps `flex-wrap`/`align-content`/`row-gap`; preview `flexWrap`
 - Tests: fixtures (both sides), harness (3×100 in a 250 row → 2 lines, positions), parser mapping; mutation-checked (never-break)
 
-### 3. Text: `text-align`, `font`, `line-height`, wrap-by-width on any text
-- [ ] `text` node: `align_text` (left/center/right), `font` enum (body/title/ui/outline/talking/small), `line_height`, `wrap:true` with `width` → `SetRegionSize` + `EnableWordWrap`
-- [ ] parser: `text-align`, `font`, `line-height` style keys → props
-- Tests: harness (Text gets SetHAlign/SetRegionSize/EnableWordWrap), parser mapping
+### 3. Text: `text-align`, `font`, wrap-by-width — DONE 2026-09-12
+- [x] `text` node: `halign`/`valign` accept CSS words (left/center/right, top/middle/bottom) or the DST constant names; `font` accepts friendly names (title/body/ui/outline/chat/talking/small/default) or the raw globals; a `width` already gives a region + word wrap
+- [x] parser: `text-align` → `halign`, `vertical-align` → `valign`, `font` → `font`, `line-height` → `line_height`
+- [-] `line-height`: parsed and carried, but the DST `Text` widget has no line-height API — ignored by the renderer (documented in `ui-css-support.md`)
+- [ ] preview: `textAlign` for `halign` (the preview still centres text) — small follow-up
+- Tests: harness (SetHAlign/SetVAlign from words, region + word wrap from width, legacy constant), parser mapping
 
 ### 4. Real grid: `grid-template-columns` with `fr`, per-axis gap, `span`
 - [ ] `layout_math`: track sizing for `fr`/px/`%` columns, `column-gap`/`row-gap`, `grid-column: span N` (rts-dom `grid.rs`, `grid_linhas.rs`)

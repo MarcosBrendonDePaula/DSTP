@@ -56,9 +56,10 @@ texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`
 | `transform: rotate/translate/3d` | ❌ | no widget rotate; translate = position only |
 | `gradient` | ❌ | no gradient fill; could fake with a gradient texture asset only |
 | `transition` / `animation` | ❌ | no tween in the declarative tree (the mod CAN MoveTo/scale in code, but not as a style prop) |
-| `font-family` (web fonts) | 🟡 | only DST's built-in fonts (BODYTEXTFONT, TITLEFONT, …) via a `font` enum |
+| `font-family` (web fonts) | 🟡 | only DST's built-in fonts via `font: title|body|ui|outline|chat|talking|small` (or the raw TITLEFONT… names) |
 | `font-size` | ✅ | Text size |
-| `text-align` | ✅ | SetHAlign/SetVAlign |
+| `text-align` / `vertical-align` | ✅ | `halign`/`valign` = left/center/right, top/middle/bottom (SetHAlign/SetVAlign); needs a `width` to have a region to align in |
+| `line-height` | ❌ | parsed (`line_height`) but the DST Text widget has no line-height API — ignored |
 | `overflow` / scroll | ❌ | no clip/scroll container in this set |
 | `z-index` | 🟡 | child order + MoveToFront; no arbitrary stacking context |
 | `cursor`, `hover`, `:focus` (CSS) | 🟡 | hover/focus exist as ENGINE behavior (clickable/focus), not as style selectors |

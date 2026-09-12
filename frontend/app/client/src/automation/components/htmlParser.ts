@@ -57,6 +57,11 @@ function parseStyle(s: string): UINode {
     else if (NUM_STYLE.has(k) && !raw.includes('%') && !Number.isNaN(Number(raw))) raw = Number(raw)
     out[k] = raw
   }
+  // text: text-align → halign, vertical-align → valign (left/center/right, top/middle/
+  // bottom — the renderer maps them to DST anchors), line-height → line_height.
+  if (out['text-align'] != null) { out.halign = String(out['text-align']).trim(); delete out['text-align'] }
+  if (out['vertical-align'] != null) { out.valign = String(out['vertical-align']).trim(); delete out['vertical-align'] }
+  if (out['line-height'] != null) { const n = Number(out['line-height']); if (!Number.isNaN(n)) out.line_height = n; delete out['line-height'] }
   // CSS spellings → our props: flex-wrap → wrap (boolean), align-content, row-gap.
   if (out['flex-wrap'] != null) { out.wrap = String(out['flex-wrap']).trim() === 'wrap'; delete out['flex-wrap'] }
   if (out['align-content'] != null) { out.align_content = String(out['align-content']).trim(); delete out['align-content'] }

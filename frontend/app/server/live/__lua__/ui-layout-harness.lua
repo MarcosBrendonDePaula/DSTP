@@ -19,6 +19,10 @@ local function mkWidget(kind, ctorArgs)
     setmetatable(w, { __index = function(_, key)
         if key == "AddChild" then return function(self, c) self.children[#self.children+1] = c; c.parent = self; return c end end
         if key == "SetSize" then return function(self, a, b) self.size = { a, b }; return self end end
+        if key == "SetHAlign" then return function(self, a) self.halign = a; return self end end
+        if key == "SetVAlign" then return function(self, a) self.valign = a; return self end end
+        if key == "SetRegionSize" then return function(self, a, b) self.region = { a, b }; return self end end
+        if key == "EnableWordWrap" then return function(self, v) self.wrap = v; return self end end
         if key == "ForceImageSize" then return function(self, a, b) self.size = { a, b }; return self end end
         if key == "SetPosition" then return function(self, x, y) self.pos = { x, y }; return self end end
         if key == "MoveToFront" then return function(self) MOVE_ORDER[#MOVE_ORDER+1] = self; self.moved = true; return self end end
@@ -44,7 +48,7 @@ local mock_G = KIT.make_G({
     ThePlayer = { HUD = { controls = hudRoot } },
     NEWFONT_OUTLINE = "f", NEWFONT = "f", CHATFONT = "f", UIFONT = "f", TITLEFONT = "f",
     BODYTEXTFONT = "f", NEWFONT_SMALL = "f", TALKINGFONT = "f",
-    ANCHOR_MIDDLE = 0, SCALEMODE_PROPORTIONAL = 0, ANCHOR_LEFT = 1, ANCHOR_TOP = 2,
+    ANCHOR_MIDDLE = 0, SCALEMODE_PROPORTIONAL = 0, ANCHOR_LEFT = 1, ANCHOR_TOP = 2, ANCHOR_RIGHT = 3, ANCHOR_BOTTOM = 4,
     RESOLUTION_X = 1280, RESOLUTION_Y = 720,
     pcall = pcall,
     print = function(...)
@@ -276,5 +280,24 @@ local w1, w3 = tpos("W1"), tpos("W3")
 local function f2(p) return p and string.format("(%.1f,%.1f)", p[1], p[2]) or "nil" end
 check("wrap: W1 on the first line at (-75,15) " .. f2(w1), w1 and math.abs(w1[1] + 75) < 0.5 and math.abs(w1[2] - 15) < 0.5)
 check("wrap: W3 wrapped to the second line at (-75,-15) " .. f2(w3), w3 and math.abs(w3[1] + 75) < 0.5 and math.abs(w3[2] + 15) < 0.5)
+
+-- ── task 3: text — CSS words for alignment (left/center/right, top/middle/bottom),
+--            wrap inside a width, font by friendly name ──
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "txt", tree = {
+    type = "col", children = {
+        { type = "text", text = "T1", width = 200, halign = "left", valign = "top" },
+        { type = "text", text = "T2", halign = "ANCHOR_RIGHT" },   -- legacy DST constant name still works
+    },
+} })
+local t1, t2
+for _, w in ipairs(created) do
+    if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == "T1" then t1 = w end
+    if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == "T2" then t2 = w end
+end
+check("text halign='left' → SetHAlign(ANCHOR_LEFT=1)", t1 and rawget(t1, "halign") == 1)
+check("text valign='top' → SetVAlign(ANCHOR_TOP=2)", t1 and rawget(t1, "valign") == 2)
+check("text with a width gets a region + word wrap", t1 and rawget(t1, "region") and rawget(t1, "region")[1] == 200 and rawget(t1, "wrap") == true)
+check("legacy 'ANCHOR_RIGHT' still resolves", t2 and rawget(t2, "halign") == mock_G.ANCHOR_RIGHT)
 
 return C.report()

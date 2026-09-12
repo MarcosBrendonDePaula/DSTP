@@ -123,6 +123,15 @@ describe('htmlToTree', () => {
     expect(htmlToTree('<div style="flex-wrap:nowrap"></div>').style.wrap).toBe(false)
   })
 
+  it('text-align / font / line-height map to halign / font / line_height on a text', () => {
+    const t = htmlToTree('<text style="text-align:right; font:title; line-height:1.4; width:200">Titulo</text>')
+    expect(t.style.halign).toBe('right')
+    expect(t.style.font).toBe('title')
+    expect(t.style.line_height).toBe(1.4)
+    const n = normalizeElement(t)
+    expect(n.type).toBe('text'); expect(n.halign).toBe('right'); expect(n.font).toBe('title'); expect(n.width).toBe('200')
+  })
+
   it('throws on empty input', () => {
     expect(() => htmlToTree('')).toThrow()
   })

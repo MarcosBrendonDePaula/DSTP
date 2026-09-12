@@ -46,10 +46,28 @@ local function InitFontMap()
     }
 end
 
+-- Friendly font names (HTML `font: title`) → DST font globals; the raw global names
+-- (TITLEFONT…) keep working.
+local FONT_ALIAS = {
+    title = "TITLEFONT", body = "BODYTEXTFONT", ui = "UIFONT", outline = "NEWFONT_OUTLINE",
+    chat = "CHATFONT", talking = "TALKINGFONT", small = "NEWFONT_SMALL", default = "NEWFONT", new = "NEWFONT",
+}
 local function ResolveFont(name)
     if not name then return _G.NEWFONT_OUTLINE end
     if not FONT_MAP then InitFontMap() end
-    return FONT_MAP[name] or _G.NEWFONT_OUTLINE
+    local key = FONT_ALIAS[tostring(name):lower()] or name
+    return FONT_MAP[key] or _G.NEWFONT_OUTLINE
+end
+
+-- CSS alignment words → DST anchor constants (legacy constant names pass through).
+local ANCHOR_WORDS = {
+    left = "ANCHOR_LEFT", center = "ANCHOR_MIDDLE", middle = "ANCHOR_MIDDLE", right = "ANCHOR_RIGHT",
+    top = "ANCHOR_TOP", bottom = "ANCHOR_BOTTOM",
+}
+local function ResolveAnchor(v)
+    if v == nil then return nil end
+    local key = ANCHOR_WORDS[tostring(v):lower()] or v
+    return _G[key]
 end
 
 local function ResolveColor(c)
@@ -978,9 +996,11 @@ RenderNodeImpl = function(node, parent, ctx)
             txt:SetRegionSize(fixW, fixH or 60)
             txt:EnableWordWrap(true)
         end
-        -- Optional alignment within a sized region (used by the folded panel body).
-        if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
-        if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
+        -- Optional alignment within a sized region: CSS words (left/center/right,
+        -- top/middle/bottom) or the legacy DST constant names (ANCHOR_LEFT…).
+        local ha, va = ResolveAnchor(node.halign), ResolveAnchor(node.valign)
+        if ha ~= nil and txt.SetHAlign then txt:SetHAlign(ha) end
+        if va ~= nil and txt.SetVAlign then txt:SetVAlign(va) end
         local rw, rh = txt:GetRegionSize()
         -- LAYOUT size: an explicit width/height wins; else the measured region (with a
         -- per-char/size fallback if nil/0). node.text may be a NUMBER (template), so
@@ -1331,6 +1351,7 @@ local function NormalizeElement(node)
     for _, k in ipairs({ "width", "height", "width_ref", "height_ref", "gap", "scale", "x", "y",
                          "padding", "justify", "align", "margin", "background", "border", "opacity", "z",
                          "wrap", "row_gap", "align_content",
+                         "halign", "valign", "font", "line_height",
                          "grow", "flex", "shrink", "min_width", "max_width", "min_height", "max_height",
                          "margin_top", "margin_right", "margin_bottom", "margin_left" }) do
         if st[k] ~= nil then out[k] = st[k] end

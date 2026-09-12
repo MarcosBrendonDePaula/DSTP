@@ -26,7 +26,7 @@ export function normalizeElement(node: UINode): UINode {
   const pick = (k: string) => { if (st[k] !== undefined) out[k] = st[k] }
   for (const k of ['width', 'height', 'width_ref', 'height_ref', 'gap', 'scale', 'x', 'y',
     'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'z',
-    'wrap', 'row_gap', 'align_content', ...FLEX_ITEM_KEYS]) pick(k)
+    'wrap', 'row_gap', 'align_content', 'halign', 'valign', 'font', 'line_height', ...FLEX_ITEM_KEYS]) pick(k)
   if (st.color != null) out.color = st.color
   if (node.tag === 'div') {
     const disp = st.display || 'flex'
@@ -94,7 +94,7 @@ export function resolveSizes(node: UINode, parentW = SCREEN_W, parentH = SCREEN_
 const STYLE_KEYS = new Set([
   'width', 'height', 'width_ref', 'height_ref', 'gap', 'scale', 'x', 'y',
   'padding', 'justify', 'align', 'margin', 'background', 'border', 'opacity', 'color', 'z',
-  'wrap', 'row_gap', 'align_content',
+  'wrap', 'row_gap', 'align_content', 'halign', 'valign', 'font', 'line_height',
   ...FLEX_ITEM_KEYS,
 ])
 const CONTAINER_TYPES = new Set(['col', 'row', 'panel'])
