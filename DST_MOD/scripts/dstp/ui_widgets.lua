@@ -1592,6 +1592,11 @@ local function CreateFollow(cmd)
     local Widget = _G.require("widgets/widget")
     local follow = cmd.follow or {}
     local offset_y = follow.offset_y or 60
+    -- ttl: self-destruct after N seconds (floating damage numbers, hit flashes…)
+    local ttl = tonumber(cmd.ttl)
+    if ttl and ttl > 0 and player.DoTaskInTime then
+        player:DoTaskInTime(ttl, function() UIWidgets.DestroyWidget({ id = cmd.id }) end)
+    end
 
     -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
     local function newHolder(name)

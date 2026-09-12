@@ -29,6 +29,20 @@ The mod talks to the DSTP backend through the relay
   Fields that don't fit still ride JSON. So HP, hunger, temperature or any
   `component.field` of any preset prefab can be replicated PER FRAME on a flow's
   request, with no reload.
+- **Composite entity channel + entity events.** Every preset entity now has ONE
+  `net_string` (`_dstp_ent`) that carries its flow-chosen fields (`f`, always the
+  full set) and the EVENTS of each frame (`e`, a batch with sequence `s` — netvars
+  are state, not a queue, so two hits in one frame travel together). `data_feed`
+  gained `events: hit, heal, burn, extinguish, freeze, thaw, sleep, wake, target,
+  death`; the server hooks the DST entity events only for entities inside some
+  feed's radius and unhooks after a grace period. On the client each event sets
+  `entity.dstp_last_<kind>` and fires the synthetic rule trigger `entity_event`
+  ({kind, guid, prefab, seq, amount, actor}) — so floating damage numbers, hit
+  flashes or "boss changed target" run 100% client-side from a flow
+  (`examples/flows/mob-damage-numbers.dstp.json`). Follow widgets accept `ttl`
+  (self-destruct). The float slot pool is now OPTIONAL (`SLOT_COUNT` default 0):
+  the string channel is the default dynamic path, floats are a fast path for
+  fields that change many times per second.
 - **Flow-computed entity values.** `entity_set_data { guid, name, value }` stores a
   plain value on an entity (`inst.dstp_data[name]`); feeds read it as the field
   `data.<name>` — so a bounty, a rank or a label decided by a flow shows up in the

@@ -73,6 +73,9 @@ local player = {
         return t
     end,
 }
+local timed = {}   -- player:DoTaskInTime(delay, fn) — run by hand with fireTimed()
+player.DoTaskInTime = function(self, delay, fn) timed[#timed+1] = { delay = delay, fn = fn }; return { Cancel = function() end } end
+local function fireTimed() local t = timed; timed = {}; for _, x in ipairs(t) do x.fn() end end
 local function tick(n) for _ = 1, (n or 1) do for _, t in ipairs(tasks) do if not t.cancelled then t.fn() end end end end
 
 local mock_G = KIT.make_G({
@@ -185,5 +188,15 @@ tick(1)
 local allShown = #barImgs > 0
 for _, w in ipairs(barImgs) do if not w.shown then allShown = false end end
 check("legacy follow shows the bar once dstp_hp is present", allShown)
+
+-- ── 3) ttl: a follow widget with ttl self-destructs after ttl seconds ─────────
+created = {}; tasks = {}; timed = {}
+UIWidgets.ProcessCommand({ action = "create", id = "dmg", type = "label",
+    follow = { prefab = "rock1" }, text = "-30", ttl = 1 })
+check("ttl schedules a timed destroy (1s)", #timed == 1 and timed[1].delay == 1)
+check("widget alive before the ttl fires", UIWidgets.GetActiveCount() >= 1)
+local before = UIWidgets.GetActiveCount()
+fireTimed()
+check("ttl fired → widget destroyed", UIWidgets.GetActiveCount() == before - 1)
 
 return C.report()

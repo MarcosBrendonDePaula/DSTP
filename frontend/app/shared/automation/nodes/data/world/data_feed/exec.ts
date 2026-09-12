@@ -38,6 +38,7 @@ export const handler: NodeHandler = async (rc) => {
       prefabs: list(rc.resolve(rc.param('prefabs'))),
       tags: list(rc.resolve(rc.param('tags'))),
       fields: list(rc.resolve(rc.param('fields'))) ?? ['hp', 'hp_max'],
+      events: list(rc.resolve(rc.param('events'))),
       radius: num('radius', 30),
       interval: num('interval', 0.5),
       max: num('max', 30),

@@ -25,6 +25,7 @@ export const meta: NodeMeta = {
     prefabs: 'Comma list of prefabs to include (empty = any creature-like entity by tags).',
     tags: 'Comma list of tags (any of) to include instead of/with prefabs.',
     fields: 'Comma list of fields to ship (see the list above).',
+    events: 'Comma list of entity events to ship per frame over the entity channel: hit, heal, burn, extinguish, freeze, thaw, sleep, wake, target, death. On the client each fires an `entity_event` rule trigger ({kind, guid, prefab, amount, actor}) and sets entity.dstp_last_<kind>.',
     radius: 'Scan radius around the player (default 30).',
     interval: 'Seconds between snapshots (default 0.5, min 0.2).',
     max: 'Max entities per feed (default 30, hard cap 60).',

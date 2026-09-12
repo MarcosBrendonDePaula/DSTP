@@ -25,12 +25,23 @@ local function mkPlayer(userid)
     end
     return p
 end
+local frameTasks = {}   -- inst:DoTaskInTime(0, fn) = "end of frame" work; endFrame() runs it
+local function endFrame() local t = frameTasks; frameTasks = {}; for _, fn in ipairs(t) do fn() end end
 local function mkEnt(netid, prefab, comps)
-    local e = { prefab = prefab, valid = true, tags = {}, components = comps or {} }
+    local e = { prefab = prefab, valid = true, tags = {}, components = comps or {}, listeners = {} }
     e.Network = { GetNetworkID = function() return netid end }
     e.Transform = { GetWorldPosition = function() return 1, 0, 1 end }
     e.IsValid = function(self) return self.valid end
     e.HasTag = function(self, t) return self.tags[t] == true end
+    -- DST entity event API (what the server half hooks for event feeds)
+    e.ListenForEvent = function(self, ev, fn) self.listeners[ev] = self.listeners[ev] or {}; table.insert(self.listeners[ev], fn) end
+    e.RemoveEventCallback = function(self, ev, fn)
+        local l = self.listeners[ev] or {}
+        for i = #l, 1, -1 do if l[i] == fn then table.remove(l, i) end end
+    end
+    e.PushEvent = function(self, ev, data) for _, fn in ipairs(self.listeners[ev] or {}) do fn(self, data) end end
+    e.DoTaskInTime = function(self, delay, fn) frameTasks[#frameTasks + 1] = fn; return { Cancel = function() end } end
+    e.listenerCount = function(self) local n = 0; for _, l in pairs(self.listeners) do n = n + #l end; return n end
     return e
 end
 local function tick(n) for _ = 1, (n or 1) do for _, t in ipairs(tasks) do if not t.cancelled then t.fn() end end end end
@@ -168,6 +179,79 @@ local pb = sent[#sent] and sent[#sent].packet
 check("feed ships flow-written fields (data.bounty=42, data.label=Chefe) next to component fields",
     pb and pb.ents[5555] and pb.ents[5555]["data.bounty"] == 42 and pb.ents[5555]["data.label"] == "Chefe" and pb.ents[5555].hp == 1)
 registered.feed_stop({ userid = "KU_1", id = "bounty" })
+
+-- ── 10) THE COMPOSITE ENTITY CHANNEL: ONE net_string per entity (`inst._dstp_ent`),
+--        carrying its fields AND the events of one frame as a batch with a sequence.
+--        Netvars are state, not a queue, so two hits in the same frame must travel
+--        together, not overwrite each other. Replaces N float slots with one string;
+--        the float slots stay as an optional fast path for hot numeric fields ──
+local evts = {}
+Feed.Init({ GLOBAL = mock_G, core = core,
+            send = function(p, packet) sent[#sent + 1] = { player = p, packet = packet } end,
+            sendEnt = function(inst, packet) evts[#evts + 1] = { inst = inst, packet = packet } end })
+local function mkNet() local s = { v = nil }; s.set = function(self, v) self.v = v end; s.value = function(self) return self.v end; return s end
+local ev = mkEnt(5601, "spider", { health = { currenthealth = 50, maxhealth = 100 } }); ev._dstp_ent = mkNet()
+local evOther = mkEnt(5602, "evergreen", {}); evOther._dstp_ent = mkNet()
+local noChan = mkEnt(5603, "spider", { health = { currenthealth = 7, maxhealth = 9 } })   -- not in the preset: no channel
+NEAR = { ev, evOther, noChan }
+sent = {}; tasks = {}
+registered.feed_start({ userid = "KU_1", id = "ev", prefabs = { "spider" }, radius = 20, fields = { "hp" }, events = { "hit", "burn", "bogus" } })
+tick(1)
+check("event feed subscribes the matching entity (attacked + onignite listeners)",
+    ev.listeners.attacked and #ev.listeners.attacked == 1 and ev.listeners.onignite and #ev.listeners.onignite == 1)
+check("unknown event kind ('bogus') is ignored, non-matching entity untouched", ev:listenerCount() == 2 and evOther:listenerCount() == 0)
+check("entity WITHOUT a channel gets no listeners (nowhere to send)", noChan:listenerCount() == 0)
+check("fields of a channel entity leave the per-player JSON (they ride the entity channel)",
+    sent[#sent] and sent[#sent].packet.ents[5601] ~= nil and sent[#sent].packet.ents[5601].hp == nil)
+check("entity without a channel still gets its fields by per-player JSON", sent[#sent].packet.ents[5603] and sent[#sent].packet.ents[5603].hp == 7)
+
+-- two hits in the same frame → ONE packet with the fields AND both hits, in order, seq 1
+ev:PushEvent("attacked", { damage = 30, attacker = player })
+ev:PushEvent("attacked", { damage = 12, attacker = evOther })
+check("nothing on the entity channel before the frame ends", #evts == 0)
+check("exactly ONE flush task scheduled for the frame (not one per event)", #frameTasks == 1)
+endFrame()
+check("one packet per frame: fields + BOTH hits (s=1)", #evts == 1 and evts[1].inst == ev and evts[1].packet.s == 1
+    and evts[1].packet.f and evts[1].packet.f.hp == 50 and #evts[1].packet.e == 2)
+local h1, h2 = evts[1].packet.e[1], evts[1].packet.e[2]
+check("hit payload = kind, damage, attacker id (userid for players, prefab otherwise)",
+    h1[1] == "hit" and h1[2] == 30 and h1[3] == "KU_1" and h2[1] == "hit" and h2[2] == 12 and h2[3] == "evergreen")
+
+-- next frame: burn only → seq 2, fields still included (a late-joining client must see them)
+ev:PushEvent("onignite", {})
+endFrame()
+check("next batch has seq 2, burn event, fields still carried", #evts == 2 and evts[2].packet.s == 2
+    and evts[2].packet.e[1][1] == "burn" and evts[2].packet.f.hp == 50)
+endFrame()
+check("a quiet frame sends nothing", #evts == 2)
+-- a field change alone → packet with no events
+ev.components.health.currenthealth = 44
+tick(1); endFrame()
+check("field change → packet with f.hp=44 and no e", #evts == 3 and evts[3].packet.f.hp == 44 and evts[3].packet.e == nil)
+tick(1); endFrame()
+check("unchanged fields → nothing", #evts == 3)
+
+-- entity leaves every feed → listeners removed (after the grace window)
+NEAR = { evOther, noChan }
+KIT.now = (KIT.now or 0) + 10
+tick(1)
+check("entity out of range → unsubscribed (no listeners left)", ev:listenerCount() == 0)
+ev:PushEvent("attacked", { damage = 5 }); endFrame()
+check("no packet after unsubscribe", #evts == 3)
+registered.feed_stop({ userid = "KU_1", id = "ev" })
+
+-- CLIENT: OnEntity → dstp_<field>, dstp_last_* + the entity_event hook; duplicates by seq ignored
+local hooks = {}
+Feed.on_entity_event = function(inst, kind, args) hooks[#hooks + 1] = { inst = inst, kind = kind, args = args } end
+local cEv = mkEnt(5601, "spider")
+Feed.OnEntity(cEv, { s = 1, f = { hp = 50 }, e = { { "hit", 30, "KU_1" }, { "burn" } } })
+check("client applies fields (dstp_hp=50)", cEv.dstp_hp == 50)
+check("client exposes last event + per-kind payload (dstp_last_event=burn, dstp_last_hit=30)", cEv.dstp_last_event == "burn" and cEv.dstp_last_hit == 30)
+check("client hook fired once per event, in order", #hooks == 2 and hooks[1].kind == "hit" and hooks[1].args[1] == 30 and hooks[2].kind == "burn")
+Feed.OnEntity(cEv, { s = 1, f = { hp = 50 }, e = { { "hit", 30, "KU_1" }, { "burn" } } })   -- replay of the same batch
+check("same seq replayed → ignored", #hooks == 2)
+Feed.OnEntity(cEv, { s = 2, f = { hp = 42 }, e = { { "heal", 8 } } })
+check("newer seq processed (hp=42, heal hook)", #hooks == 3 and cEv.dstp_last_heal == 8 and cEv.dstp_hp == 42)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- SLOT POOL — "dynamic netvars" the safe way. modmain declares N generic net_floats

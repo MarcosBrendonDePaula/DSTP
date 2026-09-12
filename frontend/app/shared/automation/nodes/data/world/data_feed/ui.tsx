@@ -53,6 +53,9 @@ export const ui = function DataFeedNode({ id, data, selected }: any) {
           <NodeField label="Campos (hp, hunger, temperature, fuel, burning, comp.campo)">
             <NodeInput value={p.fields ?? 'hp, hp_max'} onChange={v => setParam('fields', v)} placeholder="hp, hp_max, temperature" />
           </NodeField>
+          <NodeField label="Eventos (hit, heal, burn, freeze, sleep, target, death)">
+            <NodeInput value={p.events ?? ''} onChange={v => setParam('events', v)} placeholder="hit, burn" />
+          </NodeField>
           <NodeField label="Raio">
             <NodeInput value={p.radius ?? '30'} onChange={v => setParam('radius', v)} placeholder="30" />
           </NodeField>

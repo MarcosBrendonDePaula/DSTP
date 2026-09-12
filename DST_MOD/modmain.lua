@@ -25,7 +25,7 @@ local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 -- the mod config, which DST syncs from the server to every client — so both sides
 -- declare exactly the same slots at PostInit (the positional rule). The MEANING of a
 -- slot is assigned at runtime by flows (data_feed node); only this shape is fixed.
-local SLOT_COUNT = tonumber(GetModConfigData("SLOT_COUNT")) or 10
+local SLOT_COUNT = tonumber(GetModConfigData("SLOT_COUNT")) or 0
 local SLOT_PRESET = GetModConfigData("SLOT_PRESET") or "mobs"
 local SLOT_PREFABS = GLOBAL.require("dstp/slot_prefabs").presets[SLOT_PRESET] or {}
 
@@ -34,6 +34,31 @@ local UIWidgets = nil
 local DataFeed = nil   -- client half of scripts/dstp/data_feed.lua (lazy)
 -- Client-side rules engine (loaded on client only)
 local RulesEngine = nil
+
+-- Lazy accessor for the client rules engine (shared by the UI router below and the
+-- entity-event hook), so a rule can react to a mob event before any UI arrived.
+local function GetRulesEngine()
+    if not RulesEngine then
+        RulesEngine = GLOBAL.require("dstp/rules_engine")
+        RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
+        if UIWidgets then RulesEngine.SetUIWidgets(UIWidgets) end
+    end
+    return RulesEngine
+end
+-- Client half of data_feed, lazily required; its entity-event hook feeds the rules.
+local function GetDataFeed()
+    if not DataFeed then
+        DataFeed = GLOBAL.require("dstp/data_feed")
+        DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
+        DataFeed.on_entity_event = function(inst, kind, args)
+            GetRulesEngine().HandleEvent("entity_event", {
+                kind = kind, guid = inst.GUID, prefab = inst.prefab, seq = inst._dstp_ent_seq,
+                amount = args[1], actor = args[2], args = args,
+            })
+        end
+    end
+    return DataFeed
+end
 -- Last _dstp_ui envelope seq we processed. The net_string replays its last value on
 -- reconnect/dirty re-fire; the backend stamps a monotonic seq on each batch envelope
 -- (mod-side counter), so we skip an envelope whose seq we've already applied. Dedup
@@ -154,12 +179,8 @@ AddPrefabPostInit("player_classified", function(inst)
         inst:ListenForEvent("dstp_feed_dirty", function()
             local s = inst._dstp_feed:value()
             if not s or s == "" then return end
-            if not DataFeed then
-                DataFeed = GLOBAL.require("dstp/data_feed")
-                DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
-            end
             local ok, packet = GLOBAL.pcall(GLOBAL.json.decode, s)
-            if ok and type(packet) == "table" then DataFeed.Apply(packet) end
+            if ok and type(packet) == "table" then GetDataFeed().Apply(packet) end
         end)
 
         -- Client: process UI widget commands from backend
@@ -202,12 +223,9 @@ AddPrefabPostInit("player_classified", function(inst)
                 if not (c and c.action) then return end
                 local a = tostring(c.action)
                 if a:sub(1, 6) == "rules_" or a:sub(1, 6) == "state_" then
-                    if not RulesEngine then
-                        RulesEngine = GLOBAL.require("dstp/rules_engine")
-                        RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
-                        RulesEngine.SetUIWidgets(UIWidgets)
-                    end
-                    RulesEngine.ProcessCommand(c)
+                    local re = GetRulesEngine()
+                    re.SetUIWidgets(UIWidgets)   -- UIWidgets exists by now (this is its router)
+                    re.ProcessCommand(c)
                 else
                     UIWidgets.ProcessCommand(c)
                 end
@@ -394,21 +412,29 @@ AddPrefabPostInitAny(function(inst)
     -- Slot pool: SLOT_COUNT generic net_floats, declared identically on both sides for
     -- every prefab of the preset. Server: data_feed writes them. Client: each dirty
     -- event hands (slot, value) to data_feed, which decodes it via the slot map.
-    if SLOT_COUNT > 0 and SLOT_PREFABS[inst.prefab] then
-        inst._dstp_slot = {}
-        for i = 1, SLOT_COUNT do
-            inst._dstp_slot[i] = GLOBAL.net_float(inst.GUID, "dstp.slot" .. i, "dstp_slot" .. i .. "_dirty")
-        end
+    if SLOT_PREFABS[inst.prefab] then
+        -- The composite ENTITY CHANNEL: one net_string per preset entity carrying its
+        -- flow-chosen fields + the events of each frame (data_feed.lua). This is the
+        -- default dynamic path; the float slots below are an optional fast path.
+        inst._dstp_ent = GLOBAL.net_string(inst.GUID, "dstp.ent", "dstp_ent_dirty")
         if not isServer then
+            inst:ListenForEvent("dstp_ent_dirty", function()
+                local s = inst._dstp_ent:value()
+                if s and s ~= "" then GetDataFeed().OnEntity(inst, s) end
+            end)
+        end
+        if SLOT_COUNT > 0 then
+            inst._dstp_slot = {}
             for i = 1, SLOT_COUNT do
-                local idx = i
-                inst:ListenForEvent("dstp_slot" .. idx .. "_dirty", function()
-                    if not DataFeed then
-                        DataFeed = GLOBAL.require("dstp/data_feed")
-                        DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
-                    end
-                    DataFeed.OnSlot(inst, idx, inst._dstp_slot[idx]:value())
-                end)
+                inst._dstp_slot[i] = GLOBAL.net_float(inst.GUID, "dstp.slot" .. i, "dstp_slot" .. i .. "_dirty")
+            end
+            if not isServer then
+                for i = 1, SLOT_COUNT do
+                    local idx = i
+                    inst:ListenForEvent("dstp_slot" .. idx .. "_dirty", function()
+                        GetDataFeed().OnSlot(inst, idx, inst._dstp_slot[idx]:value())
+                    end)
+                end
             end
         end
     end

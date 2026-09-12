@@ -54,7 +54,7 @@ describe('data_feed node', () => {
   it('start → feed_start with parsed lists and numbers, then the chain continues', async () => {
     const nodes = [
       trigger('t', 'player_spawn'),
-      feed('f', { operation: 'start', userid: '{{trigger.userid}}', id: 'mobs', prefabs: 'spider, hound', fields: 'hp, hp_max, burnable.burning', radius: '25', interval: '0.5', max: '20' }),
+      feed('f', { operation: 'start', userid: '{{trigger.userid}}', id: 'mobs', prefabs: 'spider, hound', fields: 'hp, hp_max, burnable.burning', events: 'hit, burn', radius: '25', interval: '0.5', max: '20' }),
       action('after', 'announce', { message: 'next' }),
     ]
     await run(nodes, [edge('t', 'f'), edge('f', 'after')], { type: 'player_spawn', data: { userid: 'KU_1' } })
@@ -62,7 +62,7 @@ describe('data_feed node', () => {
     expect(cmd).toBeDefined()
     expect(cmd!.data).toMatchObject({
       userid: 'KU_1', id: 'mobs',
-      prefabs: ['spider', 'hound'], fields: ['hp', 'hp_max', 'burnable.burning'],
+      prefabs: ['spider', 'hound'], fields: ['hp', 'hp_max', 'burnable.burning'], events: ['hit', 'burn'],
       radius: 25, interval: 0.5, max: 20,
     })
     expect(commands.some(c => c.type === 'announce' && c.data.message === 'next')).toBe(true)

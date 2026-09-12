@@ -341,6 +341,9 @@ end
 -- Internal (synthetic) events we dispatch ourselves, not via DST listeners
 local INTERNAL_EVENTS = {
     ui_button_click = true,
+    -- dispatched by the data-feed client half (data_feed.lua OnEntity → modmain hook):
+    -- { kind, guid, prefab, seq, amount, actor, args }
+    entity_event = true,
 }
 
 -------------------------------------------------

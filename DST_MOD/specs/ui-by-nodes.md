@@ -60,6 +60,12 @@ generic prop/action covers it:
   plain `component.field` of the entities around a player as `inst.dstp_<field>`,
   so `bind: text=entity.dstp_temperature` just works. No netvar, no reload. Example:
   `examples/flows/mob-lifebars-feed.dstp.json`.
+- **Entity events → client rules** — `data_feed` `events: hit, burn, …` ship each
+  frame's events over the entity's own channel; the client fires the synthetic rule
+  trigger `entity_event` ({kind, guid, prefab, seq, amount, actor}). A `rule_install`
+  with `when.event = entity_event` + `show_widget { follow: { guid: "{{event.guid}}" },
+  ttl }` gives floating damage numbers with zero backend round-trips. Example:
+  `examples/flows/mob-damage-numbers.dstp.json`.
 
 **Principle:** if a new UI needs new Lua, the renderer isn't generic enough —
 the missing capability should become a prop/action, not a special widget type.

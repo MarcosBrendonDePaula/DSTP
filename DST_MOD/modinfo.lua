@@ -63,20 +63,20 @@ configuration_options = {
     {
         name = "SLOT_COUNT",
         label = "Data slots por entidade",
-        hover = "Quantos netvars genéricos (slots) cada entidade da lista recebe. Os fluxos escolhem em tempo real o que cada slot carrega (HP, fome, temperatura, combustível...) — replicado por frame, sem reload. Custo: ~200 bytes de memória por slot por entidade. Precisa ser igual no servidor e nos clientes (o DST sincroniza esta config).",
+        hover = "Slots numéricos EXTRAS (net_float) por entidade, além do canal composto que toda entidade da lista já tem. Só vale para campos que mudam muitas vezes por segundo (4 bytes por mudança em vez da string inteira). 0 = só o canal composto (padrão). Custo: ~200 bytes de memória por slot por entidade. Precisa ser igual no servidor e nos clientes (o DST sincroniza esta config).",
         options = {
-            {description = "0 (desligado)", data = 0},
+            {description = "0 — só o canal composto (padrão)", data = 0},
             {description = "4", data = 4},
             {description = "8", data = 8},
-            {description = "10 (padrão)", data = 10},
+            {description = "10", data = 10},
             {description = "16", data = 16},
         },
-        default = 10,
+        default = 0,
     },
     {
         name = "SLOT_PRESET",
-        label = "Entidades com data slots",
-        hover = "Quais prefabs recebem os slots (lista em scripts/dstp/slot_prefabs.lua). 'Mobs' = criaturas e chefes. 'Mobs + estruturas' inclui fogueiras, baús, máquinas, plantas e paredes.",
+        label = "Entidades com canal de dados",
+        hover = "Quais prefabs recebem o canal de dados por entidade (campos + eventos escolhidos pelos fluxos, replicados por frame) e os slots extras. Lista em scripts/dstp/slot_prefabs.lua. 'Mobs' = criaturas e chefes. 'Mobs + estruturas' inclui fogueiras, baús, máquinas, plantas e paredes.",
         options = {
             {description = "Desligado", data = "off"},
             {description = "Mobs (padrão)", data = "mobs"},
