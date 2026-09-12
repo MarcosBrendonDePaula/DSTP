@@ -13,6 +13,7 @@ import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 import { installVaultAccessors, maskSecrets } from './vault-context'
 import { executeAIAgent } from './ai/executeAIAgent'
 import { getNodeEntry } from './nodes/registry'
+import { resolveRuleHtml } from './ui/htmlToNode'
 import type { NodeRunContext } from './nodes/types'
 
 // Which callback declared in a ui_builder tree does this fired callback belong to?
@@ -1429,9 +1430,17 @@ export class FlowEngine {
           try { rules = JSON.parse(rules) } catch { return }
         }
         if (!Array.isArray(rules)) rules = [rules]
-        this.host.pushCommand(serverId, userid ? 'install_rules' : 'install_rules_all', {
-          userid, rules, seq: Date.now(),
-        })
+        const cmdType = userid ? 'install_rules' : 'install_rules_all'
+        // dom_* rule actions may carry `html` instead of `node`: parse on the backend
+        // (jsdom) so the client only ever receives tree JSON. Async only when needed.
+        const needsHtml = rules.some((r: any) => Array.isArray(r?.do) && r.do.some((a: any) => typeof a?.html === 'string' && a.node == null))
+        if (needsHtml) {
+          resolveRuleHtml(rules).then(resolved => {
+            this.host.pushCommand(serverId, cmdType, { userid, rules: resolved, seq: Date.now() })
+          }).catch(err => console.error('[FlowEngine] rule_install html parse failed:', err))
+        } else {
+          this.host.pushCommand(serverId, cmdType, { userid, rules, seq: Date.now() })
+        }
       } else if (actionType === 'rule_uninstall') {
         let ids = actionData.ids
         if (typeof ids === 'string') ids = ids.split(',').map((s: string) => s.trim())

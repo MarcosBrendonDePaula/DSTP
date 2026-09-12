@@ -254,7 +254,21 @@ local function ActionPlaySound(action, event_data)
     end
 end
 
+-- Micro-DOM actions: mutate a live ui tree by node id, templates resolved from the
+-- event. The whole action (minus `action`) is the UIWidgets command — no seq, so it
+-- never trips the command dedup.
+local function ActionDom(action, event_data)
+    if not (UIWidgets and UIWidgets.ProcessCommand) then return end
+    local resolved = ResolveValue(action, event_data)
+    resolved.seq = nil
+    UIWidgets.ProcessCommand(resolved)
+end
+
 local ACTIONS = {
+    dom_set       = ActionDom,
+    dom_append    = ActionDom,
+    dom_remove    = ActionDom,
+    dom_toggle    = ActionDom,
     show_widget   = ActionShowWidget,
     hide_widget   = ActionHideWidget,
     update_widget = ActionUpdateWidget,

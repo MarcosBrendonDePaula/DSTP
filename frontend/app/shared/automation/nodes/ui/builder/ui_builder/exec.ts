@@ -1,4 +1,5 @@
 import type { NodeHandler } from '@server/live/nodes/types'
+import { htmlToNode } from '@server/live/ui/htmlToNode'
 
 // Mirrors the legacy ui_builder branch: resolve the whole tree, push a ui_command
 // tree-create to the player, then CONTINUE the action chain (unlike ui_panel).
@@ -15,7 +16,17 @@ export const handler: NodeHandler = async (rc) => {
     rc.setContext({ closed: true })
     return { followEdges: (edge: any) => !String(edge.sourceHandle || '').startsWith('cb:') }
   }
-  const tree = rc.resolveTree(rc.node.data.tree || {})
+  // Runtime HTML (task 11): `html` param (e.g. {{myscript.html}}) wins over the static
+  // tree — parsed on the backend (jsdom) into the tree the client renders. Templates
+  // resolve before parsing. Invalid HTML falls back to the static tree + `error`.
+  let tree: any
+  let htmlError: string | undefined
+  const runtimeHtml = String(rc.resolve(rc.param('html', '')) ?? '').trim()
+  if (runtimeHtml) {
+    try { tree = await htmlToNode(runtimeHtml) }
+    catch (err: any) { htmlError = String(err?.message ?? err) }
+  }
+  if (!tree) tree = rc.resolveTree(rc.node.data.tree || {})
   if (userid) {
     // Position: percent model (pct_x/pct_y) takes priority; else the legacy anchor.
     // Only forward pct_* when both are set, so anchor-only flows are untouched.
@@ -31,7 +42,7 @@ export const handler: NodeHandler = async (rc) => {
     else { cmd.anchor = rc.param('anchor', 'center') }
     rc.pushCommand('ui_command', { userid, cmd })
   }
-  rc.setContext({ rendered: true })
+  rc.setContext(htmlError ? { rendered: true, error: htmlError } : { rendered: true })
   // Follow the normal "continua" output, but NOT the `cb:<callback>` handles — those are
   // EVENT outputs, fired only when the player actually clicks (via evaluateEvent's
   // _startHandle). Following them here would loop (repaint → cb → repaint → …).

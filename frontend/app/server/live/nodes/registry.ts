@@ -194,6 +194,8 @@ import { meta as uiProgressBarMeta } from '@shared/automation/nodes/actions/inte
 import { handler as uiProgressBarHandler } from '@shared/automation/nodes/actions/interface/ui_progress_bar/exec'
 import { meta as uiSetMeta } from '@shared/automation/nodes/actions/interface/ui_set/meta'
 import { handler as uiSetHandler } from '@shared/automation/nodes/actions/interface/ui_set/exec'
+import { meta as uiDomMeta } from '@shared/automation/nodes/actions/interface/ui_dom/meta'
+import { handler as uiDomHandler } from '@shared/automation/nodes/actions/interface/ui_dom/exec'
 import { meta as uiDestroyMeta } from '@shared/automation/nodes/actions/interface/ui_destroy/meta'
 import { handler as uiDestroyHandler } from '@shared/automation/nodes/actions/interface/ui_destroy/exec'
 import { meta as uiClearMeta } from '@shared/automation/nodes/actions/interface/ui_clear/meta'
@@ -320,6 +322,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: uiLabelMeta, handler: uiLabelHandler },
   { meta: uiProgressBarMeta, handler: uiProgressBarHandler },
   { meta: uiSetMeta, handler: uiSetHandler },
+  { meta: uiDomMeta, handler: uiDomHandler },
   { meta: uiDestroyMeta, handler: uiDestroyHandler },
   { meta: uiClearMeta, handler: uiClearHandler },
   { meta: ruleInstallMeta, handler: ruleInstallHandler },

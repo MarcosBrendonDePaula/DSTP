@@ -172,7 +172,7 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, forceCode, pctX
     if (!forceCode) return
     let start = html
     if (start == null) { try { start = treeToHtml(toElement(root)) } catch { start = '' } }
-    setCodeDraft(start)
+    setCodeDraft(start ?? '')
     setCodeErr(null)
   }, [forceCode, nodeId])
 

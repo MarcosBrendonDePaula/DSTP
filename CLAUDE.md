@@ -178,7 +178,8 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `wait` | Multi-trigger merge: waits for N branches, 3 correlation modes, timeout support |
 | `ai_agent` | LLM agent (Vercel AI SDK). Nodes wired to its `tools` handle become callable tools; agentic loop (`stopWhen: stepCountIs`). See **AI Agent Node** below. |
 | `ai_memory` | The AI's own key/value store, used as a tool by `ai_agent` (save/get/list/delete, free-form key). |
-| `ui_*` | In-game UI: `ui_builder`, `ui_panel`, `ui_menu`, `ui_rule`, and primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`) |
+| `ui_*` | In-game UI: `ui_builder` (HTML is the default authoring mode; `data.ui_html` is the node's truth, re-parsed into `data.tree`; a runtime `html` param wins over the editor), `ui_rule`, primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`, still used by `ui_track`). `ui_panel`/`ui_menu` are **legacy** (`NodeMeta.legacy`: badge, out of the AI catalog; `ui_panel` hidden). A `ui_builder` button `callback="prefix:*"` is a **wildcard handle** `cb:prefix:*` catching every runtime `prefix:<rest>` click (`{{trigger.callback_rest}}`) |
+| `ui_dom` | **Micro-DOM**: mutate a UI already open on the player's screen by node id — `append` (node written as HTML, parsed on the backend via jsdom → tree JSON; the client never parses HTML), `remove`, `set` (props JSON), `toggle`. Mod side: `dom_*` commands keep the tree DEFINITION and rebuild in place (`ui_widgets.lua` `RebuildTree`); the same `dom_*` are rule actions in `rules_engine.lua` (`ui_rule` `do`, `html` converted at install). See `DST_MOD/specs/ui-html-tasks.md` items 10–11 |
 
 All nodes support `alias` for friendly context keys (`{{myAlias.field}}` instead of `{{node_id.field}}`).
 

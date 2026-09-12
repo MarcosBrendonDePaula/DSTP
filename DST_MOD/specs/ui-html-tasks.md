@@ -70,15 +70,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 
 ### 10. Micro-DOM: tree manipulation as rule actions (client-side, data not code)
 - [x] `cb:` wildcard handles (2026-09-12): a tree button declared `callback="prefix:*"` exposes the handle `cb:prefix:*`, and ANY runtime click `prefix:<rest>` (buttons from `dom_append` / script HTML) starts the flow there with `{{trigger.callback_rest}}`; exact names win over the wildcard; the generic `ui_callback` trigger still catches everything. Test: `ui-callback-wildcard.test.ts`
-- [ ] rules_engine actions `dom_set { id, props }`, `dom_append { parent, html | node }`, `dom_remove { id }`, `dom_toggle { id }` → `UIWidgets.SetProps` / a new `AppendChild` / `RemoveNode` on the addressable tree (`byId`), re-laying the parent
-- [ ] `dom_append` accepts an HTML string (parsed on the BACKEND at rule-install time into a node — the client never parses HTML)
-- [ ] no client-side Lua/JS: the "script area" is the backend `script` node producing HTML for `ui_builder`; the client only interprets data (decision recorded 2026-09-12; see `dynamic-data-bindings.md` on why client Lua is out)
-- Tests: rules harness (dom_* reach the widget patch/append/remove), ui-layout harness (append re-lays the parent)
+- [x] `UIWidgets` micro-DOM (2026-09-12): the tree entry keeps its DEFINITION (`entry.tree` + the create `cmd`); `dom_append { id, parent?, node, index? }` / `dom_remove { id, node }` mutate the definition and REBUILD the tree in place (same id, same placement — `RebuildTree`); `dom_set { id, node, props }` / `dom_toggle { id, node, visible? }` patch the live node via `byId` AND persist into the definition (`visible=false` in a definition now starts hidden, so a rebuild keeps a toggled-off node off). Rebuild cost: text_input contents / tab selection reset — acceptable for v1
+- [x] rules_engine actions `dom_set` / `dom_append` / `dom_remove` / `dom_toggle` → `UIWidgets.ProcessCommand` with the event templates resolved, no `seq` (would trip the dedup)
+- [x] `ui_dom` node (backend): operation append (HTML → node via jsdom on the server) / remove / set (props JSON) / toggle; `dom_append` in a `ui_rule` may carry `html` — converted to `node` at `rule_install` time (`resolveRuleHtml`); the client never parses HTML
+- [x] no client-side Lua/JS: the "script area" is the backend `script` node producing HTML for `ui_builder` (item 11); the client only interprets data (decision recorded 2026-09-12; see `dynamic-data-bindings.md` on why client Lua is out)
+- Tests: `ui-dom.test.ts` (append/remove rebuild, set/toggle persist, placement survives, unknown ids no-op), `rules-dom.test.ts` (dom_* reach UIWidgets resolved), `ui_dom/exec.test.ts` (HTML → node, each op → its command)
 
 ### 11. Server-side DOM: edit the HTML in the flow before it renders (owner's ask 2026-09-12)
-- [ ] `ui_builder` accepts a runtime `html` param (`{{myscript.html}}`) — parsed on the backend with the same `htmlToTree` → `normalizeTree` (jsdom) into the tree the client renders; `data.ui_html` stays the static default
+- [x] `ui_builder` accepts a runtime `html` param (`{{myscript.html}}`, 2026-09-12) — parsed on the backend with the same `htmlToTree` → `normalizeTree` (now in `app/shared/automation/ui/`, client files re-export) via jsdom's `DOMParser` (`app/server/live/ui/htmlToNode.ts`); wins over the static tree, invalid HTML falls back to it + `error`. Test: `ui_builder/exec-html.test.ts`
 - [ ] `script` node context gets `dom(html)` → a jsdom `document` (querySelector/append/remove/setAttribute…) and `html(document)` back to a string; example flow: shop catalogue built from a list with `document.createElement`
-- [ ] jsdom becomes a runtime dependency (it is a devDependency today) — measure the bundle/startup cost; fallback: a tiny server-side parser if too heavy
+- [x] jsdom is a runtime dependency (moved from devDependencies); loaded LAZILY on first HTML parse (~12ms per parse, ~0.3s first load), so boot pays nothing. Bundle size impact still to measure on `bun run build`
 - [ ] Lua on the backend (fengari is already here) only if the owner prefers the syntax — JS is native to Bun
 - Tests: engine e2e (script → html → ui_builder → tree pushed), parser round-trip under Bun (no browser DOMParser)
 

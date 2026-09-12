@@ -726,6 +726,9 @@ local function Register(ctx, node, widget, patch)
     if type(node.bind) == "table" and ctx.bound then
         table.insert(ctx.bound, { bind = node.bind, patch = full, last = {} })
     end
+    -- `visible=false` in the DEFINITION starts hidden (what dom_toggle persists, so a
+    -- rebuild keeps a toggled-off node off).
+    if node.visible == false and widget.inst:IsValid() then widget:Hide() end
     if not (node.id and ctx.byId) then return end
     ctx.byId[node.id] = { widget = widget, patch = full }
 end
@@ -1493,7 +1496,10 @@ CreateTree = function(cmd)
         w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
         if LAYOUT_DEBUG then Log(string.format("CreateTree id=%s placed by ANCHOR %s -> screen(%d,%d)", tostring(cmd.id), tostring(cmd.anchor or "center"), math.floor(ax), math.floor(ay))) end
     end
-    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
+    -- `tree` + `cmd` are kept so the micro-DOM (dom_append/dom_remove/...) can mutate
+    -- the DEFINITION and rebuild the tree in place with the same placement.
+    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields,
+             tree = cmd.tree, cmd = cmd }
 end
 
 -- Release the keyboard grab of any editing text_input in an entry, so destroying a tree
@@ -1536,6 +1542,96 @@ local function UpdateTree(entry, cmd)
         if fresh then fresh.group = group end
         return fresh
     end
+end
+
+-------------------------------------------------
+-- MICRO-DOM — mutate a live tree by node id (data, not code)
+-------------------------------------------------
+-- The tree DEFINITION lives next to the widgets (entry.tree). dom_append / dom_remove
+-- edit the definition and rebuild the whole tree in place (same id, same placement —
+-- simple and always correct; a tree is small). dom_set / dom_toggle patch the live
+-- node through `byId` AND persist into the definition, so a later rebuild keeps them.
+-- Nodes arrive as tree JSON (the backend parses HTML) — the client never parses HTML.
+
+-- Find a node definition by id: returns def, parent_list, index (walks children + tabs).
+local function FindDef(def, id, parent_list, index)
+    if type(def) ~= "table" then return nil end
+    if def.id == id then return def, parent_list, index end
+    if type(def.children) == "table" then
+        for i, c in ipairs(def.children) do
+            local f, pl, ix = FindDef(c, id, def.children, i)
+            if f then return f, pl, ix end
+        end
+    end
+    if type(def.tabs) == "table" then
+        for _, t in ipairs(def.tabs) do
+            local f, pl, ix = FindDef(t and t.child, id, nil, nil)
+            if f then return f, pl, ix end
+        end
+    end
+    return nil
+end
+
+local function RebuildTree(id)
+    local entry = active_widgets[id]
+    if not (entry and entry.type == "tree" and entry.cmd) then return end
+    ReleaseTextFields(entry)
+    if entry.widget and entry.widget.inst:IsValid() then entry.widget:Kill() end
+    entry.cmd.tree = entry.tree
+    local fresh = CreateTree(entry.cmd)
+    if fresh then
+        fresh.group = entry.group
+        active_widgets[id] = fresh
+    else
+        active_widgets[id] = nil
+    end
+end
+
+--- dom_append: cmd = { id = <tree id>, parent = <node id | nil = root>, node = {def}, index = n? }
+function UIWidgets.DomAppend(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree and type(cmd.node) == "table") then return end
+    local parent = cmd.parent and FindDef(entry.tree, cmd.parent) or entry.tree
+    if not parent then return end
+    parent.children = parent.children or {}
+    local n = #parent.children
+    local at = tonumber(cmd.index)
+    if at and at >= 1 and at <= n then table.insert(parent.children, at, cmd.node)
+    else table.insert(parent.children, cmd.node) end
+    RebuildTree(cmd.id)
+end
+
+--- dom_remove: cmd = { id = <tree id>, node = <node id> }
+function UIWidgets.DomRemove(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree) then return end
+    local def, list, ix = FindDef(entry.tree, cmd.node)
+    if not (def and list and ix) then return end   -- root / tab child: not removable
+    table.remove(list, ix)
+    RebuildTree(cmd.id)
+end
+
+--- dom_set: like ui_set (live patch) but ALSO persisted into the definition.
+--- cmd = { id = <tree id>, node = <node id>, props = {...} }
+function UIWidgets.DomSet(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree and type(cmd.props) == "table") then return end
+    local def = FindDef(entry.tree, cmd.node)
+    if def then for k, v in pairs(cmd.props) do def[k] = v end end
+    UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
+end
+
+--- dom_toggle: flip a node's visibility (persisted). cmd = { id, node, visible = bool? }
+function UIWidgets.DomToggle(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree) then return end
+    local def = FindDef(entry.tree, cmd.node)
+    if not def then return end
+    local vis
+    if cmd.visible ~= nil then vis = cmd.visible and true or false
+    else vis = (def.visible == false) end
+    def.visible = vis
+    UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = { visible = vis } })
 end
 
 -------------------------------------------------
@@ -1984,6 +2080,14 @@ function UIWidgets.ProcessCommand(cmd)
     elseif cmd.action == "set" or cmd.action == "ui_set" then
         -- Generic in-place prop patch on any addressable node.
         UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
+    elseif cmd.action == "dom_append" then
+        UIWidgets.DomAppend(cmd)
+    elseif cmd.action == "dom_remove" then
+        UIWidgets.DomRemove(cmd)
+    elseif cmd.action == "dom_set" then
+        UIWidgets.DomSet(cmd)
+    elseif cmd.action == "dom_toggle" then
+        UIWidgets.DomToggle(cmd)
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
     -- NOTE: the "batch" envelope is no longer fanned out HERE. The client router in
