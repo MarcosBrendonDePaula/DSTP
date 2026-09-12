@@ -19,7 +19,7 @@ texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`
 | CSS | Status | Notes |
 |-----|--------|-------|
 | `display: flex` | ✅ | col/row via LayoutChildren |
-| `display: grid` | ✅ | grid/grid_template (weights) |
+| `display: grid` | ✅ | `grid-template-columns` with px / `fr` / `%`, `column-gap`/`row-gap`, `grid-column: span N`, `justify-items`/`align-items` (`LayoutGrid`); the legacy uniform `cols` / `grid_rows` weights still work |
 | `display: block` | ✅ | single column |
 | `position: absolute` + `x/y` | ✅ | canvas mode |
 | `flex-direction` | ✅ | row/column |

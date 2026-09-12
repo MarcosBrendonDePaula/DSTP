@@ -317,4 +317,16 @@ check("display:absolute draws NO panel close button", closeBtns == 0)
 check("display:absolute draws its style.background (square.tex)", sq >= 1)
 check("display:absolute child at style.x/y → (-50,60) " .. f2(ab), ab and math.abs(ab[1] + 50) < 0.5 and math.abs(ab[2] - 60) < 0.5)
 
+-- ── task 4: CSS grid — grid_columns {"1fr","1fr"} in a 200-wide col, gaps 10/10,
+--            three 100x20 texts → cols 95/95, rows of 20: G1 (-50,15) G2 (55,15) G3 (-50,-15) ──
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "grid", tree = {
+    type = "col", mode = "grid", width = 200, grid_columns = { "1fr", "1fr" }, column_gap = 10, row_gap = 10,
+    children = { { type = "text", text = "G1" }, { type = "text", text = "G2" }, { type = "text", text = "G3" } },
+} })
+local g1, g2, g3 = tpos("G1"), tpos("G2"), tpos("G3")
+check("grid: G1 at (-50,15) " .. f2(g1), g1 and math.abs(g1[1] + 50) < 0.5 and math.abs(g1[2] - 15) < 0.5)
+check("grid: G2 in the second column at (55,15) " .. f2(g2), g2 and math.abs(g2[1] - 55) < 0.5 and math.abs(g2[2] - 15) < 0.5)
+check("grid: G3 wraps to the second row at (-50,-15) " .. f2(g3), g3 and math.abs(g3[1] + 50) < 0.5 and math.abs(g3[2] + 15) < 0.5)
+
 return C.report()

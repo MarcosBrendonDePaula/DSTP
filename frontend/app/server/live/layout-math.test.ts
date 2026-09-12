@@ -62,6 +62,13 @@ describe('layoutMath.ts (panel side) matches the shared fixtures', () => {
   it('toDst', () => {
     for (const f of fixtures.to_dst) expect(LM.toDst(f.x, f.y, f.w, f.h, f.W, f.H)).toEqual([f.dx, f.dy])
   })
+  it('layoutGrid (fr/px/% columns, span, justify/align items, auto columns)', () => {
+    for (const f of (fixtures as any).layout_grid) {
+      const r = LM.layoutGrid(f.items as any, f.opts as any)
+      const got = r.items.map(p => ({ main: p.main, cross: p.cross, size: p.size }))
+      expect({ name: f.name, pos: got, used: r.used, cols: r.cols }).toEqual({ name: f.name, pos: f.pos, used: f.used, cols: f.cols })
+    }
+  })
   it('layoutLines (wrap + align_content)', () => {
     for (const f of (fixtures as any).layout_lines) {
       const r = LM.layoutLines(f.items as any, f.opts as any)
@@ -114,6 +121,18 @@ describe('layout_math.lua (game side) matches the SAME fixtures under fengari', 
       for i, f in ipairs(F.to_dst) do
         local dx, dy = LM.ToDst(f.x, f.y, f.w, f.h, f.W, f.H)
         check("todst#" .. i, close(dx, f.dx) and close(dy, f.dy))
+      end
+      for i, f in ipairs(F.layout_grid or {}) do
+        local r = LM.LayoutGrid(f.items, f.opts)
+        local ok = #r.items == #f.pos and close(r.used.main, f.used.main) and close(r.used.cross, f.used.cross) and #r.cols == #f.cols
+        for j = 1, #f.cols do if not close(r.cols[j], f.cols[j]) then ok = false end end
+        local got = {}
+        for j, p in ipairs(f.pos) do
+          local g = r.items[j] or {}
+          got[#got+1] = string.format("(%s,%s,%s)", tostring(g.main), tostring(g.cross), tostring(g.size))
+          if not (g and close(g.main, p.main) and close(g.cross, p.cross) and close(g.size, p.size)) then ok = false end
+        end
+        check("grid#" .. i .. " " .. f.name .. " got " .. table.concat(got, " ") .. " used=" .. tostring(r.used.main) .. "x" .. tostring(r.used.cross) .. " cols=" .. table.concat(r.cols or {}, ","), ok)
       end
       for i, f in ipairs(F.layout_lines or {}) do
         local r = LM.LayoutLines(f.items, f.opts)

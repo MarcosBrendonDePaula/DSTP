@@ -351,6 +351,14 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         flexWrap: (node.wrap === true || node.wrap === 'true' || node.wrap === 'wrap') ? 'wrap' : undefined,
         rowGap: node.row_gap != null ? Number(node.row_gap) : undefined,
         alignContent: node.align_content ? cssJustify(node.align_content) : undefined,
+        // CSS grid (grid_columns) — the same columns the Lua LayoutGrid resolves
+        ...(node.mode === 'grid' && Array.isArray(node.grid_columns) ? {
+          display: 'grid',
+          gridTemplateColumns: node.grid_columns.map((c: any) => typeof c === 'number' ? `${c}px` : String(c)).join(' '),
+          columnGap: node.column_gap != null ? Number(node.column_gap) : gap,
+          justifyItems: node.justify_items || 'start',
+          alignItems: node.align_items || node.align || 'start',
+        } : {}),
         padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
         background: cssColor(node.background),
         // border: { width, color } or a bare width (default colour), like the Lua AddBox

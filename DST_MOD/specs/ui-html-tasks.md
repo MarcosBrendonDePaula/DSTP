@@ -37,10 +37,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [ ] preview: `textAlign` for `halign` (the preview still centres text) — small follow-up
 - Tests: harness (SetHAlign/SetVAlign from words, region + word wrap from width, legacy constant), parser mapping
 
-### 4. Real grid: `grid-template-columns` with `fr`, per-axis gap, `span`
-- [ ] `layout_math`: track sizing for `fr`/px/`%` columns, `column-gap`/`row-gap`, `grid-column: span N` (rts-dom `grid.rs`, `grid_linhas.rs`)
-- [ ] `GridChildren` rewritten on it; legacy `cols` / `grid_rows` keep working
-- Tests: fixtures + harness
+### 4. Real grid: `grid-template-columns` with `fr`, per-axis gap, `span` — DONE 2026-09-12
+- [x] `layout_math` `LayoutGrid` (Lua + TS, 8 fixtures): px / `fr` / `%` columns, `column_gap`/`row_gap`, `span` (an item that doesn't fit the rest of the row starts a new one), rows sized to the tallest item or `row_height`, `justify_items`/`align_items` per cell; without a track, fr/% columns size to their widest item
+- [x] `GridChildrenCSS` in the mod when `grid_columns` is set; the legacy uniform `cols` / `grid_rows` grid keeps working; parser maps `grid-template-columns` / `column-gap` / `justify-items` / `grid-column: span N` (+ `align-items`, `justify-content`, `flex-direction` spellings); preview renders it as CSS grid
+- Tests: fixtures (both sides), harness (2×1fr in 200 → positions), parser mapping; mutation-checked (span overflow, fr unit)
 
 ### 5. `display: absolute` as a plain canvas container — DONE 2026-09-12
 - [x] `absolute` maps to `col` + `mode:canvas` (not `panel` — no frame, no X); `AddBox` now also runs on the canvas and grid branches, so `style.background`/`border` are honoured there
@@ -60,6 +60,25 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 ### 8. Scrollable list: `overflow: scroll` + `height`
 - [ ] `div` with `overflow:scroll` and a fixed height renders through DST `ScrollableList` (or a clipped viewport + wheel handler)
 - Tests: harness (children beyond the height are parented to the scroller)
+
+### 9. HTML is the default authoring mode (owner's decision 2026-09-12)
+- [ ] `ui_builder` opens in HTML mode by default; a new node seeds an HTML template (`<panel title="…">…</panel>`) stored in `data.ui_html`
+- [ ] the visual/tree editors stay reachable but secondary; the HTML source is the node's truth when present
+- [ ] `ui_panel`/`ui_menu` legacy action nodes: keep working, mark as legacy in the palette; new docs/examples use `ui_builder` + HTML
+- [ ] remove the old panel/tree-only paths once every example flow is HTML (`examples/flows/**` migration, tracked here)
+
+### 10. Micro-DOM: tree manipulation as rule actions (client-side, data not code)
+- [ ] rules_engine actions `dom_set { id, props }`, `dom_append { parent, html | node }`, `dom_remove { id }`, `dom_toggle { id }` → `UIWidgets.SetProps` / a new `AppendChild` / `RemoveNode` on the addressable tree (`byId`), re-laying the parent
+- [ ] `dom_append` accepts an HTML string (parsed on the BACKEND at rule-install time into a node — the client never parses HTML)
+- [ ] no client-side Lua/JS: the "script area" is the backend `script` node producing HTML for `ui_builder`; the client only interprets data (decision recorded 2026-09-12; see `dynamic-data-bindings.md` on why client Lua is out)
+- Tests: rules harness (dom_* reach the widget patch/append/remove), ui-layout harness (append re-lays the parent)
+
+### 11. Server-side DOM: edit the HTML in the flow before it renders (owner's ask 2026-09-12)
+- [ ] `ui_builder` accepts a runtime `html` param (`{{myscript.html}}`) — parsed on the backend with the same `htmlToTree` → `normalizeTree` (jsdom) into the tree the client renders; `data.ui_html` stays the static default
+- [ ] `script` node context gets `dom(html)` → a jsdom `document` (querySelector/append/remove/setAttribute…) and `html(document)` back to a string; example flow: shop catalogue built from a list with `document.createElement`
+- [ ] jsdom becomes a runtime dependency (it is a devDependency today) — measure the bundle/startup cost; fallback: a tiny server-side parser if too heavy
+- [ ] Lua on the backend (fengari is already here) only if the owner prefers the syntax — JS is native to Bun
+- Tests: engine e2e (script → html → ui_builder → tree pushed), parser round-trip under Bun (no browser DOMParser)
 
 ## Won't do (engine limits — see `ui-css-support.md`)
 - [-] web fonts, arbitrary `border-radius`, gradients, `rotate`, `transition`/`animation` as style, real box-shadow, generic `overflow:hidden` clipping — no primitive in the Klei widget set

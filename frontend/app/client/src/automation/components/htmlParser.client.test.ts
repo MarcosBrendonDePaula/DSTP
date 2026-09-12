@@ -159,6 +159,26 @@ describe('htmlToTree', () => {
     expect(back.width).toBe(300)
   })
 
+  it('dynamic lists from HTML: repeat/as pass through, and for="item of {{list}}" is sugar for them', () => {
+    const t = htmlToTree('<div repeat="{{cb.items}}" as="item"><button callback="buy:{{item.prefab}}">{{item.nome}}</button></div>')
+    expect(t.repeat).toBe('{{cb.items}}'); expect(t.as).toBe('item')
+    expect(t.children[0].callback).toBe('buy:{{item.prefab}}'); expect(t.children[0].text).toBe('{{item.nome}}')
+    const s = htmlToTree('<div for="it of {{cb.items}}"><text>{{it.nome}}</text></div>')
+    expect(s.repeat).toBe('{{cb.items}}'); expect(s.as).toBe('it'); expect(s.for).toBeUndefined()
+  })
+
+  it('grid CSS keys: grid-template-columns / column-gap / justify-items / grid-column span (task 4)', () => {
+    const t = htmlToTree('<div style="display:grid; grid-template-columns:1fr 2fr 100; column-gap:6; row-gap:4; justify-items:center"><text style="grid-column: span 2">a</text></div>')
+    expect(t.style.grid_columns).toEqual(['1fr', '2fr', 100])
+    expect(t.style.column_gap).toBe(6)
+    expect(t.style.row_gap).toBe(4)
+    expect(t.style.justify_items).toBe('center')
+    expect(t.children[0].style.span).toBe(2)
+    const n = normalizeElement(t)
+    expect(n.type).toBe('col'); expect(n.mode).toBe('grid'); expect(n.grid_columns).toEqual(['1fr', '2fr', 100]); expect(n.column_gap).toBe(6)
+    expect(normalizeElement(t.children[0]).span).toBe(2)
+  })
+
   it('throws on empty input', () => {
     expect(() => htmlToTree('')).toThrow()
   })

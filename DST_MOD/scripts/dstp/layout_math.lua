@@ -272,6 +272,96 @@ function M.LayoutLines(items, opts)
     return { items = out, used = { main = usedMain, cross = usedCross }, lines = n }
 end
 
+-- CSS grid, the subset a HUD needs (rts-dom grid.rs / grid_linhas.rs): columns as
+-- px / "1fr" / "25%", per-axis gaps, item `span` (an item that doesn't fit the rest of
+-- the row starts a new one), rows sized to their tallest item (or `row_height`),
+-- `justify_items` / `align_items` per cell (start/center/end/stretch). Without a
+-- `track`, fr/% columns size to their widest single-span item.
+-- Returns { items = {{main,cross,size}...}, used = {main,cross}, cols = {widths}, rows = n }.
+function M.LayoutGrid(items, opts)
+    opts = opts or {}
+    local spec = (type(opts.columns) == "table" and #opts.columns > 0) and opts.columns or { "1fr" }
+    local n = #spec
+    local cgap, rgap = opts.column_gap or 0, opts.row_gap or 0
+    -- 1) placement
+    local place, row, col = {}, 0, 0
+    for k, it in ipairs(items) do
+        local span = math.min(math.max(1, math.floor(tonumber(it.span) or 1)), n)
+        if col + span > n then row = row + 1; col = 0 end
+        place[k] = { row = row, col = col, span = span }
+        col = col + span
+        if col >= n then row = row + 1; col = 0 end
+    end
+    local nRows = (#items > 0) and (place[#items].row + 1) or 0
+    -- 2) column widths
+    local width, fr, fixedSum = {}, {}, 0
+    for i, c in ipairs(spec) do
+        width[i], fr[i] = 0, 0
+        if type(c) == "number" then
+            width[i] = c; fixedSum = fixedSum + c
+        else
+            local s = tostring(c):match("^%s*(.-)%s*$")
+            local vfr = s:match("^(%d*%.?%d+)%s*fr$")
+            local vpct = s:match("^(%d*%.?%d+)%s*%%$")
+            if vfr then fr[i] = tonumber(vfr)
+            elseif vpct then
+                if opts.track ~= nil then width[i] = opts.track * tonumber(vpct) / 100; fixedSum = fixedSum + width[i]
+                else fr[i] = -1 end
+            elseif tonumber(s) then width[i] = tonumber(s); fixedSum = fixedSum + width[i]
+            else fr[i] = 1 end
+        end
+    end
+    local sumFr = 0
+    for i = 1, n do if fr[i] > 0 then sumFr = sumFr + fr[i] end end
+    if opts.track ~= nil and sumFr > 0 then
+        local unit = math.max(opts.track - fixedSum - cgap * (n - 1), 0) / sumFr
+        for i = 1, n do if fr[i] > 0 then width[i] = fr[i] * unit end end
+    else
+        for i = 1, n do
+            if fr[i] ~= 0 then
+                local m = 0
+                for k, it in ipairs(items) do
+                    if place[k].col == i - 1 and place[k].span == 1 and it.main > m then m = it.main end
+                end
+                width[i] = m
+            end
+        end
+    end
+    -- 3) row heights
+    local rowH = {}
+    for r = 1, nRows do rowH[r] = 0 end
+    for k, it in ipairs(items) do
+        local r = place[k].row + 1
+        if it.cross > rowH[r] then rowH[r] = it.cross end
+    end
+    if opts.row_height ~= nil then for r = 1, nRows do rowH[r] = opts.row_height end end
+    -- 4) positions
+    local colX, x = {}, 0
+    for i = 1, n do colX[i] = x; x = x + width[i] + cgap end
+    local rowY, y = {}, 0
+    for r = 1, nRows do rowY[r] = y; y = y + rowH[r] + rgap end
+    local ji, ai = opts.justify_items or "start", opts.align_items or "start"
+    local out = {}
+    for k, it in ipairs(items) do
+        local p = place[k]
+        local cell = 0
+        for i = p.col + 1, p.col + p.span do cell = cell + width[i] end
+        cell = cell + cgap * (p.span - 1)
+        local size = (ji == "stretch") and cell or it.main
+        local mainOff = 0
+        if ji == "center" then mainOff = (cell - it.main) / 2 elseif ji == "end" then mainOff = cell - it.main end
+        local rh = rowH[p.row + 1]
+        local crossOff = 0
+        if ai == "center" then crossOff = (rh - it.cross) / 2 elseif ai == "end" then crossOff = rh - it.cross end
+        out[k] = { main = colX[p.col + 1] + mainOff, cross = rowY[p.row + 1] + crossOff, size = size }
+    end
+    local usedMain = cgap * math.max(n - 1, 0)
+    for i = 1, n do usedMain = usedMain + width[i] end
+    local usedCross = rgap * math.max(nRows - 1, 0)
+    for r = 1, nRows do usedCross = usedCross + rowH[r] end
+    return { items = out, used = { main = usedMain, cross = usedCross }, cols = width, rows = nRows }
+end
+
 -- CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → the DST
 -- widget CENTER (DST widgets are centered on their own origin and y grows UP).
 function M.ToDst(x, y, w, h, W, H)

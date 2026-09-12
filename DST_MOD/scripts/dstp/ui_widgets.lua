@@ -471,6 +471,41 @@ local function CanvasChildren(node, container, ctx)
     return W, H
 end
 
+-- CSS grid: `grid_columns` (px / "1fr" / "25%"), `column_gap` / `row_gap` (default
+-- `gap`), `row_height`, `justify_items` / `align_items` per cell, child `span`. The
+-- math is LayoutMath.LayoutGrid (shared fixtures with the panel); positions are
+-- converted to DST space once, like LayoutChildren.
+local function GridChildrenCSS(node, container, ctx)
+    local gap = tonumber(node.gap) or 8
+    local pad = tonumber(node.padding) or 0
+    local kids, items = {}, {}
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
+        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        if cwidget then
+            cw, ch = cw or 0, ch or 0
+            kids[#kids + 1] = { w = cwidget, width = cw, height = ch }
+            items[#items + 1] = { main = cw, cross = ch, span = tonumber(ChildProp(childdef, "span")) }
+        end
+    end
+    local fixedW = ResolveW(node, ctx)
+    local res = LayoutMath.LayoutGrid(items, {
+        columns = node.grid_columns,
+        track = fixedW and (fixedW - 2 * pad) or nil,
+        column_gap = tonumber(node.column_gap) or gap,
+        row_gap = tonumber(node.row_gap) or gap,
+        row_height = tonumber(node.row_height),
+        justify_items = node.justify_items,
+        align_items = node.align_items or node.align,
+    })
+    local W, H = res.used.main, res.used.cross
+    for i, k in ipairs(kids) do
+        local p = res.items[i]
+        local dx, dy = LayoutMath.ToDst(p.main, p.cross, k.width, k.height, W, H)
+        k.w:SetPosition(dx, dy, 0)
+    end
+    return W, H
+end
+
 -- Grid mode: lay children out in a `cols`-column grid, row by row, with `gap` between
 -- cells. Each cell is the size of the largest child (uniform grid). Children stay
 -- "blocked" (auto-placed) but the whole grid sits inside a canvas container at its x,y.
@@ -883,7 +918,11 @@ RenderNodeImpl = function(node, parent, ctx)
             AddBox(c, w, h, node)   -- background/border/opacity behind the placed children
             return c, w, h
         elseif node.mode == "grid" then
-            local w, h = GridChildren(node, c, ctx)
+            -- CSS grid (grid_columns: px / "1fr" / "25%") via LayoutMath; the legacy
+            -- uniform `cols` / `grid_rows` grid stays for trees without grid_columns.
+            local w, h
+            if type(node.grid_columns) == "table" then w, h = GridChildrenCSS(node, c, ctx)
+            else w, h = GridChildren(node, c, ctx) end
             local fw, fh = ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
             AddBox(c, fw, fh, node)
             return c, fw, fh
@@ -1357,6 +1396,7 @@ local function NormalizeElement(node)
                          "padding", "justify", "align", "margin", "background", "border", "opacity", "z",
                          "wrap", "row_gap", "align_content",
                          "halign", "valign", "font", "line_height",
+                         "grid_columns", "column_gap", "justify_items", "span", "row_height",
                          "grow", "flex", "shrink", "min_width", "max_width", "min_height", "max_height",
                          "margin_top", "margin_right", "margin_bottom", "margin_left" }) do
         if st[k] ~= nil then out[k] = st[k] end

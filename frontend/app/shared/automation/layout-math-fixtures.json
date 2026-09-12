@@ -1103,5 +1103,383 @@
       },
       "lines": 1
     }
+  ],
+  "layout_grid": [
+    {
+      "name": "two 1fr columns in a 200 track, gap 10/10: 3 items → 2 rows",
+      "items": [
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "track": 200,
+        "column_gap": 10,
+        "row_gap": 10
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 105,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 0,
+          "cross": 30,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 50
+      },
+      "cols": [
+        95,
+        95
+      ]
+    },
+    {
+      "name": "px + fr: [100, 1fr] in 300 → 100 and 200",
+      "items": [
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          100,
+          "1fr"
+        ],
+        "track": 300,
+        "column_gap": 0,
+        "row_gap": 0
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 100,
+          "cross": 0,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 20
+      },
+      "cols": [
+        100,
+        200
+      ]
+    },
+    {
+      "name": "percent columns: [25%, 75%] in 200 → 50 and 150",
+      "items": [
+        {
+          "main": 10,
+          "cross": 20
+        },
+        {
+          "main": 10,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "25%",
+          "75%"
+        ],
+        "track": 200,
+        "column_gap": 0,
+        "row_gap": 0
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 10
+        },
+        {
+          "main": 50,
+          "cross": 0,
+          "size": 10
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 20
+      },
+      "cols": [
+        50,
+        150
+      ]
+    },
+    {
+      "name": "span 2 that does not fit the rest of the row starts a new row and takes both cells",
+      "items": [
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20,
+          "span": 2
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "track": 200,
+        "column_gap": 0,
+        "row_gap": 0,
+        "justify_items": "stretch"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 0,
+          "cross": 20,
+          "size": 200
+        },
+        {
+          "main": 0,
+          "cross": 40,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 60
+      },
+      "cols": [
+        100,
+        100
+      ]
+    },
+    {
+      "name": "justify_items center inside a 95 cell",
+      "items": [
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "track": 200,
+        "column_gap": 10,
+        "row_gap": 0,
+        "justify_items": "center"
+      },
+      "pos": [
+        {
+          "main": 22.5,
+          "cross": 0,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 20
+      },
+      "cols": [
+        95,
+        95
+      ]
+    },
+    {
+      "name": "align_items end inside a 40-tall row (row = tallest item)",
+      "items": [
+        {
+          "main": 50,
+          "cross": 40
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "track": 200,
+        "column_gap": 0,
+        "row_gap": 0,
+        "align_items": "end"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 100,
+          "cross": 20,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 40
+      },
+      "cols": [
+        100,
+        100
+      ]
+    },
+    {
+      "name": "no track: fr columns size to their widest item (auto)",
+      "items": [
+        {
+          "main": 60,
+          "cross": 20
+        },
+        {
+          "main": 40,
+          "cross": 20
+        },
+        {
+          "main": 30,
+          "cross": 20
+        },
+        {
+          "main": 80,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "column_gap": 0,
+        "row_gap": 0
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 60
+        },
+        {
+          "main": 60,
+          "cross": 0,
+          "size": 40
+        },
+        {
+          "main": 0,
+          "cross": 20,
+          "size": 30
+        },
+        {
+          "main": 60,
+          "cross": 20,
+          "size": 80
+        }
+      ],
+      "used": {
+        "main": 140,
+        "cross": 40
+      },
+      "cols": [
+        60,
+        80
+      ]
+    },
+    {
+      "name": "fixed row_height overrides the measured row",
+      "items": [
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "columns": [
+          "1fr",
+          "1fr"
+        ],
+        "track": 200,
+        "column_gap": 0,
+        "row_gap": 0,
+        "row_height": 50
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 100,
+          "cross": 0,
+          "size": 50
+        },
+        {
+          "main": 0,
+          "cross": 50,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 100
+      },
+      "cols": [
+        100,
+        100
+      ]
+    }
   ]
 }

@@ -64,6 +64,20 @@ function parseStyle(s: string): UINode {
   if (out['text-align'] != null) { out.halign = String(out['text-align']).trim(); delete out['text-align'] }
   if (out['vertical-align'] != null) { out.valign = String(out['vertical-align']).trim(); delete out['vertical-align'] }
   if (out['line-height'] != null) { const n = Number(out['line-height']); if (!Number.isNaN(n)) out.line_height = n; delete out['line-height'] }
+  // grid: grid-template-columns → grid_columns (px numbers / "1fr" / "25%"), column-gap,
+  // justify-items; on an item, grid-column: span N → span.
+  if (out['grid-template-columns'] != null) {
+    out.grid_columns = String(out['grid-template-columns']).trim().split(/\s+/).filter(Boolean)
+      .map(tok => (!tok.includes('%') && !tok.endsWith('fr') && !Number.isNaN(Number(tok))) ? Number(tok) : tok.replace(/px$/, ''))
+      .map(tok => (typeof tok === 'string' && !Number.isNaN(Number(tok))) ? Number(tok) : tok)
+    delete out['grid-template-columns']
+  }
+  if (out['column-gap'] != null) { const n = Number(out['column-gap']); if (!Number.isNaN(n)) out.column_gap = n; delete out['column-gap'] }
+  if (out['justify-items'] != null) { out.justify_items = String(out['justify-items']).trim(); delete out['justify-items'] }
+  if (out['align-items'] != null) { out.align = String(out['align-items']).trim(); delete out['align-items'] }
+  if (out['justify-content'] != null) { out.justify = String(out['justify-content']).trim().replace(/^space-/, ''); delete out['justify-content'] }
+  if (out['flex-direction'] != null) { out.direction = String(out['flex-direction']).trim(); delete out['flex-direction'] }
+  if (out['grid-column'] != null) { const m = String(out['grid-column']).match(/span\s+(\d+)/); if (m) out.span = Number(m[1]); delete out['grid-column'] }
   // CSS spellings → our props: flex-wrap → wrap (boolean), align-content, row-gap.
   if (out['flex-wrap'] != null) { out.wrap = String(out['flex-wrap']).trim() === 'wrap'; delete out['flex-wrap'] }
   if (out['align-content'] != null) { out.align_content = String(out['align-content']).trim(); delete out['align-content'] }
@@ -104,6 +118,12 @@ function elementToNode(el: Element): UINode {
     if (val === 'true' || val === 'false') { node[name] = val === 'true'; continue }
     // numeric-ish bare attrs (size, width, height, value, max) stay strings unless clean numbers
     node[name] = (!val.includes('%') && !Number.isNaN(Number(val))) ? Number(val) : val
+  }
+  // `for="item of {{list}}"` is sugar for repeat="{{list}}" as="item" (dynamic lists:
+  // the first child is the per-item template, resolved on the backend).
+  if (typeof node.for === 'string') {
+    const m = node.for.match(/^\s*([\w$]+)\s+(?:of|in)\s+(.+?)\s*$/)
+    if (m) { node.as = m[1]; node.repeat = m[2]; delete node.for }
   }
   // children: element children → nodes; loose text between them → <text> children
   // (it used to be silently dropped); for text leaves, the inner text → `text` prop

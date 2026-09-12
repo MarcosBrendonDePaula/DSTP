@@ -266,6 +266,86 @@ export function layoutLines(items: LineItem[], opts: LinesOpts): LinesResult {
   return { items: out, used: { main: usedMain, cross: usedCross }, lines: n }
 }
 
+export type GridColumn = number | string   // px | "1fr" | "25%"
+export interface GridItem extends LineItem { span?: number }
+export interface GridOpts {
+  columns?: GridColumn[]     // default ["1fr"]
+  track?: number | null      // container content width; without it fr/% columns size to their widest item
+  column_gap?: number
+  row_gap?: number
+  row_height?: number | null // fixed row height (default: tallest item in the row)
+  justify_items?: 'start' | 'center' | 'end' | 'stretch' | (string & {})
+  align_items?: 'start' | 'center' | 'end' | 'stretch' | (string & {})
+}
+export interface GridResult extends LineResult { cols: number[]; rows: number }
+
+/** CSS grid, the subset a HUD needs (rts-dom `grid.rs` / `grid_linhas.rs`):
+ *  `grid-template-columns` with px / fr / %, per-axis gaps, `grid-column: span N`
+ *  (an item that doesn't fit the rest of the row starts a new one), rows auto-sized
+ *  to their tallest item (or `row_height`), `justify-items` / `align-items` per cell. */
+export function layoutGrid(items: GridItem[], opts: GridOpts): GridResult {
+  const spec = (opts.columns && opts.columns.length ? opts.columns : ['1fr'])
+  const n = spec.length
+  const cgap = opts.column_gap ?? 0, rgap = opts.row_gap ?? 0
+  // 1) placement (row-major, spans)
+  const place: { row: number; col: number; span: number }[] = []
+  let row = 0, col = 0
+  for (const it of items) {
+    const span = Math.min(Math.max(1, Math.floor(it.span ?? 1)), n)
+    if (col + span > n) { row++; col = 0 }
+    place.push({ row, col, span })
+    col += span
+    if (col >= n) { row++; col = 0 }
+  }
+  const nRows = items.length ? place[place.length - 1].row + 1 : 0
+  // 2) column widths
+  const width = new Array<number>(n).fill(0)
+  const fr = new Array<number>(n).fill(0)
+  let fixedSum = 0
+  spec.forEach((c, i) => {
+    if (typeof c === 'number') { width[i] = c; fixedSum += c; return }
+    const s = String(c).trim()
+    const mFr = s.match(/^(\d*\.?\d+)\s*fr$/); if (mFr) { fr[i] = Number(mFr[1]); return }
+    const mPct = s.match(/^(\d*\.?\d+)\s*%$/)
+    if (mPct) { if (opts.track != null) { width[i] = opts.track * Number(mPct[1]) / 100; fixedSum += width[i] } else fr[i] = -1; return }
+    const px = Number(s); if (!Number.isNaN(px)) { width[i] = px; fixedSum += px; return }
+    fr[i] = 1
+  })
+  const sumFr = fr.reduce((a, b) => a + (b > 0 ? b : 0), 0)
+  if (opts.track != null && sumFr > 0) {
+    const unit = Math.max(opts.track - fixedSum - cgap * (n - 1), 0) / sumFr
+    fr.forEach((f, i) => { if (f > 0) width[i] = f * unit })
+  } else {
+    // auto: an fr/% column takes its widest single-span item
+    fr.forEach((f, i) => {
+      if (f !== 0) width[i] = items.reduce((m, it, k) => place[k].col === i && place[k].span === 1 ? Math.max(m, it.main) : m, 0)
+    })
+  }
+  // 3) row heights
+  const rowH = new Array<number>(nRows).fill(0)
+  items.forEach((it, k) => { rowH[place[k].row] = Math.max(rowH[place[k].row], it.cross) })
+  if (opts.row_height != null) rowH.fill(opts.row_height)
+  // 4) positions
+  const colX: number[] = []; let x = 0
+  for (let i = 0; i < n; i++) { colX.push(x); x += width[i] + cgap }
+  const rowY: number[] = []; let y = 0
+  for (let r = 0; r < nRows; r++) { rowY.push(y); y += rowH[r] + rgap }
+  const ji = opts.justify_items ?? 'start', ai = opts.align_items ?? 'start'
+  const out: LinePos[] = items.map((it, k) => {
+    const p = place[k]
+    let cell = 0; for (let i = p.col; i < p.col + p.span; i++) cell += width[i]
+    cell += cgap * (p.span - 1)
+    const size = ji === 'stretch' ? cell : it.main
+    const mainOff = ji === 'center' ? (cell - it.main) / 2 : ji === 'end' ? cell - it.main : 0
+    const rh = rowH[p.row]
+    const crossOff = ai === 'center' ? (rh - it.cross) / 2 : ai === 'end' ? rh - it.cross : 0
+    return { main: colX[p.col] + mainOff, cross: rowY[p.row] + crossOff, size }
+  })
+  const usedMain = width.reduce((a, b) => a + b, 0) + cgap * Math.max(n - 1, 0)
+  const usedCross = rowH.reduce((a, b) => a + b, 0) + rgap * Math.max(nRows - 1, 0)
+  return { items: out, used: { main: usedMain, cross: usedCross }, cols: width, rows: nRows }
+}
+
 /** CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → the DST
  *  widget CENTER (DST widgets are centered on their own origin and y grows UP). */
 export function toDst(x: number, y: number, w: number, h: number, W: number, H: number): [number, number] {
