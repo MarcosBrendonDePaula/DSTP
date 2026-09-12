@@ -1508,6 +1508,15 @@ local function BuildFollowVisual(w, cmd)
         return { update = function(ent) ApplyBindings(ctx, { entity = ent }) end, ctx = ctx }
     end
 
+    -- `label` following an entity = TEXT ONLY, fixed (damage numbers, tags). The bar +
+    -- name-tracking label below is the `progress_bar` shape. (Drawing the bar for every
+    -- type put a full HP bar under each "-30" in-game, and the name overwrote the text.)
+    if cmd.type == "label" then
+        local txt = w:AddChild(Text(_G.NEWFONT_OUTLINE, tonumber(cmd.size) or 22, tostring(cmd.text or cmd.label or "")))
+        if cmd.color then local c = ResolveColor(cmd.color); txt:SetColour(c[1], c[2], c[3], c[4]) end
+        return { update = function() end }
+    end
+
     local bw = cmd.width or 80
     local bh = cmd.height or 10
     local bgc = ResolveColor(cmd.bg_color or {0.1, 0.1, 0.1, 0.8})

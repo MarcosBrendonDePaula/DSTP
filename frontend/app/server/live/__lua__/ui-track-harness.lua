@@ -193,6 +193,29 @@ local allShown = #barImgs > 0
 for _, w in ipairs(barImgs) do if not w.shown then allShown = false end end
 check("legacy follow shows the bar once dstp_hp is present", allShown)
 
+-- ── 2b) a `label` that follows an entity draws ONLY its text — no bar. (In-game the
+--        damage-number label came with a full HP bar under it: the legacy visual drew
+--        bar+label regardless of cmd.type.) `progress_bar` keeps drawing the bar.
+created = {}; tasks = {}
+UIWidgets.ProcessCommand({ action = "create", id = "lbl", type = "label",
+    follow = { prefab = "rock1" }, text = "-30" })
+tick(1)
+local sq = 0
+for _, w in ipairs(created) do if w.kind == "Image" and w.ctorArgs and w.ctorArgs[2] == "square.tex" then sq = sq + 1 end end
+check("follow label draws no bar images (#square.tex=" .. sq .. ")", sq == 0)
+local lblTxt
+for _, w in ipairs(created) do if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == "-30" then lblTxt = w end end
+local lblStr = lblTxt and rawget(lblTxt, "str")   -- mock __index returns a fn for missing keys
+check("follow label draws its text and KEEPS it (not overwritten by the entity name on tick)",
+    lblTxt ~= nil and (lblStr == nil or lblStr == "-30"))
+created = {}; tasks = {}
+UIWidgets.ProcessCommand({ action = "create", id = "pb", type = "progress_bar",
+    follow = { prefab = "rock1" }, width = 80, height = 10 })
+tick(1)
+sq = 0
+for _, w in ipairs(created) do if w.kind == "Image" and w.ctorArgs and w.ctorArgs[2] == "square.tex" then sq = sq + 1 end end
+check("follow progress_bar still draws the bar (bg+fg)", sq == 2)
+
 -- ── 3) ttl: a follow widget with ttl self-destructs after ttl seconds ─────────
 created = {}; tasks = {}; timed = {}
 UIWidgets.ProcessCommand({ action = "create", id = "dmg", type = "label",
