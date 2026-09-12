@@ -4,6 +4,7 @@ import { BaseNode, NodeField, NodeSelect, NodeInput, useNodeDataUpdater } from '
 const OPERATIONS = [
   { value: 'start', label: '📡 Iniciar feed' },
   { value: 'stop', label: '⏹ Parar feed' },
+  { value: 'set', label: '✏️ Gravar valor numa entidade (data.<nome>)' },
 ]
 
 export const ui = function DataFeedNode({ id, data, selected }: any) {
@@ -19,12 +20,28 @@ export const ui = function DataFeedNode({ id, data, selected }: any) {
       <NodeField label="Operação">
         <NodeSelect value={op} onChange={v => setParam('operation', v)} options={OPERATIONS} />
       </NodeField>
-      <NodeField label="Player">
-        <NodeInput value={p.userid ?? '{{trigger.userid}}'} onChange={v => setParam('userid', v)} placeholder="{{trigger.userid}}" />
-      </NodeField>
-      <NodeField label="ID do feed">
-        <NodeInput value={p.id ?? 'mobs'} onChange={v => setParam('id', v)} placeholder="mobs" />
-      </NodeField>
+      {op === 'set' ? (
+        <>
+          <NodeField label="GUID da entidade">
+            <NodeInput value={p.guid ?? '{{trigger.guid}}'} onChange={v => setParam('guid', v)} placeholder="{{trigger.guid}}" />
+          </NodeField>
+          <NodeField label="Nome (vira data.<nome>)">
+            <NodeInput value={p.name ?? ''} onChange={v => setParam('name', v)} placeholder="bounty" />
+          </NodeField>
+          <NodeField label="Valor (vazio = limpar)">
+            <NodeInput value={p.value ?? ''} onChange={v => setParam('value', v)} placeholder="150" />
+          </NodeField>
+        </>
+      ) : (
+        <>
+          <NodeField label="Player">
+            <NodeInput value={p.userid ?? '{{trigger.userid}}'} onChange={v => setParam('userid', v)} placeholder="{{trigger.userid}}" />
+          </NodeField>
+          <NodeField label="ID do feed">
+            <NodeInput value={p.id ?? 'mobs'} onChange={v => setParam('id', v)} placeholder="mobs" />
+          </NodeField>
+        </>
+      )}
       {op === 'start' && (
         <>
           <NodeField label="Prefabs (lista)">

@@ -142,6 +142,33 @@ check("client Apply writes booleans too", cSpider.dstp_burning == false)
 Feed.Apply({ radius = 25, ents = { ["5001"] = { hp = 7 } } })
 check("client Apply accepts string netid keys (JSON)", cSpider.dstp_hp == 7)
 
+-- ── 9) FLOW-COMPUTED values: entity_set_data writes inst.dstp_data[name]; the feed
+--       reads it as the field "data.<name>" like any component field ──
+check("entity_set_data command registered", registered.entity_set_data ~= nil)
+local bounty = mkEnt(5555, "spider", { health = { currenthealth = 1, maxhealth = 2 } })
+bounty.GUID = 777
+mock_G.Ents = { [777] = bounty }
+registered.entity_set_data({ guid = 777, name = "bounty", value = 150 })
+check("SetData stores a plain value on the entity", bounty.dstp_data and bounty.dstp_data.bounty == 150)
+check("Read('data.bounty') returns the flow-written value", Feed.Read(bounty, "data.bounty") == 150)
+registered.entity_set_data({ guid = 777, name = "label", value = "Chefe" })
+check("strings are allowed too", Feed.Read(bounty, "data.label") == "Chefe")
+registered.entity_set_data({ guid = 777, name = "junk", value = { nested = true } })
+check("tables are rejected at WRITE time (data, not structures)", bounty.dstp_data.junk == nil and Feed.Read(bounty, "data.junk") == nil)
+registered.entity_set_data({ guid = 777, name = "bounty" })          -- no value → clear
+check("no value clears the field", Feed.Read(bounty, "data.bounty") == nil)
+registered.entity_set_data({ guid = 999999, name = "x", value = 1 })  -- unknown guid → no crash
+-- the feed ships data.* fields like any other (JSON here: no slots on this entity)
+registered.entity_set_data({ guid = 777, name = "bounty", value = 42 })
+NEAR = { bounty }
+sent = {}; tasks = {}
+registered.feed_start({ userid = "KU_1", id = "bounty", prefabs = { "spider" }, radius = 20, fields = { "hp", "data.bounty", "data.label" } })
+tick(1)
+local pb = sent[#sent] and sent[#sent].packet
+check("feed ships flow-written fields (data.bounty=42, data.label=Chefe) next to component fields",
+    pb and pb.ents[5555] and pb.ents[5555]["data.bounty"] == 42 and pb.ents[5555]["data.label"] == "Chefe" and pb.ents[5555].hp == 1)
+registered.feed_stop({ userid = "KU_1", id = "bounty" })
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- SLOT POOL — "dynamic netvars" the safe way. modmain declares N generic net_floats
 -- (`inst._dstp_slot[i]`) on a preset prefab list, identical both sides at PostInit;

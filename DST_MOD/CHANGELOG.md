@@ -29,6 +29,10 @@ The mod talks to the DSTP backend through the relay
   Fields that don't fit still ride JSON. So HP, hunger, temperature or any
   `component.field` of any preset prefab can be replicated PER FRAME on a flow's
   request, with no reload.
+- **Flow-computed entity values.** `entity_set_data { guid, name, value }` stores a
+  plain value on an entity (`inst.dstp_data[name]`); feeds read it as the field
+  `data.<name>` — so a bounty, a rank or a label decided by a flow shows up in the
+  HUD next to HP. `data_feed` node operation `set`.
 - **`ui_track` mode `all`** — one HUD follower per entity in `radius` matching
   `prefabs`/`tags`, created when the entity enters range and destroyed when it
   leaves, all client-side from a single command. `require_hp` skips entities

@@ -127,8 +127,26 @@ local function plain(v)
     return nil
 end
 
--- Read ONE field of an entity: a whitelisted reader, or a plain `component.field`.
+-- Flow-computed values: a flow writes `entity_set_data { guid, name, value }` and the
+-- value lives on the entity as inst.dstp_data[name]; the feed reads it as the field
+-- "data.<name>" like any component field. Plain values only (number/string/boolean);
+-- a nil value clears the entry.
+function M.SetData(inst, name, value)
+    if type(inst) ~= "table" or name == nil then return false end
+    if value ~= nil and plain(value) == nil then return false end
+    inst.dstp_data = inst.dstp_data or {}
+    inst.dstp_data[tostring(name)] = value
+    return true
+end
+
+-- Read ONE field of an entity: "data.<name>" (flow-written), a whitelisted reader, or
+-- a plain `component.field`.
 function M.Read(inst, field)
+    local dataKey = tostring(field):match("^data%.([%w_]+)$")
+    if dataKey then
+        local d = inst.dstp_data
+        return type(d) == "table" and plain(d[dataKey]) or nil
+    end
     local comps = inst.components
     if type(comps) ~= "table" then return nil end
     local r = READERS[field]
@@ -431,6 +449,17 @@ function M.Init(env)
             local player = data and data.userid and core.FindPlayer(data.userid)
             if not player then return end
             if data.id == "*" then M.StopAll(player) else M.Stop(player, data.id) end
+        end)
+        -- entity_set_data { guid, name, value } — a flow-computed value on an entity,
+        -- shipped by feeds that ask for the field "data.<name>". Same GUID resolver
+        -- contract as get_entity (Ents[guid] + IsValid).
+        core.RegisterCommand("entity_set_data", function(data)
+            if not (data and data.name) then return end
+            local guid = tonumber(data.guid)
+            local ents = _G.Ents
+            local inst = guid and type(ents) == "table" and ents[guid] or nil
+            if not (inst and (not inst.IsValid or inst:IsValid())) then return end
+            M.SetData(inst, data.name, data.value)
         end)
     end
     return M

@@ -16,6 +16,21 @@ export const handler: NodeHandler = async (rc) => {
   const id = String(rc.resolve(rc.param('id', 'mobs')) || 'mobs')
   if (op === 'stop') {
     rc.pushCommand('feed_stop', { userid, id })
+  } else if (op === 'set') {
+    // a flow-computed value on an entity → readable by feeds as "data.<name>"
+    const guid = Number(rc.resolve(rc.param('guid')))
+    const raw = rc.resolve(rc.param('value'))
+    let value: any = raw
+    if (typeof raw === 'string') {
+      const s = raw.trim()
+      if (s === '') value = undefined
+      else if (s === 'true' || s === 'false') value = s === 'true'
+      else if (s !== '' && !Number.isNaN(Number(s))) value = Number(s)
+    }
+    rc.pushCommand('entity_set_data', { guid, name: String(rc.resolve(rc.param('name')) || ''), value })
+    rc.setContext({ executed: true, operation: op, guid, name: rc.param('name') })
+    rc.executedActions.push('entity_set_data')
+    return 'continue'
   } else {
     const num = (k: string, d: number) => { const n = Number(rc.resolve(rc.param(k))); return Number.isFinite(n) && n > 0 ? n : d }
     rc.pushCommand('feed_start', {

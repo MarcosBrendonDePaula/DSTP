@@ -68,6 +68,12 @@ describe('data_feed node', () => {
     expect(commands.some(c => c.type === 'announce' && c.data.message === 'next')).toBe(true)
   })
 
+  it('set → entity_set_data with guid/name/value (a flow-computed field the feed can ship as data.<name>)', async () => {
+    const nodes = [trigger('t', 'player_kill'), feed('f', { operation: 'set', guid: '{{trigger.guid}}', name: 'bounty', value: '150' })]
+    await run(nodes, [edge('t', 'f')], { type: 'player_kill', data: { guid: 777 } })
+    expect(commands.find(c => c.type === 'entity_set_data')?.data).toMatchObject({ guid: 777, name: 'bounty', value: 150 })
+  })
+
   it('stop → feed_stop with userid + id', async () => {
     const nodes = [trigger('t', 'player_left'), feed('f', { operation: 'stop', userid: 'u1', id: 'mobs' })]
     await run(nodes, [edge('t', 'f')], { type: 'player_left', data: {} })
