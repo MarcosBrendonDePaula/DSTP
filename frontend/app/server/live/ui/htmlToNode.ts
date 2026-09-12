@@ -20,6 +20,25 @@ async function ensureDomParser(): Promise<void> {
   await ready
 }
 
+let jsdomMod: Promise<any> | null = null
+const loadJsdom = () => (jsdomMod ??= import('jsdom'))
+
+/** `context.dom(html)` for the script node: a jsdom Document whose <body> holds the
+ *  snippet — querySelector / createElement / append / remove / setAttribute all work.
+ *  Pair with `html(document)` to get the string back for `ui_builder`'s `html` param. */
+export async function domOf(html = ''): Promise<any> {
+  const { JSDOM } = await loadJsdom()
+  return new JSDOM(`<!doctype html><html><body>${String(html)}</body></html>`).window.document
+}
+
+/** Serialize what `domOf` gave back (a Document → its body's inner HTML) or any element. */
+export function htmlOf(x: any): string {
+  if (!x) return ''
+  if (x.body) return String(x.body.innerHTML)
+  if (typeof x.outerHTML === 'string') return x.outerHTML
+  return String(x)
+}
+
 /** Parse an HTML snippet into the legacy tree the mod renders ({ type, ..., children }).
  *  Throws on empty/invalid input (callers log and skip). */
 export async function htmlToNode(html: string): Promise<Record<string, any>> {

@@ -13,7 +13,7 @@ import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 import { installVaultAccessors, maskSecrets } from './vault-context'
 import { executeAIAgent } from './ai/executeAIAgent'
 import { getNodeEntry } from './nodes/registry'
-import { resolveRuleHtml } from './ui/htmlToNode'
+import { resolveRuleHtml, domOf, htmlOf, htmlToNode } from './ui/htmlToNode'
 import type { NodeRunContext } from './nodes/types'
 
 // Which callback declared in a ui_builder tree does this fired callback belong to?
@@ -1658,6 +1658,13 @@ export class FlowEngine {
         const g = groups.find(x => x.server_id === serverId)
         return g ? g.all_players : []
       }
+
+      // context.dom(html) → a jsdom document to build/edit UI HTML server-side;
+      // context.html(doc|el) → back to a string (feed it to ui_builder's `html` param);
+      // context.htmlToNode(html) → the tree JSON the client renders (for ui_dom/rules).
+      context.dom = domOf
+      context.html = htmlOf
+      context.htmlToNode = htmlToNode
 
       const wrappedCode = `
         ${code}

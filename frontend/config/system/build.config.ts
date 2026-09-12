@@ -28,7 +28,9 @@ const buildSchema = {
   sourceMaps: config.boolean('BUILD_SOURCE_MAPS', helpers.isDevelopment()),
   clean: config.boolean('BUILD_CLEAN', true),
   mode: config.enum('BUILD_MODE', ['development', 'production'] as const, helpers.isProduction() ? 'production' : 'development'),
-  external: config.array('BUILD_EXTERNAL', []),
+  // jsdom is only loaded lazily (server-side HTML parse for ui_dom / runtime html) —
+  // keep it out of dist/index.js (it alone is ~6MB) and resolve it from node_modules.
+  external: config.array('BUILD_EXTERNAL', ['jsdom']),
   optimize: config.boolean('BUILD_OPTIMIZE', true)
 } as const
 

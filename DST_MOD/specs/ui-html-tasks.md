@@ -78,8 +78,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 
 ### 11. Server-side DOM: edit the HTML in the flow before it renders (owner's ask 2026-09-12)
 - [x] `ui_builder` accepts a runtime `html` param (`{{myscript.html}}`, 2026-09-12) — parsed on the backend with the same `htmlToTree` → `normalizeTree` (now in `app/shared/automation/ui/`, client files re-export) via jsdom's `DOMParser` (`app/server/live/ui/htmlToNode.ts`); wins over the static tree, invalid HTML falls back to it + `error`. Test: `ui_builder/exec-html.test.ts`
-- [ ] `script` node context gets `dom(html)` → a jsdom `document` (querySelector/append/remove/setAttribute…) and `html(document)` back to a string; example flow: shop catalogue built from a list with `document.createElement`
-- [x] jsdom is a runtime dependency (moved from devDependencies); loaded LAZILY on first HTML parse (~12ms per parse, ~0.3s first load), so boot pays nothing. Bundle size impact still to measure on `bun run build`
+- [x] `script` node context gets `dom(html)` → a jsdom `document` (querySelector/append/remove/setAttribute…), `html(document|element)` back to a string, and `htmlToNode(html)` → tree JSON (2026-09-12). Test: `script-dom.test.ts` (catalogue built with `createElement` → `ui_builder html="{{s.html}}"` → tree pushed with the buttons)
+- [x] jsdom is a runtime dependency (moved from devDependencies); loaded LAZILY on first HTML parse (~12ms per parse, ~0.3s first load), so boot pays nothing. Bundle: measured 2026-09-12 — inlined it made `dist/index.js` 9.2MB; now `external` by default (`config/system/build.config.ts`, `BUILD_EXTERNAL`) → 3.8MB, resolved from `node_modules` at runtime (it is a runtime dependency)
 - [ ] Lua on the backend (fengari is already here) only if the owner prefers the syntax — JS is native to Bun
 - Tests: engine e2e (script → html → ui_builder → tree pushed), parser round-trip under Bun (no browser DOMParser)
 
