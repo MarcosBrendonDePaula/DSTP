@@ -263,4 +263,18 @@ for _, w in ipairs(created) do
 end
 check("align=stretch leaves a child with an explicit width alone (120)", bar120)
 
+-- ── task 2: wrap — a 250-wide row with three 100-wide texts breaks into 2 lines ──
+-- Text stubs measure 100x20. gap 10, row_gap 10 → line 1: W1,W2; line 2: W3.
+-- Content box 250x50 centred on the origin: W1 → (-75, 15), W3 → (-75, -15).
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "wrap", tree = {
+    type = "row", width = 250, gap = 10, row_gap = 10, wrap = true, justify = "start", align = "start",
+    children = { { type = "text", text = "W1" }, { type = "text", text = "W2" }, { type = "text", text = "W3" } },
+} })
+local function tpos(name) for _, w in ipairs(created) do if w.kind == "Text" and w.ctorArgs and w.ctorArgs[3] == name then return rawget(w, "pos") end end end
+local w1, w3 = tpos("W1"), tpos("W3")
+local function f2(p) return p and string.format("(%.1f,%.1f)", p[1], p[2]) or "nil" end
+check("wrap: W1 on the first line at (-75,15) " .. f2(w1), w1 and math.abs(w1[1] + 75) < 0.5 and math.abs(w1[2] - 15) < 0.5)
+check("wrap: W3 wrapped to the second line at (-75,-15) " .. f2(w3), w3 and math.abs(w3[1] + 75) < 0.5 and math.abs(w3[2] + 15) < 0.5)
+
 return C.report()

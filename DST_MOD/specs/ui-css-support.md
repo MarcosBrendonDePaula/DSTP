@@ -32,7 +32,10 @@ texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`
 | `flex-grow` | ✅ | `grow` (or `flex`) on a child of a fixed-size container: the slot grows, the child's widget is centered in it (leaf textures are not resized) |
 | `flex-shrink` | ✅ | `shrink` — implemented in the math, but never triggers today because a fixed size is a minimum (nothing overflows) |
 | `min-width`/`max-width` (`*-height` in a column) | ✅ | `min_width`/`max_width`/`min_height`/`max_height` on the MAIN axis, clamp after grow |
-| `flex-wrap`, `align-content`, baseline | ❌ | single line only — nothing in-game needs multi-line flex |
+| `flex-wrap` / `align-content` / `row-gap` | ✅ | `wrap:true` (needs a fixed main size), `align_content` start/center/end/between/around/evenly/stretch, `row_gap` — `LayoutLines` |
+| baseline alignment | ❌ | no text metrics for baseline; `align:center` is the practical stand-in |
+| `border` | ✅ | `border: <w> <r,g,b,a>` / `border: <w>` / `border-width`+`border-color` → frame Image |
+| `align-items: stretch` | ✅ | children without a cross size fill the container's cross content box (fixed-size containers only) |
 
 **Where the math lives:** `DST_MOD/scripts/dstp/layout_math.lua` (pure, no widgets) mirrored by
 `frontend/app/shared/automation/layoutMath.ts`; both pinned to

@@ -202,6 +202,70 @@ export function layoutLine(items: LineItem[], opts: LineOpts): LineResult {
   return { items: out, used: { main: track, cross: line } }
 }
 
+export interface LinesOpts extends LineOpts {
+  wrap?: boolean            // flex-wrap: wrap — needs a track; without one nothing wraps
+  row_gap?: number          // gap between lines (cross axis)
+  align_content?: Justify | 'stretch' | (string & {})   // default: stretch when `cross` is fixed
+}
+export interface LinesResult extends LineResult { lines: number }
+
+/** Multi-line flex (flex-wrap: wrap). Items break into lines greedily by the track
+ *  (an item wider than the track gets its own line — never clipped), each line is laid
+ *  out by layoutLine, then the lines are placed on the cross axis by `align_content`
+ *  (rts-dom `flex_linhas.rs`: `justify_offsets` reused for the line block; `stretch`
+ *  splits the free cross space between the lines). Positions stay in item order. */
+export function layoutLines(items: LineItem[], opts: LinesOpts): LinesResult {
+  if (!opts.wrap || opts.track == null) {
+    const r = layoutLine(items, opts)
+    return { ...r, lines: 1 }
+  }
+  const track = opts.track
+  const gap = opts.gap ?? 0
+  const rowGap = opts.row_gap ?? 0
+  const side = (it: LineItem, v: number | undefined, auto: boolean | undefined) => auto ? 0 : (v ?? it.margin ?? 0)
+  const outer = (it: LineItem) => it.main + side(it, it.marginMainStart, it.autoMainStart) + side(it, it.marginMainEnd, it.autoMainEnd)
+
+  // 1) break into lines
+  const lines: LineItem[][] = []
+  let cur: LineItem[] = [], curW = 0
+  for (const it of items) {
+    const o = outer(it)
+    if (cur.length > 0 && curW + gap + o > track) { lines.push(cur); cur = []; curW = 0 }
+    curW += (cur.length > 0 ? gap : 0) + o
+    cur.push(it)
+  }
+  if (cur.length) lines.push(cur)
+  const n = lines.length
+
+  // 2) each line on its own (fixed track, auto cross)
+  const lineOpts: LineOpts = { track, gap, justify: opts.justify, align: opts.align }
+  let results = lines.map(li => layoutLine(li, lineOpts))
+  const lineCross = results.map(r => r.used.cross)
+  const totalCross = lineCross.reduce((a, b) => a + b, 0) + rowGap * Math.max(n - 1, 0)
+
+  // 3) place the lines on the cross axis
+  let leading = 0, between = 0, extra = 0
+  if (opts.cross != null) {
+    const free = opts.cross - totalCross
+    const ac = opts.align_content ?? 'stretch'
+    if (ac === 'stretch') extra = Math.max(free, 0) / n
+    else [leading, between] = justifyOffsets(ac, free, n)
+  }
+  const out: LinePos[] = []
+  let y = leading
+  let usedMain = track
+  for (let i = 0; i < n; i++) {
+    const lc = lineCross[i] + extra
+    // a stretched line re-lays its items so `align` applies inside the taller line
+    const r = extra > 0 ? layoutLine(lines[i], { ...lineOpts, cross: lc }) : results[i]
+    for (const p of r.items) out.push({ main: p.main, cross: y + p.cross, size: p.size })
+    usedMain = Math.max(usedMain, r.used.main)
+    y += lc + rowGap + between
+  }
+  const usedCross = opts.cross != null ? Math.max(opts.cross, totalCross) : totalCross
+  return { items: out, used: { main: usedMain, cross: usedCross }, lines: n }
+}
+
 /** CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → the DST
  *  widget CENTER (DST widgets are centered on their own origin and y grows UP). */
 export function toDst(x: number, y: number, w: number, h: number, W: number, H: number): [number, number] {

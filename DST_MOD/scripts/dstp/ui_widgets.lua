@@ -379,10 +379,13 @@ local function LayoutChildren(node, container, ctx, axis)
     local fixedMain, crossFixed
     if isCol then fixedMain, crossFixed = ResolveH(node, ctx), ResolveW(node, ctx)
     else fixedMain, crossFixed = ResolveW(node, ctx), ResolveH(node, ctx) end
-    local res = LayoutMath.LayoutLine(items, {
+    -- wrap (flex-wrap: wrap) needs a fixed main size; row_gap / align_content place the lines.
+    local wrap = (node.wrap == true) or (node.wrap == "true") or (node.wrap == "wrap")
+    local res = LayoutMath.LayoutLines(items, {
         track = fixedMain and (fixedMain - 2 * pad) or nil,
         cross = crossFixed and (crossFixed - 2 * pad) or nil,
         gap = gap, justify = justify, align = align,
+        wrap = wrap, row_gap = tonumber(node.row_gap), align_content = node.align_content,
     })
     -- The content box (W×H in CSS space) is centered on the container origin.
     local W, H
@@ -1327,6 +1330,7 @@ local function NormalizeElement(node)
     -- it (mirrors elementModel.ts — assigning nil here wiped HTML width/height/gap attrs).
     for _, k in ipairs({ "width", "height", "width_ref", "height_ref", "gap", "scale", "x", "y",
                          "padding", "justify", "align", "margin", "background", "border", "opacity", "z",
+                         "wrap", "row_gap", "align_content",
                          "grow", "flex", "shrink", "min_width", "max_width", "min_height", "max_height",
                          "margin_top", "margin_right", "margin_bottom", "margin_left" }) do
         if st[k] ~= nil then out[k] = st[k] end

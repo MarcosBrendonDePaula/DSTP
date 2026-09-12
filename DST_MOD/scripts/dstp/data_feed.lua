@@ -513,6 +513,12 @@ function M.SlotMap() return slotMapForWire() end
 -------------------------------------------------
 -- Apply (client)
 -------------------------------------------------
+-- Client-side key for a field: `hp` → inst.dstp_hp; a generic `workable.workleft` →
+-- inst.dstp_workable_workleft (a dotted key would be unreachable from a UI `bind`).
+local function fieldKey(f)
+    return "dstp_" .. (tostring(f):gsub("%.", "_"))
+end
+
 -- Client copy of the slot map (arrives inside every packet).
 local clientMap = {}
 function M.ResetClient() clientMap = {} end
@@ -536,7 +542,7 @@ function M.OnEntity(inst, packet)
     if s and inst._dstp_ent_seq and s <= inst._dstp_ent_seq then return end
     if s then inst._dstp_ent_seq = s end
     if type(packet.f) == "table" then
-        for k, v in pairs(packet.f) do inst["dstp_" .. tostring(k)] = v end
+        for k, v in pairs(packet.f) do inst[fieldKey(k)] = v end
     end
     if type(packet.e) == "table" then
         for _, e in ipairs(packet.e) do
@@ -567,7 +573,7 @@ local function applySlots(inst)
     if type(raw) ~= "table" then return end
     for i, v in pairs(raw) do
         local e = clientMap[i]
-        if e and e.name ~= "" then inst["dstp_" .. e.name] = decodeSlot(e.kind, v) end
+        if e and e.name ~= "" then inst[fieldKey(e.name)] = decodeSlot(e.kind, v) end
     end
 end
 
@@ -578,7 +584,7 @@ function M.OnSlot(inst, i, v)
     inst._dstp_slotraw = inst._dstp_slotraw or {}
     inst._dstp_slotraw[i] = v
     local e = clientMap[i]
-    if e and e.name ~= "" then inst["dstp_" .. e.name] = decodeSlot(e.kind, v) end
+    if e and e.name ~= "" then inst[fieldKey(e.name)] = decodeSlot(e.kind, v) end
 end
 
 -- packet = { radius=, slots=, ents = { [netid or "netid"] = { field = value } } }.
@@ -608,7 +614,7 @@ function M.Apply(packet)
     for key, row in pairs(packet.ents) do
         local inst = byNet[tonumber(key) or key]
         if inst and type(row) == "table" then
-            for f, v in pairs(row) do inst["dstp_" .. tostring(f)] = v end
+            for f, v in pairs(row) do inst[fieldKey(f)] = v end
             applied = applied + 1
         end
     end

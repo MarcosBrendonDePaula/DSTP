@@ -152,6 +152,12 @@ check("client Apply writes booleans too", cSpider.dstp_burning == false)
 -- JSON object keys arrive as STRINGS after decode — must still match
 Feed.Apply({ radius = 25, ents = { ["5001"] = { hp = 7 } } })
 check("client Apply accepts string netid keys (JSON)", cSpider.dstp_hp == 7)
+-- generic `component.field` names are exposed with the dot replaced by `_` so a UI
+-- `bind` can reach them (entity.dstp_workable_workleft — a dotted key is unreachable)
+Feed.Apply({ radius = 25, ents = { [5001] = { ["workable.workleft"] = 3 } } })
+check("client Apply exposes dotted fields as dstp_<comp>_<field>", cSpider.dstp_workable_workleft == 3)
+Feed.OnEntity(cSpider, { s = 99, f = { ["workable.maxwork"] = 6 } })
+check("client OnEntity exposes dotted fields the same way", cSpider.dstp_workable_maxwork == 6)
 
 -- ── 9) FLOW-COMPUTED values: entity_set_data writes inst.dstp_data[name]; the feed
 --       reads it as the field "data.<name>" like any component field ──

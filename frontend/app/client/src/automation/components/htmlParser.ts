@@ -57,6 +57,10 @@ function parseStyle(s: string): UINode {
     else if (NUM_STYLE.has(k) && !raw.includes('%') && !Number.isNaN(Number(raw))) raw = Number(raw)
     out[k] = raw
   }
+  // CSS spellings → our props: flex-wrap → wrap (boolean), align-content, row-gap.
+  if (out['flex-wrap'] != null) { out.wrap = String(out['flex-wrap']).trim() === 'wrap'; delete out['flex-wrap'] }
+  if (out['align-content'] != null) { out.align_content = String(out['align-content']).trim(); delete out['align-content'] }
+  if (out['row-gap'] != null) { const n = Number(out['row-gap']); if (!Number.isNaN(n)) out.row_gap = n; delete out['row-gap'] }
   // border → the renderer's { width, color } table. Forms: `border: 2 1,0,0,1`
   // (width then r,g,b,a), `border: 3` (width only, default colour), or the split
   // `border-width` / `border-color` keys.

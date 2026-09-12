@@ -1,0 +1,44 @@
+{
+  "name": "Construções — digite !build: vida dos muros e marteladas restantes de baús/fogueiras, em cima de cada um",
+  "nodes": [
+    { "id": "trg", "type": "trigger", "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "chat_message", "alias": "chat" } },
+    { "id": "cond", "type": "condition", "position": { "x": 320, "y": 0 },
+      "data": { "field": "{{chat.message}}", "operator": "contains", "value": "!build" } },
+
+    { "id": "feed", "type": "data_feed", "position": { "x": 640, "y": 0 },
+      "data": { "params": {
+        "operation": "start", "userid": "{{chat.userid}}", "id": "build",
+        "prefabs": "wall_hay, wall_wood, wall_stone, wall_moonrock, treasurechest, dragonflychest, icebox, firepit, coldfirepit, researchlab, researchlab2, birdcage, meatrack, cookpot",
+        "fields": "hp, hp_max, workable.workleft, workable.maxwork, burning",
+        "radius": "20", "interval": "0.5" } } },
+
+    { "id": "track", "type": "ui_track", "position": { "x": 960, "y": 0 },
+      "data": { "action_type": "ui_track", "params": {
+        "userid": "{{chat.userid}}", "id": "build_hud", "mode": "all",
+        "prefabs": "wall_hay, wall_wood, wall_stone, wall_moonrock, treasurechest, dragonflychest, icebox, firepit, coldfirepit, researchlab, researchlab2, birdcage, meatrack, cookpot",
+        "radius": "20", "require_hp": "false", "offset_y": "40" } } },
+
+    { "id": "tpl", "type": "ui_col", "position": { "x": 1300, "y": 0 },
+      "data": { "params": { "gap": "2", "align": "center" } } },
+    { "id": "name", "type": "ui_text", "position": { "x": 1620, "y": -100 },
+      "data": { "params": { "text": "?", "size": "13", "color": "[1,1,1,1]", "bind": "text=entity.name" } } },
+    { "id": "hp", "type": "ui_bar", "position": { "x": 1620, "y": -10 },
+      "data": { "params": { "value": "1", "max": "1", "width": "60", "height": "7", "color": "[0.9,0.3,0.2,1]", "bind": "value=entity.hp; max=entity.hp_max; visible=entity.has_hp" } } },
+    { "id": "work", "type": "ui_text", "position": { "x": 1620, "y": 80 },
+      "data": { "params": { "text": "", "size": "12", "color": "[0.85,0.85,0.6,1]", "bind": "text=entity.dstp_workable_workleft" } } },
+
+    { "id": "ok", "type": "action", "position": { "x": 960, "y": 200 },
+      "data": { "action_type": "ui_notification", "params": { "userid": "{{chat.userid}}", "text": "HUD de construcoes ligado: vida dos muros e marteladas restantes", "duration": "4" } } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trg", "target": "cond" },
+    { "id": "e2", "source": "cond", "target": "feed", "sourceHandle": "true" },
+    { "id": "e3", "source": "feed", "target": "track" },
+    { "id": "e4", "source": "track", "target": "tpl" },
+    { "id": "e5", "source": "tpl", "target": "name" },
+    { "id": "e6", "source": "tpl", "target": "hp" },
+    { "id": "e7", "source": "tpl", "target": "work" },
+    { "id": "e8", "source": "track", "target": "ok" }
+  ]
+}

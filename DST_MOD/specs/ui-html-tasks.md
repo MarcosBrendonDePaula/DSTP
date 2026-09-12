@@ -24,11 +24,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [x] `align: stretch` (col/row): a child with no explicit cross size is rendered at the container's cross content box (bars, buttons, inputs, nested cols fill the width); auto-sized containers can't stretch (nothing to stretch to)
 - Tests: `htmlParser.client.test.ts` (border forms), `ui-layout-harness.lua` (frame image = box + 2·width; stretched bar = container content width; explicit width left alone)
 
-### 2. Multi-line flex: `wrap` + `align-content`
-- [ ] `layout_math`: break items into lines by the track (rts-dom `flex_linhas.rs`), `align-content` start/center/end/between/around/stretch, `row-gap`
-- [ ] `LayoutChildren` uses it when `wrap` is set; reported box = all lines
-- [ ] TS mirror + fixtures in `layout-math-fixtures.json`
-- Tests: fixtures (both sides), harness (3 items in a 250px row wrap to 2 lines)
+### 2. Multi-line flex: `wrap` + `align-content` — DONE 2026-09-12
+- [x] `layout_math` `LayoutLines`: greedy line breaking by the track (an item wider than the track gets its own line), per-line `LayoutLine`, `align_content` start/center/end/between/around/evenly/stretch (stretch = default with a fixed cross), `row_gap`
+- [x] `LayoutChildren` calls it (`wrap`, `row_gap`, `align_content` props); reported box = all lines
+- [x] TS mirror `layoutLines` + 7 fixtures; parser maps `flex-wrap`/`align-content`/`row-gap`; preview `flexWrap`
+- Tests: fixtures (both sides), harness (3×100 in a 250 row → 2 lines, positions), parser mapping; mutation-checked (never-break)
 
 ### 3. Text: `text-align`, `font`, `line-height`, wrap-by-width on any text
 - [ ] `text` node: `align_text` (left/center/right), `font` enum (body/title/ui/outline/talking/small), `line_height`, `wrap:true` with `width` → `SetRegionSize` + `EnableWordWrap`

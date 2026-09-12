@@ -62,6 +62,13 @@ describe('layoutMath.ts (panel side) matches the shared fixtures', () => {
   it('toDst', () => {
     for (const f of fixtures.to_dst) expect(LM.toDst(f.x, f.y, f.w, f.h, f.W, f.H)).toEqual([f.dx, f.dy])
   })
+  it('layoutLines (wrap + align_content)', () => {
+    for (const f of (fixtures as any).layout_lines) {
+      const r = LM.layoutLines(f.items as any, f.opts as any)
+      const got = r.items.map(p => ({ main: p.main, cross: p.cross, size: p.size }))
+      expect({ name: f.name, pos: got, used: r.used, lines: r.lines }).toEqual({ name: f.name, pos: f.pos, used: f.used, lines: f.lines })
+    }
+  })
 })
 
 describe('layout_math.lua (game side) matches the SAME fixtures under fengari', () => {
@@ -107,6 +114,17 @@ describe('layout_math.lua (game side) matches the SAME fixtures under fengari', 
       for i, f in ipairs(F.to_dst) do
         local dx, dy = LM.ToDst(f.x, f.y, f.w, f.h, f.W, f.H)
         check("todst#" .. i, close(dx, f.dx) and close(dy, f.dy))
+      end
+      for i, f in ipairs(F.layout_lines or {}) do
+        local r = LM.LayoutLines(f.items, f.opts)
+        local ok = #r.items == #f.pos and close(r.used.main, f.used.main) and close(r.used.cross, f.used.cross) and r.lines == f.lines
+        local got = {}
+        for j, p in ipairs(f.pos) do
+          local g = r.items[j] or {}
+          got[#got+1] = string.format("(%s,%s,%s)", tostring(g.main), tostring(g.cross), tostring(g.size))
+          if not (g and close(g.main, p.main) and close(g.cross, p.cross) and close(g.size, p.size)) then ok = false end
+        end
+        check("lines#" .. i .. " " .. f.name .. " got " .. table.concat(got, " ") .. " used=" .. tostring(r.used.main) .. "x" .. tostring(r.used.cross) .. " lines=" .. tostring(r.lines), ok)
       end
       return C.report()
     `

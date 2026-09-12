@@ -205,6 +205,73 @@ function M.LayoutLine(items, opts)
     return { items = out, used = { main = track, cross = line } }
 end
 
+-- Multi-line flex (flex-wrap: wrap). Items break into lines greedily by the track (an
+-- item wider than the track gets its own line — never clipped), each line is laid out
+-- by LayoutLine, then the lines are placed on the cross axis by `align_content`
+-- (rts-dom flex_linhas.rs: JustifyOffsets reused for the line block; `stretch` — the
+-- default when `cross` is fixed — splits the free cross space between the lines).
+-- opts adds: wrap, row_gap, align_content. Positions stay in item order.
+-- Returns { items=, used=, lines=<n> }.
+function M.LayoutLines(items, opts)
+    opts = opts or {}
+    if not opts.wrap or opts.track == nil then
+        local r = M.LayoutLine(items, opts)
+        r.lines = 1
+        return r
+    end
+    local track = opts.track
+    local gap = opts.gap or 0
+    local rowGap = opts.row_gap or 0
+    local function outer(it)
+        return it.main + side(it, it.marginMainStart, it.autoMainStart) + side(it, it.marginMainEnd, it.autoMainEnd)
+    end
+
+    -- 1) break into lines
+    local lines, cur, curW = {}, {}, 0
+    for _, it in ipairs(items) do
+        local o = outer(it)
+        if #cur > 0 and curW + gap + o > track then lines[#lines + 1] = cur; cur = {}; curW = 0 end
+        curW = curW + ((#cur > 0) and gap or 0) + o
+        cur[#cur + 1] = it
+    end
+    if #cur > 0 then lines[#lines + 1] = cur end
+    local n = #lines
+
+    -- 2) each line on its own (fixed track, auto cross)
+    local lineOpts = { track = track, gap = gap, justify = opts.justify, align = opts.align }
+    local results, lineCross, totalCross = {}, {}, 0
+    for i, li in ipairs(lines) do
+        results[i] = M.LayoutLine(li, lineOpts)
+        lineCross[i] = results[i].used.cross
+        totalCross = totalCross + lineCross[i]
+    end
+    totalCross = totalCross + rowGap * math.max(n - 1, 0)
+
+    -- 3) place the lines on the cross axis
+    local leading, between, extra = 0, 0, 0
+    if opts.cross ~= nil then
+        local free = opts.cross - totalCross
+        local ac = opts.align_content or "stretch"
+        if ac == "stretch" then extra = math.max(free, 0) / n
+        else leading, between = M.JustifyOffsets(ac, free, n) end
+    end
+    local out, y, usedMain = {}, leading, track
+    for i, li in ipairs(lines) do
+        local lc = lineCross[i] + extra
+        local r = results[i]
+        if extra > 0 then
+            -- a stretched line re-lays its items so `align` applies inside the taller line
+            r = M.LayoutLine(li, { track = track, gap = gap, justify = opts.justify, align = opts.align, cross = lc })
+        end
+        for _, p in ipairs(r.items) do out[#out + 1] = { main = p.main, cross = y + p.cross, size = p.size } end
+        if r.used.main > usedMain then usedMain = r.used.main end
+        y = y + lc + rowGap + between
+    end
+    local usedCross = totalCross
+    if opts.cross ~= nil and opts.cross > usedCross then usedCross = opts.cross end
+    return { items = out, used = { main = usedMain, cross = usedCross }, lines = n }
+end
+
 -- CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → the DST
 -- widget CENTER (DST widgets are centered on their own origin and y grows UP).
 function M.ToDst(x, y, w, h, W, H)

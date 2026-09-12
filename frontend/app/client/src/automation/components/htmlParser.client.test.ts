@@ -113,6 +113,16 @@ describe('htmlToTree', () => {
     expect(normalizeElement(htmlToTree('<div style="border:2 1,0,0,1"></div>')).border).toEqual({ width: 2, color: [1, 0, 0, 1] })
   })
 
+  it('flex-wrap / align-content / row-gap map to wrap / align_content / row_gap', () => {
+    const t = htmlToTree('<div style="display:flex; direction:row; flex-wrap:wrap; align-content:center; row-gap:6"></div>')
+    expect(t.style.wrap).toBe(true)
+    expect(t.style.align_content).toBe('center')
+    expect(t.style.row_gap).toBe(6)
+    const n = normalizeElement(t)
+    expect(n.type).toBe('row'); expect(n.wrap).toBe(true); expect(n.align_content).toBe('center'); expect(n.row_gap).toBe(6)
+    expect(htmlToTree('<div style="flex-wrap:nowrap"></div>').style.wrap).toBe(false)
+  })
+
   it('throws on empty input', () => {
     expect(() => htmlToTree('')).toThrow()
   })

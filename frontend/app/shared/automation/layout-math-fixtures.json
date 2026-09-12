@@ -1,121 +1,1107 @@
 {
   "_doc": "Shared fixtures for the flex arithmetic ported from rts-dom (crates/rts-dom/src/layout/{coluna,flex_limites,flex_margens_auto}.rs). Consumed by BOTH DST_MOD/scripts/dstp/layout_math.lua (fengari) and app/shared/automation/layoutMath.ts so the game and the panel are proven to compute the same numbers. All positions are in CSS space: origin top-left, y grows DOWN.",
-
   "justify_offsets": [
-    { "justify": "start",   "free": 100, "n": 3, "leading": 0,   "between": 0 },
-    { "justify": "end",     "free": 100, "n": 3, "leading": 100, "between": 0 },
-    { "justify": "center",  "free": 100, "n": 3, "leading": 50,  "between": 0 },
-    { "justify": "between", "free": 100, "n": 3, "leading": 0,   "between": 50 },
-    { "justify": "between", "free": 100, "n": 1, "leading": 0,   "between": 0 },
-    { "justify": "around",  "free": 100, "n": 2, "leading": 25,  "between": 50 },
-    { "justify": "evenly",  "free": 100, "n": 3, "leading": 25,  "between": 25 },
-    { "_doc": "overflow (free<0) — Chrome behaviour: center overflows symmetrically, end flushes to the end, everything else flushes to the start",
-      "justify": "center",  "free": -40, "n": 2, "leading": -20, "between": 0 },
-    { "justify": "end",     "free": -40, "n": 2, "leading": -40, "between": 0 },
-    { "justify": "between", "free": -40, "n": 2, "leading": 0,   "between": 0 },
-    { "justify": "around",  "free": -40, "n": 2, "leading": 0,   "between": 0 },
-    { "justify": "start",   "free": -40, "n": 2, "leading": 0,   "between": 0 },
-    { "_doc": "unknown value falls back to start", "justify": "bogus", "free": 100, "n": 2, "leading": 0, "between": 0 }
+    {
+      "justify": "start",
+      "free": 100,
+      "n": 3,
+      "leading": 0,
+      "between": 0
+    },
+    {
+      "justify": "end",
+      "free": 100,
+      "n": 3,
+      "leading": 100,
+      "between": 0
+    },
+    {
+      "justify": "center",
+      "free": 100,
+      "n": 3,
+      "leading": 50,
+      "between": 0
+    },
+    {
+      "justify": "between",
+      "free": 100,
+      "n": 3,
+      "leading": 0,
+      "between": 50
+    },
+    {
+      "justify": "between",
+      "free": 100,
+      "n": 1,
+      "leading": 0,
+      "between": 0
+    },
+    {
+      "justify": "around",
+      "free": 100,
+      "n": 2,
+      "leading": 25,
+      "between": 50
+    },
+    {
+      "justify": "evenly",
+      "free": 100,
+      "n": 3,
+      "leading": 25,
+      "between": 25
+    },
+    {
+      "_doc": "overflow (free<0) — Chrome behaviour: center overflows symmetrically, end flushes to the end, everything else flushes to the start",
+      "justify": "center",
+      "free": -40,
+      "n": 2,
+      "leading": -20,
+      "between": 0
+    },
+    {
+      "justify": "end",
+      "free": -40,
+      "n": 2,
+      "leading": -40,
+      "between": 0
+    },
+    {
+      "justify": "between",
+      "free": -40,
+      "n": 2,
+      "leading": 0,
+      "between": 0
+    },
+    {
+      "justify": "around",
+      "free": -40,
+      "n": 2,
+      "leading": 0,
+      "between": 0
+    },
+    {
+      "justify": "start",
+      "free": -40,
+      "n": 2,
+      "leading": 0,
+      "between": 0
+    },
+    {
+      "_doc": "unknown value falls back to start",
+      "justify": "bogus",
+      "free": 100,
+      "n": 2,
+      "leading": 0,
+      "between": 0
+    }
   ],
-
   "align_offset": [
-    { "align": "start",   "line": 100, "item": 30, "offset": 0 },
-    { "align": "end",     "line": 100, "item": 30, "offset": 70 },
-    { "align": "center",  "line": 100, "item": 30, "offset": 35 },
-    { "align": "stretch", "line": 100, "item": 30, "offset": 0 },
-    { "align": "center",  "line": 20,  "item": 30, "offset": -5 },
-    { "align": "end",     "line": 20,  "item": 30, "offset": -10 }
+    {
+      "align": "start",
+      "line": 100,
+      "item": 30,
+      "offset": 0
+    },
+    {
+      "align": "end",
+      "line": 100,
+      "item": 30,
+      "offset": 70
+    },
+    {
+      "align": "center",
+      "line": 100,
+      "item": 30,
+      "offset": 35
+    },
+    {
+      "align": "stretch",
+      "line": 100,
+      "item": 30,
+      "offset": 0
+    },
+    {
+      "align": "center",
+      "line": 20,
+      "item": 30,
+      "offset": -5
+    },
+    {
+      "align": "end",
+      "line": 20,
+      "item": 30,
+      "offset": -10
+    }
   ],
-
   "auto_margin_cross": [
-    { "_doc": "no auto margin → null → caller falls back to align", "autoStart": false, "autoEnd": false, "line": 100, "item": 30, "offset": null },
-    { "autoStart": true,  "autoEnd": true,  "line": 100, "item": 30, "offset": 35 },
-    { "_doc": "margin-top:auto alone pushes to the END", "autoStart": true, "autoEnd": false, "line": 100, "item": 30, "offset": 70 },
-    { "autoStart": false, "autoEnd": true,  "line": 100, "item": 30, "offset": 0 },
-    { "_doc": "no free space → auto margins are 0", "autoStart": true, "autoEnd": true, "line": 20, "item": 30, "offset": 0 }
+    {
+      "_doc": "no auto margin → null → caller falls back to align",
+      "autoStart": false,
+      "autoEnd": false,
+      "line": 100,
+      "item": 30,
+      "offset": null
+    },
+    {
+      "autoStart": true,
+      "autoEnd": true,
+      "line": 100,
+      "item": 30,
+      "offset": 35
+    },
+    {
+      "_doc": "margin-top:auto alone pushes to the END",
+      "autoStart": true,
+      "autoEnd": false,
+      "line": 100,
+      "item": 30,
+      "offset": 70
+    },
+    {
+      "autoStart": false,
+      "autoEnd": true,
+      "line": 100,
+      "item": 30,
+      "offset": 0
+    },
+    {
+      "_doc": "no free space → auto margins are 0",
+      "autoStart": true,
+      "autoEnd": true,
+      "line": 20,
+      "item": 30,
+      "offset": 0
+    }
   ],
-
   "clamp_final": [
-    { "main": 150, "min": 0,   "max": 100,  "out": 100 },
-    { "main": 50,  "min": 80,  "max": 100,  "out": 80 },
-    { "_doc": "min wins over max when they conflict (CSS2 §10.4)", "main": 150, "min": 200, "max": 100, "out": 200 },
-    { "main": 50,  "min": 0,   "max": null, "out": 50 }
+    {
+      "main": 150,
+      "min": 0,
+      "max": 100,
+      "out": 100
+    },
+    {
+      "main": 50,
+      "min": 80,
+      "max": 100,
+      "out": 80
+    },
+    {
+      "_doc": "min wins over max when they conflict (CSS2 §10.4)",
+      "main": 150,
+      "min": 200,
+      "max": 100,
+      "out": 200
+    },
+    {
+      "main": 50,
+      "min": 0,
+      "max": null,
+      "out": 50
+    }
   ],
-
   "resolve_main_sizes": [
-    { "_doc": "flex-grow splits the free space", "items": [ { "base": 100, "grow": 1 }, { "base": 100, "grow": 1 } ], "content": 300, "gap": 0, "main": [150, 150] },
-    { "_doc": "weighted grow", "items": [ { "base": 100, "grow": 1 }, { "base": 100, "grow": 3 } ], "content": 300, "gap": 0, "main": [125, 175] },
-    { "_doc": "no grow → bases untouched", "items": [ { "base": 100 }, { "base": 100 } ], "content": 300, "gap": 0, "main": [100, 100] },
-    { "_doc": "gap is subtracted from the free space", "items": [ { "base": 100, "grow": 1 }, { "base": 100, "grow": 1 } ], "content": 300, "gap": 20, "main": [140, 140] },
-    { "_doc": "grow capped by max (no redistribution, same cut as rts-dom)", "items": [ { "base": 50, "grow": 1, "max": 60 }, { "base": 50, "grow": 1 } ], "content": 200, "gap": 0, "main": [60, 100] },
-    { "_doc": "shrink (default 1) splits the deficit weighted by base", "items": [ { "base": 150 }, { "base": 150 } ], "content": 200, "gap": 0, "main": [100, 100] },
-    { "items": [ { "base": 200 }, { "base": 100 } ], "content": 240, "gap": 0, "main": [160, 80] },
-    { "_doc": "an item that would go below its min freezes there; the rest of the deficit goes to the others", "items": [ { "base": 150, "min": 120 }, { "base": 150 } ], "content": 180, "gap": 0, "main": [120, 60] },
-    { "_doc": "shrink:0 never shrinks", "items": [ { "base": 150, "shrink": 0 }, { "base": 150 } ], "content": 200, "gap": 0, "main": [150, 50] }
+    {
+      "_doc": "flex-grow splits the free space",
+      "items": [
+        {
+          "base": 100,
+          "grow": 1
+        },
+        {
+          "base": 100,
+          "grow": 1
+        }
+      ],
+      "content": 300,
+      "gap": 0,
+      "main": [
+        150,
+        150
+      ]
+    },
+    {
+      "_doc": "weighted grow",
+      "items": [
+        {
+          "base": 100,
+          "grow": 1
+        },
+        {
+          "base": 100,
+          "grow": 3
+        }
+      ],
+      "content": 300,
+      "gap": 0,
+      "main": [
+        125,
+        175
+      ]
+    },
+    {
+      "_doc": "no grow → bases untouched",
+      "items": [
+        {
+          "base": 100
+        },
+        {
+          "base": 100
+        }
+      ],
+      "content": 300,
+      "gap": 0,
+      "main": [
+        100,
+        100
+      ]
+    },
+    {
+      "_doc": "gap is subtracted from the free space",
+      "items": [
+        {
+          "base": 100,
+          "grow": 1
+        },
+        {
+          "base": 100,
+          "grow": 1
+        }
+      ],
+      "content": 300,
+      "gap": 20,
+      "main": [
+        140,
+        140
+      ]
+    },
+    {
+      "_doc": "grow capped by max (no redistribution, same cut as rts-dom)",
+      "items": [
+        {
+          "base": 50,
+          "grow": 1,
+          "max": 60
+        },
+        {
+          "base": 50,
+          "grow": 1
+        }
+      ],
+      "content": 200,
+      "gap": 0,
+      "main": [
+        60,
+        100
+      ]
+    },
+    {
+      "_doc": "shrink (default 1) splits the deficit weighted by base",
+      "items": [
+        {
+          "base": 150
+        },
+        {
+          "base": 150
+        }
+      ],
+      "content": 200,
+      "gap": 0,
+      "main": [
+        100,
+        100
+      ]
+    },
+    {
+      "items": [
+        {
+          "base": 200
+        },
+        {
+          "base": 100
+        }
+      ],
+      "content": 240,
+      "gap": 0,
+      "main": [
+        160,
+        80
+      ]
+    },
+    {
+      "_doc": "an item that would go below its min freezes there; the rest of the deficit goes to the others",
+      "items": [
+        {
+          "base": 150,
+          "min": 120
+        },
+        {
+          "base": 150
+        }
+      ],
+      "content": 180,
+      "gap": 0,
+      "main": [
+        120,
+        60
+      ]
+    },
+    {
+      "_doc": "shrink:0 never shrinks",
+      "items": [
+        {
+          "base": 150,
+          "shrink": 0
+        },
+        {
+          "base": 150
+        }
+      ],
+      "content": 200,
+      "gap": 0,
+      "main": [
+        150,
+        50
+      ]
+    }
   ],
-
   "layout_line": [
-    { "name": "auto track, center: items packed from 0 with gap",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 20 } ],
-      "opts": { "gap": 10, "justify": "center", "align": "center" },
-      "pos": [ { "main": 0, "cross": 0, "size": 100 }, { "main": 110, "cross": 0, "size": 100 } ],
-      "used": { "main": 210, "cross": 20 } },
-    { "name": "fixed track, between",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 20 } ],
-      "opts": { "track": 300, "gap": 10, "justify": "between", "align": "start" },
-      "pos": [ { "main": 0, "cross": 0, "size": 100 }, { "main": 200, "cross": 0, "size": 100 } ],
-      "used": { "main": 300, "cross": 20 } },
-    { "name": "fixed track, end",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 20 } ],
-      "opts": { "track": 300, "gap": 10, "justify": "end", "align": "start" },
-      "pos": [ { "main": 90, "cross": 0, "size": 100 }, { "main": 200, "cross": 0, "size": 100 } ],
-      "used": { "main": 300, "cross": 20 } },
-    { "name": "fixed cross, align end",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 40 } ],
-      "opts": { "cross": 100, "gap": 0, "justify": "start", "align": "end" },
-      "pos": [ { "main": 0, "cross": 80, "size": 100 }, { "main": 100, "cross": 60, "size": 100 } ],
-      "used": { "main": 200, "cross": 100 } },
-    { "name": "fixed cross, align center",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 40 } ],
-      "opts": { "cross": 100, "gap": 0, "justify": "start", "align": "center" },
-      "pos": [ { "main": 0, "cross": 40, "size": 100 }, { "main": 100, "cross": 30, "size": 100 } ],
-      "used": { "main": 200, "cross": 100 } },
-    { "name": "symmetric margin: outer box counts on both axes, position is the border box",
-      "items": [ { "main": 100, "cross": 20, "margin": 5 }, { "main": 100, "cross": 20 } ],
-      "opts": { "gap": 10, "justify": "start", "align": "start" },
-      "pos": [ { "main": 5, "cross": 5, "size": 100 }, { "main": 120, "cross": 0, "size": 100 } ],
-      "used": { "main": 220, "cross": 30 } },
-    { "name": "auto main margin absorbs the free space and beats justify",
-      "items": [ { "main": 100, "cross": 20, "autoMainEnd": true }, { "main": 100, "cross": 20 } ],
-      "opts": { "track": 300, "gap": 0, "justify": "center", "align": "start" },
-      "pos": [ { "main": 0, "cross": 0, "size": 100 }, { "main": 200, "cross": 0, "size": 100 } ],
-      "used": { "main": 300, "cross": 20 } },
-    { "name": "grow fills the track",
-      "items": [ { "main": 100, "cross": 20, "grow": 1 }, { "main": 100, "cross": 20, "grow": 1 } ],
-      "opts": { "track": 300, "gap": 0, "justify": "start", "align": "start" },
-      "pos": [ { "main": 0, "cross": 0, "size": 150 }, { "main": 150, "cross": 0, "size": 150 } ],
-      "used": { "main": 300, "cross": 20 } },
-    { "name": "fixed track is a MINIMUM: content larger than the track grows it (no overflow)",
-      "items": [ { "main": 100, "cross": 20 }, { "main": 100, "cross": 20 } ],
-      "opts": { "track": 100, "gap": 0, "justify": "center", "align": "start" },
-      "pos": [ { "main": 0, "cross": 0, "size": 100 }, { "main": 100, "cross": 0, "size": 100 } ],
-      "used": { "main": 200, "cross": 20 } },
-    { "name": "fixed cross is a MINIMUM too",
-      "items": [ { "main": 100, "cross": 20 } ],
-      "opts": { "cross": 10, "gap": 0, "justify": "start", "align": "center" },
-      "pos": [ { "main": 0, "cross": 0, "size": 100 } ],
-      "used": { "main": 100, "cross": 20 } },
-    { "name": "auto cross margin wins over align",
-      "items": [ { "main": 100, "cross": 20, "autoCrossStart": true }, { "main": 100, "cross": 20 } ],
-      "opts": { "cross": 100, "gap": 0, "justify": "start", "align": "start" },
-      "pos": [ { "main": 0, "cross": 80, "size": 100 }, { "main": 100, "cross": 0, "size": 100 } ],
-      "used": { "main": 200, "cross": 100 } }
+    {
+      "name": "auto track, center: items packed from 0 with gap",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "gap": 10,
+        "justify": "center",
+        "align": "center"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 210,
+        "cross": 20
+      }
+    },
+    {
+      "name": "fixed track, between",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 300,
+        "gap": 10,
+        "justify": "between",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 200,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 20
+      }
+    },
+    {
+      "name": "fixed track, end",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 300,
+        "gap": 10,
+        "justify": "end",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 90,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 200,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 20
+      }
+    },
+    {
+      "name": "fixed cross, align end",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 40
+        }
+      ],
+      "opts": {
+        "cross": 100,
+        "gap": 0,
+        "justify": "start",
+        "align": "end"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 80,
+          "size": 100
+        },
+        {
+          "main": 100,
+          "cross": 60,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 100
+      }
+    },
+    {
+      "name": "fixed cross, align center",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 40
+        }
+      ],
+      "opts": {
+        "cross": 100,
+        "gap": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 40,
+          "size": 100
+        },
+        {
+          "main": 100,
+          "cross": 30,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 100
+      }
+    },
+    {
+      "name": "symmetric margin: outer box counts on both axes, position is the border box",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20,
+          "margin": 5
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "gap": 10,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 5,
+          "cross": 5,
+          "size": 100
+        },
+        {
+          "main": 120,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 220,
+        "cross": 30
+      }
+    },
+    {
+      "name": "auto main margin absorbs the free space and beats justify",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20,
+          "autoMainEnd": true
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 300,
+        "gap": 0,
+        "justify": "center",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 200,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 20
+      }
+    },
+    {
+      "name": "grow fills the track",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20,
+          "grow": 1
+        },
+        {
+          "main": 100,
+          "cross": 20,
+          "grow": 1
+        }
+      ],
+      "opts": {
+        "track": 300,
+        "gap": 0,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 150
+        },
+        {
+          "main": 150,
+          "cross": 0,
+          "size": 150
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 20
+      }
+    },
+    {
+      "name": "fixed track is a MINIMUM: content larger than the track grows it (no overflow)",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 100,
+        "gap": 0,
+        "justify": "center",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 100,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 20
+      }
+    },
+    {
+      "name": "fixed cross is a MINIMUM too",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "cross": 10,
+        "gap": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 100,
+        "cross": 20
+      }
+    },
+    {
+      "name": "auto cross margin wins over align",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20,
+          "autoCrossStart": true
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "cross": 100,
+        "gap": 0,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 80,
+          "size": 100
+        },
+        {
+          "main": 100,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 200,
+        "cross": 100
+      }
+    }
   ],
-
   "to_dst": [
-    { "_doc": "CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → DST widget center (y grows UP)",
-      "x": 0, "y": 0, "w": 100, "h": 20, "W": 300, "H": 100, "dx": -100, "dy": 40 },
-    { "x": 200, "y": 80, "w": 100, "h": 20, "W": 300, "H": 100, "dx": 100, "dy": -40 },
-    { "x": 100, "y": 40, "w": 100, "h": 20, "W": 300, "H": 100, "dx": 0, "dy": 0 }
+    {
+      "_doc": "CSS top-left box (x,y,w,h) inside a W×H container centered at the origin → DST widget center (y grows UP)",
+      "x": 0,
+      "y": 0,
+      "w": 100,
+      "h": 20,
+      "W": 300,
+      "H": 100,
+      "dx": -100,
+      "dy": 40
+    },
+    {
+      "x": 200,
+      "y": 80,
+      "w": 100,
+      "h": 20,
+      "W": 300,
+      "H": 100,
+      "dx": 100,
+      "dy": -40
+    },
+    {
+      "x": 100,
+      "y": 40,
+      "w": 100,
+      "h": 20,
+      "W": 300,
+      "H": 100,
+      "dx": 0,
+      "dy": 0
+    }
+  ],
+  "layout_lines": [
+    {
+      "name": "wrap: 3x100 in a 250 track with gap 10 → 2 lines (2+1), row_gap 10",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "gap": 10,
+        "row_gap": 10,
+        "wrap": true,
+        "justify": "start",
+        "align": "start",
+        "align_content": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 0,
+          "cross": 30,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 250,
+        "cross": 50
+      },
+      "lines": 2
+    },
+    {
+      "name": "align_content center with a fixed cross of 100: the 50px block of lines sits at 25",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "cross": 100,
+        "gap": 10,
+        "row_gap": 10,
+        "wrap": true,
+        "justify": "start",
+        "align": "start",
+        "align_content": "center"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 25,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 25,
+          "size": 100
+        },
+        {
+          "main": 0,
+          "cross": 55,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 250,
+        "cross": 100
+      },
+      "lines": 2
+    },
+    {
+      "name": "align_content stretch (default with a fixed cross): free space is split between the lines",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "cross": 100,
+        "gap": 10,
+        "row_gap": 10,
+        "wrap": true,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 0,
+          "cross": 55,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 250,
+        "cross": 100
+      },
+      "lines": 2
+    },
+    {
+      "name": "justify between applies per line",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "gap": 10,
+        "row_gap": 0,
+        "wrap": true,
+        "justify": "between",
+        "align": "start",
+        "align_content": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 150,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 0,
+          "cross": 20,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 250,
+        "cross": 40
+      },
+      "lines": 2
+    },
+    {
+      "name": "no track → nothing wraps (one line), used.main = the content",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "gap": 10,
+        "wrap": true,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 220,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 320,
+        "cross": 20
+      },
+      "lines": 1
+    },
+    {
+      "name": "an item wider than the track gets its own line (never clipped)",
+      "items": [
+        {
+          "main": 300,
+          "cross": 20
+        },
+        {
+          "main": 50,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "gap": 10,
+        "row_gap": 5,
+        "wrap": true,
+        "justify": "start",
+        "align": "start",
+        "align_content": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 300
+        },
+        {
+          "main": 0,
+          "cross": 25,
+          "size": 50
+        }
+      ],
+      "used": {
+        "main": 300,
+        "cross": 45
+      },
+      "lines": 2
+    },
+    {
+      "name": "wrap:false with a track keeps the single-line behaviour (track grows)",
+      "items": [
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        },
+        {
+          "main": 100,
+          "cross": 20
+        }
+      ],
+      "opts": {
+        "track": 250,
+        "gap": 10,
+        "wrap": false,
+        "justify": "start",
+        "align": "start"
+      },
+      "pos": [
+        {
+          "main": 0,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 110,
+          "cross": 0,
+          "size": 100
+        },
+        {
+          "main": 220,
+          "cross": 0,
+          "size": 100
+        }
+      ],
+      "used": {
+        "main": 320,
+        "cross": 20
+      },
+      "lines": 1
+    }
   ]
 }

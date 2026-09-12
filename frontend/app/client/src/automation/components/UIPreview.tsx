@@ -348,6 +348,9 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
         // padding/background/opacity/size — incl. percent sizes which CSS takes as-is).
         justifyContent: cssJustify(node.justify),
         alignItems: cssAlign(node.align),
+        flexWrap: (node.wrap === true || node.wrap === 'true' || node.wrap === 'wrap') ? 'wrap' : undefined,
+        rowGap: node.row_gap != null ? Number(node.row_gap) : undefined,
+        alignContent: node.align_content ? cssJustify(node.align_content) : undefined,
         padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
         background: cssColor(node.background),
         // border: { width, color } or a bare width (default colour), like the Lua AddBox
