@@ -781,8 +781,26 @@ local function MakeHitTarget(parent, w, h, pad, debug)
     return hit
 end
 
+-- Hover as an event (task 7): focus on the HUD is granted by the engine hit-test to
+-- the hovered hit target (the same focus that gates clicks — see MakeHitTarget), so
+-- OnGainFocus/OnLoseFocus ARE mouse enter/leave for our purposes. Report them through
+-- UIWidgets._hover_fn(id, root_id, hovered, callback) → modmain → rules `ui_hover`.
+local function WireHover(hit, node, ctx)
+    if not (node.id or node.callback) then return end
+    local prevGain, prevLose = hit.OnGainFocus, hit.OnLoseFocus
+    hit.OnGainFocus = function(self, ...)
+        if prevGain then prevGain(self, ...) end
+        if UIWidgets._hover_fn then _G.pcall(UIWidgets._hover_fn, node.id, ctx.root_id, true, node.callback) end
+    end
+    hit.OnLoseFocus = function(self, ...)
+        if prevLose then prevLose(self, ...) end
+        if UIWidgets._hover_fn then _G.pcall(UIWidgets._hover_fn, node.id, ctx.root_id, false, node.callback) end
+    end
+end
+
 local function MaybeClickable(widget, node, ctx, w, h)
-    if not node.callback then return end
+    -- `hover=true` without a callback still gets an overlay, just to report ui_hover.
+    if not (node.callback or node.hover) then return end
     local cb = node.callback
     local last = -1
     local function fire()
@@ -798,7 +816,8 @@ local function MaybeClickable(widget, node, ctx, w, h)
     -- whole string is clickable. node.hit_pad tunes it; default 8.
     local pad = (node.hit_pad ~= nil) and node.hit_pad or 8
     local hit = MakeHitTarget(widget, w, h, pad, node.hit_debug)
-    hit:SetOnClick(fire)
+    if cb then hit:SetOnClick(fire) end
+    WireHover(hit, node, ctx)
 end
 
 -- Make a window draggable by a title-bar hit target. `dragArea` is the invisible
@@ -1141,6 +1160,7 @@ RenderNodeImpl = function(node, parent, ctx)
             if ctx.fire then ctx.fire(cb, { id = node.id, data = node.data })
             elseif cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, { data = node.data }) end
         end)
+        WireHover(btn, node, ctx)
         Register(ctx, node, holder, function(props)
             if props.text ~= nil and label.inst:IsValid() then label:SetString(tostring(props.text)) end
             if props.color and label.inst:IsValid() then local c = ResolveColor(props.color); label:SetColour(c[1], c[2], c[3], c[4]) end
@@ -1949,6 +1969,11 @@ end
 --- fn(callback_name, widget_id) — should send an event to the backend
 function UIWidgets.SetCallbackHandler(fn)
     UIWidgets._callback_fn = fn
+end
+
+--- fn(node_id, root_id, hovered, callback) — hit targets report focus in/out (hover).
+function UIWidgets.SetHoverHandler(fn)
+    UIWidgets._hover_fn = fn
 end
 
 function UIWidgets.CreateWidget(cmd)

@@ -183,3 +183,9 @@ describe('htmlToTree', () => {
     expect(() => htmlToTree('')).toThrow()
   })
 })
+
+describe('hover attribute (task 7)', () => {
+  it('<text hover="true"> keeps a boolean hover prop through normalize', () => {
+    expect(normalizeElement(htmlToTree('<text id="tip" hover="true">x</text>'))).toMatchObject({ type: 'text', id: 'tip', hover: true })
+  })
+})

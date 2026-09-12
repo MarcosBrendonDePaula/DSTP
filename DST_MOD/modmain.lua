@@ -214,6 +214,11 @@ AddPrefabPostInit("player_classified", function(inst)
                         RulesEngine.OnUIButtonClick(callback_name, widget_id, payload)
                     end
                 end)
+                -- Hover (focus in/out on a hit target) → local rules only (no RPC: the
+                -- server doesn't need mouse-over traffic). Rules react via `ui_hover`.
+                UIWidgets.SetHoverHandler(function(node_id, ui_id, hovered, callback)
+                    GetRulesEngine().HandleEvent("ui_hover", { id = node_id, ui = ui_id, hovered = hovered, callback = callback })
+                end)
             end
 
             local ok, cmd = GLOBAL.pcall(GLOBAL.json.decode, cmd_str)

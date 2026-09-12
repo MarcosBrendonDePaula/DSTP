@@ -355,6 +355,9 @@ end
 -- Internal (synthetic) events we dispatch ourselves, not via DST listeners
 local INTERNAL_EVENTS = {
     ui_button_click = true,
+    -- hit-target focus in/out (mouse hover) from ui_widgets → modmain:
+    -- { id, ui, hovered, callback }
+    ui_hover = true,
     -- dispatched by the data-feed client half (data_feed.lua OnEntity → modmain hook):
     -- { kind, guid, prefab, seq, amount, actor, args }
     entity_event = true,

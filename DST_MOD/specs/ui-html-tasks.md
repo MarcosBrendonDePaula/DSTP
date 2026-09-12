@@ -53,9 +53,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [x] numeric style values (width/height/min/max/size/grow…) are coerced like attributes; `%` stays a string
 - Tests: parser round-trips (escaping, loose text, panel identity)
 
-### 7. `hover` / `focus` as local rule events
-- [ ] client emits `ui_hover` / `ui_focus` synthetic events (rules_engine INTERNAL_EVENTS) from the focus-based hit targets; `rule_install` can react (tint, tooltip)
-- Tests: rules harness
+### 7. `hover` as a local rule event — DONE 2026-09-12
+- [x] `WireHover` in `ui_widgets.lua`: the hit targets (clickable/`hover=true` text-icon-image overlay, the tree `button`) wrap `OnGainFocus`/`OnLoseFocus` (HUD focus IS mouse hover — the engine hit-test grants it) → `UIWidgets.SetHoverHandler` → modmain → rules synthetic `ui_hover { id, ui, hovered, callback }` (local only, no RPC — the server does not need mouse-over traffic). A node with `hover=true` and no callback gets an overlay just for hovering
+- [-] a separate `ui_focus`: on the DST HUD focus and hover are the same signal for mouse users; not worth a second event
+- Tests: `ui-hover.test.ts` (overlay + button gain/lose → events, hover-only overlay has no click; rules condition on id/hovered → dom_toggle), parser keeps `hover` boolean
 
 ### 8. Scrollable list: `overflow: scroll` + `height`
 - [ ] `div` with `overflow:scroll` and a fixed height renders through DST `ScrollableList` (or a clipped viewport + wheel handler)
