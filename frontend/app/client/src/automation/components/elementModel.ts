@@ -112,7 +112,12 @@ export function toElement(node: UINode): UINode {
   const out: UINode = {}
   const style: UINode = {}
   // derive tag + display from the legacy type/mode
-  if (CONTAINER_TYPES.has(t)) {
+  if (t === 'panel') {
+    // a panel keeps its identity (title, closeable, draggable, frame) — as a `div`
+    // it came back as a plain col and lost the frame + close button on round-trip.
+    out.tag = 'panel'
+    if (node.mode) out.mode = node.mode
+  } else if (CONTAINER_TYPES.has(t)) {
     out.tag = 'div'
     if (node.mode === 'grid') { style.display = 'grid'; if (node.cols) style.cols = node.cols; if (node.grid_rows) style.grid_template = node.grid_rows }
     else if (node.mode === 'canvas') style.display = 'absolute'

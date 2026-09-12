@@ -2,7 +2,7 @@
 // Run: vitest run --config vitest.client.config.ts
 import { describe, it, expect } from 'vitest'
 import { htmlToTree, treeToHtml } from './htmlParser'
-import { normalizeElement } from './elementModel'
+import { normalizeElement, toElement } from './elementModel'
 
 describe('htmlToTree', () => {
   it('parses a div with style into tag + style', () => {
@@ -102,7 +102,7 @@ describe('htmlToTree', () => {
     expect(t.gap).toBe(8)
     // and style still wins over a flat attr
     const s = normalizeElement(htmlToTree('<div width="10" style="width:300"></div>'))
-    expect(s.width).toBe('300')
+    expect(s.width).toBe(300)
   })
 
   it('border style forms → { width, color } (the renderer\'s shape)', () => {
@@ -129,7 +129,34 @@ describe('htmlToTree', () => {
     expect(t.style.font).toBe('title')
     expect(t.style.line_height).toBe(1.4)
     const n = normalizeElement(t)
-    expect(n.type).toBe('text'); expect(n.halign).toBe('right'); expect(n.font).toBe('title'); expect(n.width).toBe('200')
+    expect(n.type).toBe('text'); expect(n.halign).toBe('right'); expect(n.font).toBe('title'); expect(n.width).toBe(200)
+  })
+
+  it('round-trip escapes < & " in text and attributes (task 6)', () => {
+    const tree = { tag: 'panel', title: 'Diga "oi"', children: [{ tag: 'text', text: 'a < b & c > d' }, { tag: 'button', callback: 'x', text: 'Ok "agora"' }] }
+    const html = treeToHtml(tree)
+    expect(html).not.toContain('a < b')          // escaped, not raw
+    const back = htmlToTree(html)
+    expect(back.title).toBe('Diga "oi"')
+    expect(back.children[0].text).toBe('a < b & c > d')
+    expect(back.children[1].text).toBe('Ok "agora"')
+    expect(back.children.length).toBe(2)         // no phantom <b> element from the raw '<'
+  })
+
+  it('loose text inside a container becomes a <text> child instead of being dropped (task 6)', () => {
+    const t = htmlToTree('<div>Ola mundo <button callback="x">ok</button> fim</div>')
+    expect(t.children.map((c: any) => c.tag)).toEqual(['text', 'button', 'text'])
+    expect(t.children[0].text).toBe('Ola mundo')
+    expect(t.children[2].text).toBe('fim')
+  })
+
+  it('a legacy panel survives tree → html → tree with title and closeable (task 6)', () => {
+    const legacy = { type: 'panel', title: 'Loja', closeable: false, width: 300, children: [{ type: 'text', text: 'x' }] }
+    const back = normalizeElement(htmlToTree(treeToHtml(toElement(legacy))))
+    expect(back.type).toBe('panel')
+    expect(back.title).toBe('Loja')
+    expect(back.closeable).toBe(false)
+    expect(back.width).toBe(300)
   })
 
   it('throws on empty input', () => {

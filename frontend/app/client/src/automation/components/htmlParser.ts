@@ -11,7 +11,9 @@
 
 type UINode = Record<string, any>
 
-const NUM_STYLE = new Set(['gap', 'padding', 'margin', 'opacity', 'scale', 'cols', 'x', 'y', 'z'])
+// style keys whose plain numeric values are coerced (percent strings stay strings)
+const NUM_STYLE = new Set(['gap', 'padding', 'margin', 'opacity', 'scale', 'cols', 'x', 'y', 'z',
+  'width', 'height', 'min_width', 'max_width', 'min_height', 'max_height', 'size', 'grow', 'shrink', 'flex'])
 const COLOR_KEYS = new Set(['background', 'color', 'tint'])
 const TEXT_TAGS = new Set(['text', 'button', 'input'])
 
@@ -103,10 +105,18 @@ function elementToNode(el: Element): UINode {
     // numeric-ish bare attrs (size, width, height, value, max) stay strings unless clean numbers
     node[name] = (!val.includes('%') && !Number.isNaN(Number(val))) ? Number(val) : val
   }
-  // children: element children → nodes; for text leaves, the inner text → `text` prop
+  // children: element children → nodes; loose text between them → <text> children
+  // (it used to be silently dropped); for text leaves, the inner text → `text` prop
   const childEls = Array.from(el.children)
   if (childEls.length) {
-    const kids = childEls.map(elementToNode)
+    const kids: UINode[] = []
+    for (const n of Array.from(el.childNodes)) {
+      if (n.nodeType === 1) kids.push(elementToNode(n as Element))
+      else if (n.nodeType === 3 && tag !== 'tabs') {
+        const txt = (n.textContent || '').trim()
+        if (txt) kids.push({ tag: 'text', text: txt })
+      }
+    }
     if (tag === 'tabs') {
       // <tabs> authored as children (each tagged tab_label) → the renderer's shape:
       // tabs: [{ label, child }]. Without this a <tabs> in HTML rendered nothing.
@@ -135,6 +145,10 @@ export function htmlToTree(html: string): UINode {
 }
 
 // ── tree → HTML (for "view as HTML" / round-trip) ──────────────────────────────
+// Escape so a text like `a < b & "c"` survives the round trip instead of becoming a
+// phantom <b> element / broken attribute.
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 function styleToString(st: UINode): string {
   return Object.entries(st)
     .filter(([, v]) => v != null && v !== '')   // skip undefined/empty — no "k:undefined" noise
@@ -150,12 +164,12 @@ export function treeToHtml(node: UINode, indent = 0): string {
   let innerText = ''
   for (const k of Object.keys(node)) {
     if (k === 'tag' || k === 'type' || k === 'children' || k === 'tabs' || k === 'style') continue
-    if (k === 'text' && TEXT_TAGS.has(tag)) { innerText = String(node[k]); continue }
+    if (k === 'text' && TEXT_TAGS.has(tag)) { innerText = esc(String(node[k])); continue }
     const v = node[k]
     if (v == null || v === '') continue           // skip empty attrs
-    attrs.push(`${k}="${Array.isArray(v) ? v.join(',') : v}"`)
+    attrs.push(`${k}="${esc(Array.isArray(v) ? v.join(',') : String(v))}"`)
   }
-  if (node.style && Object.keys(node.style).length) attrs.unshift(`style="${styleToString(node.style)}"`)
+  if (node.style && Object.keys(node.style).length) attrs.unshift(`style="${esc(styleToString(node.style))}"`)
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}>`
   // tabs → children tagged with tab_label (the inverse of htmlToTree's <tabs> rule)
   const kids: UINode[] = Array.isArray(node.tabs)

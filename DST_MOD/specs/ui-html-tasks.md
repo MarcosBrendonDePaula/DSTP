@@ -46,11 +46,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [x] `absolute` maps to `col` + `mode:canvas` (not `panel` — no frame, no X); `AddBox` now also runs on the canvas and grid branches, so `style.background`/`border` are honoured there
 - [x] TS mirror (`elementModel.ts`) + `ui-element-model.test.ts`; harness: no close button, background drawn, child at `style.x/y`
 
-### 6. HTML round-trip hygiene
-- [ ] `treeToHtml` escapes `<`, `&`, `"` in text and attributes
-- [ ] loose text inside a container becomes a `<text>` child instead of being dropped
-- [ ] legacy `panel` survives tree → html → tree (title/closeable kept — `panel` tag, not `div`)
-- Tests: parser round-trips
+### 6. HTML round-trip hygiene — DONE 2026-09-12
+- [x] `treeToHtml` escapes `<`, `>`, `&`, `"` in text, attributes and style
+- [x] loose text inside a container becomes a `<text>` child instead of being dropped
+- [x] legacy `panel` survives tree → html → tree (`toElement` emits a `<panel>` tag, title/closeable/mode kept)
+- [x] numeric style values (width/height/min/max/size/grow…) are coerced like attributes; `%` stays a string
+- Tests: parser round-trips (escaping, loose text, panel identity)
 
 ### 7. `hover` / `focus` as local rule events
 - [ ] client emits `ui_hover` / `ui_focus` synthetic events (rules_engine INTERNAL_EVENTS) from the focus-based hit targets; `rule_install` can react (tint, tooltip)
