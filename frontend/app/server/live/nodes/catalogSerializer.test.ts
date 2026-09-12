@@ -111,3 +111,15 @@ describe('catalogSerializer', () => {
     expect(text).toContain('note:')
   })
 })
+
+describe('legacy nodes (task 9 — HTML ui_builder is the default)', () => {
+  it('ui_panel and ui_menu are marked legacy and left out of the AI catalog', () => {
+    const metas = new Map(allNodeMetas().map((m) => [m.type, m]))
+    expect(metas.get('ui_panel')?.legacy).toBe(true)
+    expect(metas.get('ui_menu')?.legacy).toBe(true)
+    for (const m of allNodeMetas()) {
+      if (m.legacy) expect(byType.has(m.type), `${m.type} is legacy, should be excluded`).toBe(false)
+    }
+    expect(byType.has('ui_builder')).toBe(true)
+  })
+})

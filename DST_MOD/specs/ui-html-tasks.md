@@ -61,11 +61,12 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (commit) · `[-]` won't do
 - [ ] `div` with `overflow:scroll` and a fixed height renders through DST `ScrollableList` (or a clipped viewport + wheel handler)
 - Tests: harness (children beyond the height are parented to the scroller)
 
-### 9. HTML is the default authoring mode (owner's decision 2026-09-12)
-- [ ] `ui_builder` opens in HTML mode by default; a new node seeds an HTML template (`<panel title="…">…</panel>`) stored in `data.ui_html`
-- [ ] the visual/tree editors stay reachable but secondary; the HTML source is the node's truth when present
-- [ ] `ui_panel`/`ui_menu` legacy action nodes: keep working, mark as legacy in the palette; new docs/examples use `ui_builder` + HTML
-- [ ] remove the old panel/tree-only paths once every example flow is HTML (`examples/flows/**` migration, tracked here)
+### 9. HTML is the default authoring mode (owner's decision 2026-09-12) — DONE 2026-09-12 (palette + modal); code removal pending
+- [x] `ui_builder` opens in HTML mode by default: `meta.defaults` seeds `ui_html` (`<panel title="Painel">…</panel>`) + the matching `tree`; a client test parses the HTML and asserts equality, so the two can't drift. The detail modal opens straight on the `</> Editor HTML` tab
+- [x] Config has a 3-way mode chooser (HTML (padrão) / Visual / Estruturado). HTML → `ui_html` is the node's source of truth and the editor re-parses it into `data.tree` on every edit; switching to Visual/Estruturado drops `ui_html` (the synced tree becomes the truth); switching back serializes the tree with `treeToHtml`. `UITreeEditor` takes `forceCode` (host-owned mode: no local toggle / Aplicar / Cancelar)
+- [x] `NodeMeta.legacy`: `ui_panel` (legacy + hidden — no longer offered) and `ui_menu` (legacy, "legado" badge in the palette) keep working for existing flows and are left out of the AI catalog (`isStandalone`)
+- [ ] remove the `ui_panel` tree-assembly path once existing flows are migrated — NOTE `buildUITree` also serves `ui_track` (children primitives), so the primitives + `buildUITree` stay; only the `ui_panel` exec/ui go. `examples/flows/**` don't use `ui_panel`/`ui_menu` (checked 2026-09-12)
+- Tests: `uiBuilderDefaults.client.test.ts` (HTML ↔ tree), `catalogSerializer.test.ts` (legacy excluded)
 
 ### 10. Micro-DOM: tree manipulation as rule actions (client-side, data not code)
 - [ ] rules_engine actions `dom_set { id, props }`, `dom_append { parent, html | node }`, `dom_remove { id }`, `dom_toggle { id }` → `UIWidgets.SetProps` / a new `AppendChild` / `RemoveNode` on the addressable tree (`byId`), re-laying the parent

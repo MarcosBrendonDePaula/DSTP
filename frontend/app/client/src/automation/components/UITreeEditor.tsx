@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { LuArrowUp, LuArrowDown, LuMaximize } from 'react-icons/lu'
 import { UICanvas } from './UICanvas'
 import { UIPreview } from './UIPreview'
@@ -123,11 +123,14 @@ const _codeState: Record<string, { on: boolean; draft: string }> = {}
 // `html` = the node's stored HTML source (data.ui_html) when the UI was authored as
 // HTML; the code editor opens on it (instead of re-generating HTML from the tree) and
 // `onHtmlChange` persists edits, so the HTML is the source of truth for that node.
-export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onSetParam, html, onHtmlChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void; html?: string; onHtmlChange?: (html: string) => void }) {
+// `forceCode` = the host owns the mode: true pins the HTML editor (the node's default,
+// task 9) and hides the local toggle + Aplicar/Cancelar; undefined = we manage it.
+export function UITreeEditor({ nodeId, tree, onChange, forceTab, forceCode, pctX, pctY, onSetParam, html, onHtmlChange }: { nodeId: string; tree: UINode | null; onChange: (tree: UINode) => void; forceTab?: 'tree' | 'render'; forceCode?: boolean; pctX?: string | number; pctY?: string | number; onSetParam?: (kv: Record<string, string>) => void; html?: string; onHtmlChange?: (html: string) => void }) {
   const [selPath, setSelPath] = useState<Step[]>([])
   const [tabState, setTab] = useState<'tree' | 'render'>('tree')
   const [fullscreen, setFullscreen] = useState(false)
-  const [codeMode, setCodeModeRaw] = useState(() => _codeState[nodeId]?.on ?? !!html)
+  const [codeModeState, setCodeModeRaw] = useState(() => _codeState[nodeId]?.on ?? !!html)
+  const codeMode = forceCode ?? codeModeState
   const [codeDraft, setCodeDraftRaw] = useState(() => _codeState[nodeId]?.draft ?? html ?? '')
   // Persist on every change so a remount restores it.
   const setCodeMode = (v: boolean | ((m: boolean) => boolean)) => setCodeModeRaw(prev => {
@@ -163,6 +166,15 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
   const pathKey = (p: Step[]) => p.map(s => s.kind + s.i).join('/') || 'root'
 
   const root: UINode = tree && tree.type ? tree : { type: 'panel', title: 'Painel', children: [] }
+  // Entering forced HTML mode (or opening a node in it): the draft starts from the
+  // node's stored HTML — or, for a node switched from tree mode, from the tree.
+  useEffect(() => {
+    if (!forceCode) return
+    let start = html
+    if (start == null) { try { start = treeToHtml(toElement(root)) } catch { start = '' } }
+    setCodeDraft(start)
+    setCodeErr(null)
+  }, [forceCode, nodeId])
 
   const save = useCallback((next: UINode) => {
     onChange(next)
@@ -554,11 +566,13 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
             {lbl}
           </button>
         ))}
-        <button onClick={() => { try { setCodeDraft(html || treeToHtml(toElement(root))) } catch { setCodeDraft('') } setCodeErr(null); setCodeMode(m => !m) }}
-          className={`ml-auto px-2.5 py-1 rounded text-[10px] border ${codeMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}
-          title="Editar a UI como HTML">
-          {'</>'} HTML
-        </button>
+        {forceCode === undefined && (
+          <button onClick={() => { try { setCodeDraft(html || treeToHtml(toElement(root))) } catch { setCodeDraft('') } setCodeErr(null); setCodeMode(m => !m) }}
+            className={`ml-auto px-2.5 py-1 rounded text-[10px] border ${codeMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}
+            title="Editar a UI como HTML">
+            {'</>'} HTML
+          </button>
+        )}
       </div>
 
       {codeMode ? (
@@ -610,19 +624,21 @@ export function UITreeEditor({ nodeId, tree, onChange, forceTab, pctX, pctY, onS
             </div>
           </div>
           {codeErr && <div className="text-[10px] text-red-400">{codeErr}</div>}
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                // Parse HTML → element tree, then normalize to the legacy shape so BOTH
-                // the visual tree editor and the renderer work with it.
-                try { const tree = normalizeTree(htmlToTree(codeDraft)); save(tree); setCodeErr(null); setCodeMode(false) }
-                catch (err: any) { setCodeErr('HTML inválido: ' + (err?.message ?? err)) }
-              }}
-              className="text-[11px] px-3 py-1.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
-              Aplicar
-            </button>
-            <button onClick={() => setCodeMode(false)} className="text-[11px] px-3 py-1.5 rounded bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10">Cancelar</button>
-          </div>
+          {forceCode === undefined && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  // Parse HTML → element tree, then normalize to the legacy shape so BOTH
+                  // the visual tree editor and the renderer work with it.
+                  try { const tree = normalizeTree(htmlToTree(codeDraft)); save(tree); setCodeErr(null); setCodeMode(false) }
+                  catch (err: any) { setCodeErr('HTML inválido: ' + (err?.message ?? err)) }
+                }}
+                className="text-[11px] px-3 py-1.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
+                Aplicar
+              </button>
+              <button onClick={() => setCodeMode(false)} className="text-[11px] px-3 py-1.5 rounded bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10">Cancelar</button>
+            </div>
+          )}
         </div>
       ) : tab === 'tree' ? (
         <div className="flex gap-3">

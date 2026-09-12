@@ -402,6 +402,7 @@ export const registryCatalog = ENTRIES
     description: e.meta.description,
     category: e.meta.category,
     subgroup: e.meta.subgroup,
+    legacy: e.meta.legacy,
     family: e.meta.kind,
     icon: e.meta.icon,
     accent: e.meta.accent ?? 'text-gray-400',

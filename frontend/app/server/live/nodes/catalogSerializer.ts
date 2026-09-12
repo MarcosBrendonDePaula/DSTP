@@ -122,6 +122,7 @@ function hasRealValues(obj: any): boolean {
  *  shells and ui-primitives (only valid nested in a UI tree). */
 export function isStandalone(meta: NodeMeta): boolean {
   if (meta.hidden) return false
+  if (meta.legacy) return false
   if (meta.kind === 'ui-primitive') return false
   return true
 }

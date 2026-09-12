@@ -67,6 +67,9 @@ export interface NodeMeta {
   outputHandles?: Array<{ id: string; description?: string; dynamic?: boolean }>
   /** Hide from the palette (internal/child-only nodes). */
   hidden?: boolean
+  /** Superseded node kept for existing flows (ui_panel/ui_menu → ui_builder HTML).
+   *  Shown with a "legado" badge in the palette and left out of the AI catalog. */
+  legacy?: boolean
   /** Flow-control flags read by FlowAnalyzer / the engine dispatcher. */
   flow?: {
     /** Entry point — not executed by processNode; matched in evaluateEvent. */

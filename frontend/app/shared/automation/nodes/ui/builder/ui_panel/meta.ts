@@ -7,9 +7,11 @@ export const meta: NodeMeta = {
   color: '#8b5cf6',
   accent: 'text-violet-300',
   category: 'UI Primitivos',
-  description: 'Container visual de UI (raiz, conecta filhos).',
+  description: '[legado] Container visual de UI montado por nos conectados. Use o UI Builder (HTML).',
   aiDescription: 'Root of a UI built from connected ui_* child nodes. Renders the whole subtree to a player.',
   kind: 'ui-primitive',
+  legacy: true,
+  hidden: true,
 
   subgroup: 'Builder',
   defaults: { params: { userid: '{{trigger.userid}}', id: 'ui', title: '', gap: '8', anchor: 'center' } },

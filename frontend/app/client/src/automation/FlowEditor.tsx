@@ -89,6 +89,7 @@ type NodeCatalogItem = {
   category: string
   family?: string   // node.meta.kind — the node declares its own menu family
   subgroup?: string // sub-grouping within the family (e.g. 'Jogador', 'Players')
+  legacy?: boolean  // superseded node (badge in the palette; kept for existing flows)
   icon: string
   accent: string
   data?: Record<string, any>
@@ -829,7 +830,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onSave, flowN
                             <ItemIcon size={16} strokeWidth={2.2} />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[12px] font-semibold text-gray-100 group-hover/card:text-white leading-tight truncate">{cleanLabel}</div>
+                            <div className="text-[12px] font-semibold text-gray-100 group-hover/card:text-white leading-tight truncate">{cleanLabel}{item.legacy && <span className="ml-1.5 align-middle text-[8px] uppercase tracking-wide px-1 py-px rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">legado</span>}</div>
                             <div className="text-[10px] text-gray-500 leading-snug mt-0.5 line-clamp-2">{item.description}</div>
                           </div>
                         </div>
