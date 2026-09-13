@@ -84,6 +84,11 @@ describe('example: Pet Chester', () => {
     await fire('entity_data', { token: 'pet:KU_1', found: true, guid: 777, prefab: 'chester' })
     expect(commands.filter(c => c.type === 'entity_set_brain').pop()?.data).toMatchObject({ guid: 777, mode: 'collect', target: 'KU_1' })
     expect(spawns()).toHaveLength(0)
+    // the guid now belongs to something ELSE (guids are re-used across world loads) → spawn, never re-bind
+    await fire('entity_data', { token: 'pet:KU_1', found: true, guid: 777, prefab: 'inventoryitem_classified' })
+    expect(commands.filter(c => c.type === 'entity_set_brain').length).toBe(1)
+    expect(spawns()).toHaveLength(1)
+    commands.length = 0
     // gone (stale guid) → spawn a fresh one
     await fire('entity_data', { token: 'pet:KU_1', found: false, reason: 'gone' })
     expect(spawns()).toHaveLength(1)

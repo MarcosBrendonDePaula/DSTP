@@ -461,6 +461,12 @@ function M.Apply(inst, spec)
     local st, reason = M.Normalize(spec)
     if not st then return false, reason end
     if st.mode == "default" then return M.Restore(inst) end
+    -- Only a mob that can MOVE can run this brain: every mode node (Follow, Wander,
+    -- ChaseAndAttack, Leash, RunAway, the pickup WALKTO) indexes components.locomotor.
+    -- In-game 2026-09-13: a flow re-used a guid from before a world load, it now named an
+    -- inventoryitem_classified, Apply took it and Follow crashed the master sim.
+    if not (inst.components and inst.components.locomotor and inst.Transform) then return false, "no_locomotor" end
+    if inst.HasTag and (inst:HasTag("CLASSIFIED") or inst:HasTag("player")) then return false, "not_a_mob" end
     inst._dstp_brain = st
     if not inst._dstp_brain_orig then
         local combat = inst.components and inst.components.combat

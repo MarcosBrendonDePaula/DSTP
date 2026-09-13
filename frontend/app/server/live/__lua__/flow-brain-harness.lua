@@ -54,7 +54,7 @@ local function mkEnt(guid, prefab, x, z, tags, isplayer)
     end
     e.PushEvent = function(self, name, data) for _, f in ipairs(self._listeners[name] or {}) do f(self, data) end end
     e.DoPeriodicTask = function(self, period, fn) self._task = { period = period, fn = fn, cancelled = false, Cancel = function(t) t.cancelled = true end }; return self._task end
-    e.components = { combat = {
+    e.components = { locomotor = {}, combat = {
         target = nil,
         SetRetargetFunction = function(self, period, fn) self.retargetperiod, self.targetfn = period, fn; e._log[#e._log + 1] = { "SetRetargetFunction", period } end,
         SetTarget = function(self, t) self.target = t; e._log[#e._log + 1] = { "SetTarget", t } end,
@@ -108,6 +108,11 @@ local a = FlowBrain.ResolveAnchor(pig, guard)
 check("ResolveAnchor: the state's point", a and a.x == 0 and a.z == 0)
 
 -- ── Apply / Restore ──
+-- an entity that cannot move (no locomotor: a classified, an item) is refused — never brained
+local classified = mkEnt(99, "inventoryitem_classified", 0, 0, {})
+classified.components = {}
+local okc, whyc = FlowBrain.Apply(classified, { mode = "collect", target = "KU_1" })
+check("Apply refuses an entity without a locomotor (no_locomotor), nothing installed", okc == false and whyc == "no_locomotor" and classified._dstp_brain == nil and count(classified, "SetBrain") == 0)
 local ok = FlowBrain.Apply(pig, { mode = "follow", target = "KU_1" })
 check("Apply: ok, brain swapped ONCE, original remembered", ok == true and count(pig, "SetBrain") == 1 and pig._dstp_brain_orig.brainfn == orig and brainClassCalls == 1)
 check("Apply: retarget fn installed with period 1", pig.components.combat.retargetperiod == 1 and type(pig.components.combat.targetfn) == "function")

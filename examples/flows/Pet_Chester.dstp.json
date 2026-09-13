@@ -602,6 +602,20 @@
         "x": 2000,
         "y": 640
       }
+    },
+    {
+      "id": "alive_prefab",
+      "type": "condition",
+      "data": {
+        "field": "ed.prefab",
+        "operator": "equals",
+        "value": "chester",
+        "alias": "alive_prefab"
+      },
+      "position": {
+        "x": 1600,
+        "y": 560
+      }
     }
   ],
   "edges": [
@@ -746,18 +760,6 @@
       "target": "alive"
     },
     {
-      "id": "e25",
-      "source": "alive",
-      "sourceHandle": "true",
-      "target": "rebind"
-    },
-    {
-      "id": "e26",
-      "source": "alive",
-      "sourceHandle": "false",
-      "target": "respawn2"
-    },
-    {
       "id": "e30",
       "source": "t_restored",
       "target": "is_pet_restored"
@@ -778,6 +780,30 @@
       "id": "e33",
       "source": "mem_pet_r",
       "target": "mem_owner_r"
+    },
+    {
+      "id": "e25",
+      "source": "alive",
+      "sourceHandle": "true",
+      "target": "alive_prefab"
+    },
+    {
+      "id": "e26",
+      "source": "alive",
+      "sourceHandle": "false",
+      "target": "respawn2"
+    },
+    {
+      "id": "e27",
+      "source": "alive_prefab",
+      "sourceHandle": "true",
+      "target": "rebind"
+    },
+    {
+      "id": "e28",
+      "source": "alive_prefab",
+      "sourceHandle": "false",
+      "target": "respawn2"
     }
   ]
 }
