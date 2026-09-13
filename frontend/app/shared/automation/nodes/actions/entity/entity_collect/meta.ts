@@ -17,6 +17,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'The mob.', item_guid: 'World item GUID.', item: 'Or a prefab: nearest within brain_radius.', store: 'self (take it) | event (only report).', timeout: 'Seconds before giving up (20).', token: 'Echoed on brain_task_done.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID do mob', placeholder: '{{pet.guid}}' },
     { key: 'prefab', label: 'Prefab do mob (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca do mob)', placeholder: '' },

@@ -202,6 +202,10 @@ import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/
 import { handler as entityGotoHandler } from '@shared/automation/nodes/actions/entity/entity_goto/exec'
 import { meta as entitySetSlotsMeta } from '@shared/automation/nodes/actions/entity/entity_set_slots/meta'
 import { handler as entitySetSlotsHandler } from '@shared/automation/nodes/actions/entity/entity_set_slots/exec'
+import { meta as entityFindMeta } from '@shared/automation/nodes/actions/entity/entity_find/meta'
+import { handler as entityFindHandler } from '@shared/automation/nodes/actions/entity/entity_find/exec'
+import { meta as entityTagIdMeta } from '@shared/automation/nodes/actions/entity/entity_tag_id/meta'
+import { handler as entityTagIdHandler } from '@shared/automation/nodes/actions/entity/entity_tag_id/exec'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { handler as entityUnfreezeHandler } from '@shared/automation/nodes/actions/entity/entity_unfreeze/exec'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -344,6 +348,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: entityCollectMeta, handler: entityCollectHandler },
   { meta: entityGotoMeta, handler: entityGotoHandler },
   { meta: entitySetSlotsMeta, handler: entitySetSlotsHandler },
+  { meta: entityFindMeta, handler: entityFindHandler },
+  { meta: entityTagIdMeta, handler: entityTagIdHandler },
   { meta: entityUnfreezeMeta, handler: entityUnfreezeHandler },
   { meta: uiNotificationMeta, handler: uiNotificationHandler },
   { meta: uiLabelMeta, handler: uiLabelHandler },

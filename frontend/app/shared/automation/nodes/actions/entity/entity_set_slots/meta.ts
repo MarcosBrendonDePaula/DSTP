@@ -16,6 +16,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'The container entity (a chest, the pet…).', slots: 'New slot count (e.g. 16, 25).', token: 'Echoed on entity_slots.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID do container', placeholder: '{{pet.guid}}' },
     { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: 'treasurechest' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

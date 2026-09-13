@@ -238,6 +238,10 @@ import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/
 import { ui as entityGotoUi } from '@shared/automation/nodes/actions/entity/entity_goto/ui'
 import { meta as entitySetSlotsMeta } from '@shared/automation/nodes/actions/entity/entity_set_slots/meta'
 import { ui as entitySetSlotsUi } from '@shared/automation/nodes/actions/entity/entity_set_slots/ui'
+import { meta as entityFindMeta } from '@shared/automation/nodes/actions/entity/entity_find/meta'
+import { ui as entityFindUi } from '@shared/automation/nodes/actions/entity/entity_find/ui'
+import { meta as entityTagIdMeta } from '@shared/automation/nodes/actions/entity/entity_tag_id/meta'
+import { ui as entityTagIdUi } from '@shared/automation/nodes/actions/entity/entity_tag_id/ui'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -365,6 +369,8 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: entityCollectMeta, ui: entityCollectUi },
   { meta: entityGotoMeta, ui: entityGotoUi },
   { meta: entitySetSlotsMeta, ui: entitySetSlotsUi },
+  { meta: entityFindMeta, ui: entityFindUi },
+  { meta: entityTagIdMeta, ui: entityTagIdUi },
   { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
   { meta: uiNotificationMeta, ui: uiNotificationUi },
   { meta: uiLabelMeta, ui: uiLabelUi },

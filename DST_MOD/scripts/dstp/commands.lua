@@ -331,6 +331,12 @@ function Commands.RegisterAll(core)
     -- a GUID from an event goes stale (the entity may already be removed), so we never
     -- index a nil and always validate IsValid — handlers branch on the reason.
     local function ResolveEntity(data)
+        -- stable id first (survives world loads — see dstp/entity_ids.lua)
+        if data.id ~= nil and data.id ~= "" and core.EntityIds then
+            local inst = core.EntityIds.Get(tostring(data.id))
+            if inst then return inst, nil end
+            return nil, "gone"
+        end
         local guid = tonumber(data.guid or data.container_guid)
         if guid then
             local inst = _G.Ents[guid]
@@ -363,6 +369,7 @@ function Commands.RegisterAll(core)
             found = true,
             prefab = inst.prefab,
             guid = inst.GUID,
+            id = core.EntityIds and core.EntityIds.IdOf(inst) or nil,   -- stable id, if the entity has one
             name = (inst.GetDisplayName and inst:GetDisplayName()) or inst.name or inst.prefab,
             x = math.floor(x), z = math.floor(z),
             age = inst.GetTimeAlive and math.floor(inst:GetTimeAlive()) or 0,
@@ -642,6 +649,51 @@ function Commands.RegisterAll(core)
             DSTP.PushEvent("entity_slots", { token = data.token, ok = ok and true or false, reason = ok and nil or why,
                 guid = inst and inst.GUID or nil, prefab = inst and inst.prefab or nil, slots = tonumber(data.slots) })
         end
+    end)
+
+    -- entity_tag_id: give an entity a stable id (or read the one it has). Ack:
+    -- entity_id { token, ok, guid, prefab, id }. Any later command can use `id` as the
+    -- resolver key — it survives world loads, the guid does not.
+    DSTP.RegisterCommand("entity_tag_id", function(data)
+        local inst, reason = ResolveEntity(data)
+        local sid = inst and core.EntityIds and core.EntityIds.Ensure(inst) or nil
+        DSTP.PushEvent("entity_id", { token = data.token, ok = sid ~= nil, reason = sid and nil or (reason or "no_id"),
+            guid = inst and inst.GUID or nil, prefab = inst and inst.prefab or nil, id = sid })
+    end)
+
+    -- entity_find: QUERY — entities by prefab (comma list ok), optionally only those whose
+    -- flow brain targets `owner_userid`, optionally within `radius` of a player (`near_userid`)
+    -- or a point (x,z). Answer: entity_found { token, count, guid (nearest), entities[] }.
+    -- The primitive that lets a flow ask "is there already a pet of mine?" instead of
+    -- guessing from a remembered guid (guids change on every world load).
+    DSTP.RegisterCommand("entity_find", function(data)
+        local want = {}
+        for p in tostring(data.prefab or ""):gmatch("[^,%s]+") do want[p] = true end
+        local cx, cz, _y, radius = nil, nil, nil, tonumber(data.radius)   -- `_y`: strict mode, never a bare `_`
+        if data.near_userid then
+            local p = FindPlayer(data.near_userid)
+            if p and p.Transform then cx, _y, cz = p.Transform:GetWorldPosition() end
+        elseif data.x ~= nil and data.z ~= nil then cx, cz = tonumber(data.x), tonumber(data.z) end
+        local found = {}
+        for _, e in pairs(_G.Ents) do
+            if e and e.prefab and want[e.prefab] and e.IsValid and e:IsValid() and e.Transform then
+                local ok = true
+                if data.owner_userid then
+                    local st = e._dstp_brain
+                    ok = st ~= nil and st.target_userid == data.owner_userid
+                end
+                local ex, _ey, ez = e.Transform:GetWorldPosition()
+                local dist = (cx and cz) and math.sqrt((ex - cx) ^ 2 + (ez - cz) ^ 2) or nil
+                if ok and radius and dist and dist > radius then ok = false end
+                if ok then found[#found + 1] = { guid = e.GUID, id = core.EntityIds and core.EntityIds.IdOf(e) or nil, prefab = e.prefab, x = math.floor(ex), z = math.floor(ez), dist = dist and math.floor(dist) or nil, mode = e._dstp_brain and e._dstp_brain.mode or nil } end
+            end
+        end
+        table.sort(found, function(a, b) return (a.dist or 0) < (b.dist or 0) end)
+        local cap = math.min(#found, 20)
+        local list = {}
+        for i = 1, cap do list[i] = found[i] end
+        DSTP.PushEvent("entity_found", { token = data.token, prefab = data.prefab, owner_userid = data.owner_userid,
+            count = #found, guid = found[1] and found[1].guid or nil, id = found[1] and found[1].id or nil, entities = list })
     end)
 
     -- entity_can_accept: capability query — how many of `item_guid` (a world item) or of a
@@ -1167,8 +1219,12 @@ function Commands.RegisterAll(core)
         if not (data.token and ent) then return end
         local x, _, z = 0, 0, 0
         if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
+        -- a spawn the flow cares about (it gave a token) gets a STABLE id right away, so
+        -- the flow can remember `id` instead of the load-volatile guid
+        local sid = core.EntityIds and core.EntityIds.Ensure(ent) or nil
         DSTP.PushEvent("spawn_result", {
             token = data.token,
+            id = sid,
             guid = ent.GUID,
             prefab = ent.prefab,
             x = math.floor(x), z = math.floor(z),

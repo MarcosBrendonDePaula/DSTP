@@ -17,6 +17,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'Entity that takes the item.', item_guid: 'The item entity GUID ({{trigger.item_guid}}).', token: 'Optional: item_taken echoes it with ok/reason.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID da entidade', placeholder: '{{trigger.guid}}' },
     { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

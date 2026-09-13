@@ -15,6 +15,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'The mob.', target_guid: 'Entity to walk to (a player, a chest…).', goto_x: 'Or a point X.', goto_z: 'Point Z.', timeout: 'Seconds before giving up (20).', token: 'Echoed on brain_task_done.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID do mob', placeholder: '{{pet.guid}}' },
     { key: 'prefab', label: 'Prefab do mob (se sem GUID)', placeholder: '' },
     { key: 'radius', label: 'Raio da busca do mob', placeholder: '8' },

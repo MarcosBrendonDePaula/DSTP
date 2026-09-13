@@ -15,6 +15,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'Source entity.', target_guid: 'Destination entity GUID (a player works too).', item: 'Prefab name, item guid, or "all".', token: 'Optional ack token.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID da origem', placeholder: '{{trigger.guid}}' },
     { key: 'prefab', label: 'Prefab da origem (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

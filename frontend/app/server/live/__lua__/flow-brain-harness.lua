@@ -34,6 +34,9 @@ Class = function(ctor)
     setmetatable(c, { __call = function(_, ...) local o = setmetatable({}, c); ctor(o, ...); return o end })
     return c
 end
+local EntityIds = require("dstp/entity_ids").Init({ GLOBAL = mock_G })
+Core.EntityIds = EntityIds
+local DstpIdComp = KIT.load(MOD_DSTP_ID_COMP, "components/dstp_id.lua")
 local FlowBrain = require("dstp/flow_brain").Init({ GLOBAL = mock_G, core = Core })
 Core.FlowBrain = FlowBrain
 local Commands = KIT.load(MOD_COMMANDS, "commands.lua")
@@ -54,6 +57,7 @@ local function mkEnt(guid, prefab, x, z, tags, isplayer)
     end
     e.PushEvent = function(self, name, data) for _, f in ipairs(self._listeners[name] or {}) do f(self, data) end end
     e.DoPeriodicTask = function(self, period, fn) self._task = { period = period, fn = fn, cancelled = false, Cancel = function(t) t.cancelled = true end }; return self._task end
+    e.AddComponent = function(self, name) if name == "dstp_id" and not self.components.dstp_id then self.components.dstp_id = DstpIdComp(self) end end
     e.components = { locomotor = {}, combat = {
         target = nil,
         SetRetargetFunction = function(self, period, fn) self.retargetperiod, self.targetfn = period, fn; e._log[#e._log + 1] = { "SetRetargetFunction", period } end,
@@ -363,6 +367,51 @@ check("collect action has a fail action", uba and #uba.onfail == 1)
 for _, f in ipairs(uba.onfail) do f() end
 check("unreachable → that item on cooldown", farItem._dstp_skip_until == 115 or (uba.target._dstp_skip_until == 115))
 FlowBrain.Apply(chester, { mode = "stay" })
+
+-- ── entity_find: "is there already a pet of mine?" ──
+local mine = mkEnt(970, "hutch", 6, 6, {}); mine.brainfn = orig
+FlowBrain.Apply(mine, { mode = "collect", target = "KU_1" })
+local theirs = mkEnt(971, "hutch", 40, 40, {}); theirs.brainfn = orig
+FlowBrain.Apply(theirs, { mode = "collect", target = "KU_9" })
+local wild = mkEnt(972, "hutch", 1, 1, {})
+run("entity_find", { prefab = "hutch", owner_userid = "KU_1", token = "f1" })
+local fe = lastEvent("entity_found")
+check("entity_find by owner: only MY hutch (not the other player's, not the wild one)", fe and fe.count == 1 and fe.guid == 970 and fe.entities[1].mode == "collect")
+run("entity_find", { prefab = "hutch", token = "f2" })
+check("entity_find without owner: every hutch", lastEvent("entity_found").count == 3)
+run("entity_find", { prefab = "hutch", near_userid = "KU_1", radius = 10, token = "f3" })
+fe = lastEvent("entity_found")
+check("entity_find near a player (5,5) within 10: mine (6,6) first, then the wild (1,1), not the far one", fe.count == 2 and fe.guid == 970 and fe.entities[2].guid == 972)
+
+-- ── stable ids: survive a world load, resolve commands, ride on events ──
+local sid = EntityIds.IdOf(mine)
+check("a flow-brained mob got a stable id on Apply", type(sid) == "string" and #sid > 3 and EntityIds.Get(sid) == mine)
+check("entity_find reports the stable id", fe.entities[1].id == sid and fe.id == sid)
+run("entity_can_accept", { id = sid, item_guid = 605, token = "byid" })
+check("commands resolve by stable id (entity_can_accept id=…)", lastEvent("entity_capacity").guid == 970)
+run("entity_can_accept", { id = "e_nope", item_guid = 605, token = "byid2" })
+check("unknown stable id → gone", lastEvent("entity_capacity").ok == false and lastEvent("entity_capacity").reason == "gone")
+-- persistence: the SAME id comes back on a freshly built entity after a load
+local savedId = mine.components.dstp_id:OnSave()
+check("dstp_id OnSave carries the id + add_component_if_missing", savedId and savedId.id == sid and savedId.add_component_if_missing == true)
+local reborn = mkEnt(980, "hutch", 6, 6, {}); reborn.brainfn = orig
+reborn:AddComponent("dstp_id"); reborn.components.dstp_id:OnLoad(savedId)
+check("after a load the id resolves to the NEW entity (guid 980)", EntityIds.Get(sid) == reborn)
+ENTS[970] = nil
+run("entity_tag_id", { guid = 980, token = "tag1" })
+check("entity_tag_id returns the existing id (no new one)", lastEvent("entity_id").id == sid and lastEvent("entity_id").guid == 980)
+run("entity_tag_id", { guid = 300, token = "tag2" })
+check("entity_tag_id on an id-less entity assigns one", lastEvent("entity_id").ok == true and EntityIds.Get(lastEvent("entity_id").id) == rabbit)
+-- spawn with a token → spawn_result carries the stable id
+mock_G.SpawnPrefab = function(name) return mkEnt(990, name, 1, 1, {}) end
+run("spawn_prefab", { prefab = "hutch", x = 1, z = 1, token = "spid" })
+check("spawn_result carries a stable id that resolves", lastEvent("spawn_result").id and EntityIds.Get(lastEvent("spawn_result").id) == ENTS[990])
+-- brain events carry the id
+FlowBrain.Apply(reborn, { mode = "stay" })
+FlowBrain.AnnounceRestored(reborn)
+check("brain events carry the stable id", lastEvent("brain_restored").id == sid)
+run("entity_find", { prefab = "nothing_a, nothing_b", token = "f4" })
+check("entity_find with a comma list and no match → count 0, no guid", lastEvent("entity_found").count == 0 and lastEvent("entity_found").guid == nil)
 
 -- ── command path ──
 run("entity_set_brain", { guid = 100, mode = "follow", target = "KU_1", token = "b1" })

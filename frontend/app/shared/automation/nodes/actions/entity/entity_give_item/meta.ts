@@ -15,6 +15,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'The entity that receives.', item: 'Item prefab (e.g. log, meat).', count: 'Stack size (default 1).', token: 'Optional: item_given echoes it.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID da entidade', placeholder: '{{trigger.guid}}' },
     { key: 'prefab', label: 'Prefab da entidade (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

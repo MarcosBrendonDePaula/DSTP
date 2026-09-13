@@ -86,7 +86,7 @@
         "alias": "mem_pet",
         "params": {
           "key": "pet:{{tk.part2}}",
-          "value": "{{sr.guid}}"
+          "value": "{{sr.id}}"
         }
       },
       "position": {
@@ -101,7 +101,7 @@
         "action": "write",
         "alias": "mem_owner",
         "params": {
-          "key": "owner:{{sr.guid}}",
+          "key": "owner:{{sr.id}}",
           "value": "{{tk.part2}}"
         }
       },
@@ -184,7 +184,7 @@
         "action": "read",
         "alias": "own",
         "params": {
-          "key": "owner:{{dead.guid}}"
+          "key": "owner:{{dead.id}}"
         }
       },
       "position": {
@@ -350,7 +350,7 @@
         "action_type": "entity_kill",
         "alias": "kill2",
         "params": {
-          "guid": "{{mem2.value}}"
+          "id": "{{mem2.value}}"
         }
       },
       "position": {
@@ -409,7 +409,7 @@
         "action_type": "get_entity",
         "alias": "probe",
         "params": {
-          "guid": "{{mem0.value}}",
+          "id": "{{mem0.value}}",
           "token": "pet:{{p.userid}}"
         }
       },
@@ -481,12 +481,13 @@
         "action_type": "entity_set_brain",
         "alias": "rebind",
         "params": {
-          "guid": "{{ed.guid}}",
+          "guid": "",
           "mode": "collect",
           "target": "{{tk2.part2}}",
           "follow_min": "2",
           "follow_dist": "3",
-          "follow_max": "6"
+          "follow_max": "6",
+          "id": "{{ed.id}}"
         }
       },
       "position": {
@@ -522,7 +523,7 @@
         "action_type": "entity_set_brain",
         "alias": "park",
         "params": {
-          "guid": "{{mem.value}}",
+          "id": "{{mem.value}}",
           "mode": "stay"
         }
       },
@@ -579,7 +580,7 @@
         "alias": "mem_pet_r",
         "params": {
           "key": "pet:{{br.target_userid}}",
-          "value": "{{br.guid}}"
+          "value": "{{br.id}}"
         }
       },
       "position": {
@@ -594,7 +595,7 @@
         "action": "write",
         "alias": "mem_owner_r",
         "params": {
-          "key": "owner:{{br.guid}}",
+          "key": "owner:{{br.id}}",
           "value": "{{br.target_userid}}"
         }
       },
@@ -624,9 +625,10 @@
         "action_type": "entity_set_slots",
         "alias": "pet_slots",
         "params": {
-          "guid": "{{sr.guid}}",
+          "guid": "",
           "slots": "16",
-          "token": "pet_slots"
+          "token": "pet_slots",
+          "id": "{{sr.id}}"
         }
       },
       "position": {

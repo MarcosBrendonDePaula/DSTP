@@ -372,7 +372,8 @@ end
 -- (the normal event queue → next sync), only for flow-brained mobs, so no category gate.
 local function Base(inst)
     local st = inst._dstp_brain or {}
-    return { guid = inst.GUID, prefab = inst.prefab, mode = st.mode }
+    local sid = Core and Core.EntityIds and Core.EntityIds.IdOf(inst) or nil
+    return { guid = inst.GUID, id = sid, prefab = inst.prefab, mode = st.mode }
 end
 local function Describe(ent)
     if not ent then return nil, nil, nil end
@@ -468,6 +469,8 @@ function M.Apply(inst, spec)
     if not (inst.components and inst.components.locomotor and inst.Transform) then return false, "no_locomotor" end
     if inst.HasTag and (inst:HasTag("CLASSIFIED") or inst:HasTag("player")) then return false, "not_a_mob" end
     inst._dstp_brain = st
+    -- a flow-controlled mob gets a STABLE id (survives world loads; the guid does not)
+    if Core and Core.EntityIds then Core.EntityIds.Ensure(inst) end
     if not inst._dstp_brain_orig then
         local combat = inst.components and inst.components.combat
         inst._dstp_brain_orig = {

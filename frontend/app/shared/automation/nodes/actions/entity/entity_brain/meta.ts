@@ -24,6 +24,7 @@ export const meta: NodeMeta = {
   aiEnums: { 'params.mode': ['follow', 'guard', 'attack', 'flee', 'wander', 'stay', 'default'] },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID', placeholder: '{{spawn.guid}}' },
     { key: 'prefab', label: 'Prefab (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

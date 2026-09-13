@@ -17,6 +17,7 @@ export const meta: NodeMeta = {
   aiParamDescriptions: { guid: 'The entity.', item_guid: 'A world item GUID (e.g. {{trigger.item_guid}}).', item: 'Or a prefab name.', token: 'Echoed on entity_capacity to match the answer.' },
   kind: 'action',
   params: [
+    { key: 'id', label: 'ID estável (sobrevive ao reload)', placeholder: '{{pet.id}}' },
     { key: 'guid', label: 'GUID da entidade', placeholder: '{{trigger.guid}}' },
     { key: 'prefab', label: 'Prefab da entidade (se sem GUID)', placeholder: '' },
     { key: 'x', label: 'X (busca)', placeholder: '' },

@@ -121,6 +121,8 @@ function DSTP.Init(mod_env, mod_config)
 
     -- Flow-driven mob brain (entity_set_brain / spawn `brain`): the BT runs in-frame,
     -- the flow only writes its state. Shared with commands through core, like claims.
+    -- Stable entity ids (dstp_id component): the resolver key that survives world loads.
+    Core.EntityIds = _G.require("dstp/entity_ids").Init({ GLOBAL = _G })
     Core.FlowBrain = _G.require("dstp/flow_brain").Init({ GLOBAL = _G, core = Core })
     -- Flow-controlled container slots (entity_set_slots): module + Klei's params table.
     Core.ContainerSlots = _G.require("dstp/container_slots")
