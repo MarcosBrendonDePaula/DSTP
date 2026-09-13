@@ -1725,6 +1725,7 @@ export class FlowEngine {
       player_enlightened: 'survival', player_lunacy_normal: 'survival', player_wet: 'survival',
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       player_pick: 'gathering', player_mine_chop_start: 'gathering',
+      player_action: 'interaction', player_action_failed: 'interaction',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
       recipe_learned: 'character', character_transform: 'character',
       player_sleep_start: 'character', player_sleep_end: 'character',

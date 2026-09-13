@@ -299,6 +299,7 @@ dstp.Init(env, {
         weather = GetModConfigData("EVT_WEATHER") == true,
         bosses = GetModConfigData("EVT_BOSSES") == true,
         gathering = GetModConfigData("EVT_GATHERING") == true,
+        interaction = GetModConfigData("EVT_INTERACTION") == true,
         survival = GetModConfigData("EVT_SURVIVAL") == true,
         health = GetModConfigData("EVT_HEALTH") == true,
         character = GetModConfigData("EVT_CHARACTER") == true,

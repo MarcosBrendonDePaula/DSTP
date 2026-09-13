@@ -163,6 +163,13 @@ configuration_options = {
         default = false,
     },
     {
+        name = "EVT_INTERACTION",
+        label = "Events: Interaction",
+        hover = "Report every action a player performs on the world (examine, pick up, attack, open, ...) with the target entity.",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
         name = "EVT_SURVIVAL",
         label = "Events: Survival",
         hover = "Track eating, sanity, starving, freezing, overheating, mounting.",

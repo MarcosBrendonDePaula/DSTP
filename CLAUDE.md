@@ -274,6 +274,7 @@ Events are grouped and hot-toggleable at runtime. Backend auto-activates categor
 - **health**: health_delta, hunger_delta, sanity_delta (debounced)
 - **survival**: player_eat, insane/sane, starving/fed, freezing/warm, overheating/cooled, mounted/dismounted
 - **gathering**: player_work, resource_gathered, player_harvest, player_startfire
+- **interaction**: player_action (EVERY action the player performs — `performaction`: LOOK/PICKUP/ATTACK/OPEN/HARVEST/CHOP/GIVE/… with the SERVER `guid`+`prefab`+`x/z` of the target, `item`, `recipe`; ground WALKTO dropped), player_action_failed (+`reason`). "The player clicked THAT entity" without client Lua — see `DST_MOD/specs/player-events-inventory.md`
 - **world**: new_day, phase_changed, season_changed, rift_closed, nightmare_phase, item_planted, object_activated, machine_toggled
 - **weather**: storm_changed, precipitation, lightning_strike
 - **bosses**: boss_event, boss_killed, toadstool_state_changed

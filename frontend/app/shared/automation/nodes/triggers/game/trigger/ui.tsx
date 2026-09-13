@@ -66,6 +66,9 @@ export const TRIGGER_EVENTS = [
   { value: 'player_startfire', label: '🔥 Player Start Fire', category: 'gathering' },
   { value: 'player_pick', label: '🌸 Player Colheu (do chão)', category: 'gathering' },
   { value: 'player_mine_chop_start', label: '⛏ Começou a Minerar/Cortar', category: 'gathering' },
+  // Interaction — every action on the world (examine/pick up/attack/open/...) with the target
+  { value: 'player_action', label: '👆 Ação do Jogador (clicou/examinou/usou algo)', category: 'interaction' },
+  { value: 'player_action_failed', label: '🚫 Ação Falhou (motivo)', category: 'interaction' },
   // World
   { value: 'new_day', label: '🌅 New Day', category: 'world' },
   { value: 'phase_changed', label: '🌙 Phase Changed', category: 'world' },
