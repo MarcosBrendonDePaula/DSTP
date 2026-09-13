@@ -56,6 +56,10 @@ describe('example: Pet Chester', () => {
     const mem = new FlowMemoryRepository(SERVER)
     expect(Number(mem.get(FLOW_ID, 'pet:KU_1'))).toBe(777)
     expect(String(mem.get(FLOW_ID, 'owner:777'))).toBe('KU_1')
+    // the flow, not the world config, decides the pet's size: 16 slots right after spawn
+    const slotsCmd = commands.find(c => c.type === 'entity_set_slots')?.data
+    expect(Number(slotsCmd?.guid)).toBe(777)
+    expect(Number(slotsCmd?.slots)).toBe(16)
 
     // the pet dies → after the delay a new chester spawns at the owner with the same brain
     await fire('brain_dead', { guid: 777, prefab: 'chester', mode: 'follow', killer_prefab: 'hound' }, 3600)

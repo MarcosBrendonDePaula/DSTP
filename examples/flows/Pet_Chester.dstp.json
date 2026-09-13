@@ -616,6 +616,23 @@
         "x": 1600,
         "y": 560
       }
+    },
+    {
+      "id": "pet_slots",
+      "type": "entity_set_slots",
+      "data": {
+        "action_type": "entity_set_slots",
+        "alias": "pet_slots",
+        "params": {
+          "guid": "{{sr.guid}}",
+          "slots": "16",
+          "token": "pet_slots"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 800
+      }
     }
   ],
   "edges": [
@@ -804,6 +821,11 @@
       "source": "alive_prefab",
       "sourceHandle": "false",
       "target": "respawn2"
+    },
+    {
+      "id": "e40",
+      "source": "mem_owner",
+      "target": "pet_slots"
     }
   ]
 }
