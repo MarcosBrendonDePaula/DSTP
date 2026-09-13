@@ -128,6 +128,13 @@ export const TRIGGER_EVENTS = [
   { value: 'claim_check_result', label: '🛡 Claim Consultada (resultado)', category: 'economy' },
   { value: 'spawn_result', label: '🏗 Spawn Resultado (GUID)', category: 'economy' },
   { value: 'entity_data', label: '🔎 Entidade Lida (resultado)', category: 'economy' },
+  // Flow brain (entity_brain / spawn brain) — the mob reports back
+  { value: 'brain_result', label: '🧠 Cérebro: aplicado (ok/erro)', category: 'economy' },
+  { value: 'brain_arrived', label: '🧠 Cérebro: chegou ao líder', category: 'economy' },
+  { value: 'brain_leader_lost', label: '🧠 Cérebro: líder sumiu', category: 'economy' },
+  { value: 'brain_target_acquired', label: '🧠 Cérebro: alvo adquirido', category: 'economy' },
+  { value: 'brain_target_lost', label: '🧠 Cérebro: alvo perdido', category: 'economy' },
+  { value: 'brain_dead', label: '🧠 Cérebro: mob morreu', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },

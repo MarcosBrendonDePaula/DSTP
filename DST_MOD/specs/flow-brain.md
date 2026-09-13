@@ -39,9 +39,17 @@ self-contained Lua module, policy in the flow.
   target. `guard` scans around the anchor; `attack` around the mob.
 - **Panic first.** `BrainCommon.PanicTrigger` sits above every mode — a burning mob still
   panics, whatever the flow said.
-- **No per-frame events yet.** The flow learns about the mob through the existing channels:
-  `brain_result` (ack), entity events (killed/attacked/frozen…), and the data feed for
-  HP. Candidates for later: `brain_arrived`, `brain_target_lost`.
+- **Events back to the flow** (all carry `guid`, `prefab`, `mode`; exposed as triggers):
+  - `brain_result { token, ok, reason }` — ack of `entity_set_brain` (needs `token`)
+  - `brain_arrived { target_guid|target_userid }` — follow: within `follow_dist` of the
+    leader. **Edge-triggered** (once per approach; re-armed when the leader gets past
+    `follow_max`), so a mob standing by its leader does not spam the flow
+  - `brain_leader_lost { target_userid|target_guid }` — follow: leader gone (once)
+  - `brain_target_acquired` / `brain_target_lost { target_guid, target_prefab, target_userid }`
+    — from the combat component's `newcombattarget` / `droppedtarget`
+  - `brain_dead { killer_guid, killer_prefab, killer_userid }`
+  Installed once with the brain swap (a 0.5 s monitor + 3 listeners), removed on `default`.
+  They are pushed only for flow-brained mobs, so there is no event category to enable.
 
 ## Example — a spider bodyguard that dies with the player's `!recall`
 

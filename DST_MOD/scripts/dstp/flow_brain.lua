@@ -116,6 +116,87 @@ function M.FindTarget(inst, state)
     return nil
 end
 
+-- ── Events back to the flow ─────────────────────────────────────────────────
+-- Every event carries { guid, prefab, mode } + specifics. Pushed through Core.PushEvent
+-- (the normal event queue → next sync), only for flow-brained mobs, so no category gate.
+local function Base(inst)
+    local st = inst._dstp_brain or {}
+    return { guid = inst.GUID, prefab = inst.prefab, mode = st.mode }
+end
+local function Describe(ent)
+    if not ent then return nil, nil, nil end
+    return ent.GUID, ent.prefab, ent.userid
+end
+local function Push(inst, typ, extra)
+    if not (Core and Core.PushEvent) then return end
+    local d = Base(inst)
+    for k, v in pairs(extra or {}) do d[k] = v end
+    Core.PushEvent(typ, d)
+end
+
+--- Periodic monitor (0.5 s): edge-triggered `brain_arrived` (follow: within follow_dist
+--- of the leader) and `brain_leader_lost` (follow: leader gone). Edge = fires once per
+--- transition, so a mob standing next to its leader does not spam the flow.
+function M.Monitor(inst)
+    local st = inst and inst._dstp_brain
+    if not st then return end
+    local mon = inst._dstp_brain_mon or {}
+    inst._dstp_brain_mon = mon
+    if st.mode ~= "follow" then mon.arrived, mon.leader_lost = nil, nil return end
+    local leader = M.ResolveLeader(st)
+    if not leader then
+        if not mon.leader_lost then
+            mon.leader_lost = true
+            Push(inst, "brain_leader_lost", { target_userid = st.target_userid, target_guid = st.target_guid })
+        end
+        mon.arrived = nil
+        return
+    end
+    mon.leader_lost = nil
+    local x, _, z = inst.Transform:GetWorldPosition()
+    local lx, _, lz = leader.Transform:GetWorldPosition()
+    local near = ((x - lx) ^ 2 + (z - lz) ^ 2) <= (st.follow_dist or 4) ^ 2
+    if near and not mon.arrived then
+        mon.arrived = true
+        local g, p, u = Describe(leader)
+        Push(inst, "brain_arrived", { target_guid = g, target_prefab = p, target_userid = u })
+    elseif not near and mon.arrived and ((x - lx) ^ 2 + (z - lz) ^ 2) > ((st.follow_max or 10) ^ 2) then
+        mon.arrived = nil   -- re-arm once the leader got far away again
+    end
+end
+
+local function InstallHooks(inst)
+    local hooks = {}
+    hooks.newtarget = function(_, data)
+        local g, p, u = Describe(data and data.target)
+        Push(inst, "brain_target_acquired", { target_guid = g, target_prefab = p, target_userid = u })
+    end
+    hooks.dropped = function(_, data)
+        local g, p, u = Describe(data and data.target)
+        Push(inst, "brain_target_lost", { target_guid = g, target_prefab = p, target_userid = u })
+    end
+    hooks.death = function(_, data)
+        local g, p, u = Describe(data and data.afflicter)
+        Push(inst, "brain_dead", { killer_guid = g, killer_prefab = p, killer_userid = u })
+    end
+    inst:ListenForEvent("newcombattarget", hooks.newtarget)
+    inst:ListenForEvent("droppedtarget", hooks.dropped)
+    inst:ListenForEvent("death", hooks.death)
+    if inst.DoPeriodicTask then hooks.task = inst:DoPeriodicTask(0.5, function() M.Monitor(inst) end) end
+    return hooks
+end
+
+local function RemoveHooks(inst, hooks)
+    if not hooks then return end
+    if inst.RemoveEventCallback then
+        inst:RemoveEventCallback("newcombattarget", hooks.newtarget)
+        inst:RemoveEventCallback("droppedtarget", hooks.dropped)
+        inst:RemoveEventCallback("death", hooks.death)
+    end
+    if hooks.task and hooks.task.Cancel then hooks.task:Cancel() end
+    inst._dstp_brain_mon = nil
+end
+
 --- Apply a spec: store the state and (once) swap the brain + retarget fn, remembering
 --- the originals so `default` restores the prefab's own behaviour.
 function M.Apply(inst, spec)
@@ -140,7 +221,9 @@ function M.Apply(inst, spec)
         else
             if Core and Core.Log then Core.Log("flow_brain: brain file missing: " .. tostring(BrainClass)) end
         end
+        inst._dstp_brain_orig.hooks = InstallHooks(inst)
     end
+    inst._dstp_brain_mon = nil   -- a mode change re-arms the edge-triggered events
     -- a fresh target scan on every mode change (drop a target the new mode forbids)
     local combat = inst.components and inst.components.combat
     if combat and combat.target and not M.ShouldTarget(inst, combat.target, st, M.ResolveLeader(st)) then
@@ -159,6 +242,7 @@ function M.Restore(inst)
         if o.targetfn then combat:SetRetargetFunction(o.retargetperiod or 3, o.targetfn)
         else combat.targetfn = nil; if combat.retargettask then combat.retargettask:Cancel(); combat.retargettask = nil end end
     end
+    RemoveHooks(inst, o.hooks)
     inst:SetBrain(o.brainfn)
     inst._dstp_brain, inst._dstp_brain_orig = nil, nil
     return true

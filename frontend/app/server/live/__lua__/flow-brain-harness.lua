@@ -40,6 +40,13 @@ local function mkEnt(guid, prefab, x, z, tags, isplayer)
     e.IsValid = function() return true end
     e.HasTag = function(self, t) return set[t] == true end
     e.SetBrain = function(self, fn) self._log[#self._log + 1] = { "SetBrain", fn }; self.brainfn = fn; self.brain = fn and fn() or nil end
+    e._listeners = {}
+    e.ListenForEvent = function(self, name, fn) self._listeners[name] = self._listeners[name] or {}; table.insert(self._listeners[name], fn) end
+    e.RemoveEventCallback = function(self, name, fn)
+        for i, f in ipairs(self._listeners[name] or {}) do if f == fn then table.remove(self._listeners[name], i) end end
+    end
+    e.PushEvent = function(self, name, data) for _, f in ipairs(self._listeners[name] or {}) do f(self, data) end end
+    e.DoPeriodicTask = function(self, period, fn) self._task = { period = period, fn = fn, cancelled = false, Cancel = function(t) t.cancelled = true end }; return self._task end
     e.components = { combat = {
         target = nil,
         SetRetargetFunction = function(self, period, fn) self.retargetperiod, self.targetfn = period, fn; e._log[#e._log + 1] = { "SetRetargetFunction", period } end,
@@ -105,8 +112,32 @@ check("Apply again: no second swap, state updated, forbidden target dropped",
 check("retarget fn: follows the CURRENT state (stay → no target)", pig.components.combat.targetfn(pig) == nil)
 FlowBrain.Apply(pig, { mode = "guard", anchor_x = 0, anchor_z = 0, brain_radius = 8, tags = "hostile" })
 check("retarget fn: guard → the spider", pig.components.combat.targetfn(pig) == spider)
+-- ── events back to the flow ──
+local function countEv(typ) local n = 0 for _, e in ipairs(Core.state.event_queue) do if e.type == typ then n = n + 1 end end return n end
+check("hooks: newcombattarget/droppedtarget/death listeners + a 0.5s monitor installed once",
+    #pig._listeners["newcombattarget"] == 1 and #pig._listeners["droppedtarget"] == 1 and #pig._listeners["death"] == 1 and pig._task and pig._task.period == 0.5)
+pig:PushEvent("newcombattarget", { target = spider })
+local ev = lastEvent("brain_target_acquired")
+check("brain_target_acquired: guid/prefab/mode + target guid/prefab", ev and ev.guid == 100 and ev.prefab == "pigman" and ev.mode == "guard" and ev.target_guid == 200 and ev.target_prefab == "spider")
+pig:PushEvent("droppedtarget", { target = spider })
+check("brain_target_lost pushed", lastEvent("brain_target_lost") and lastEvent("brain_target_lost").target_guid == 200)
+-- follow monitor: far (pig 0,0 / player 5,5 → 7.07 > follow_dist 4) → nothing; near → arrived ONCE
+FlowBrain.Apply(pig, { mode = "follow", target = "KU_1" })
+pig._task.fn()
+check("monitor: far from the leader → no brain_arrived", countEv("brain_arrived") == 0)
+pig.Transform.SetPosition(pig.Transform, 3, 0, 3)
+pig._task.fn(); pig._task.fn()
+check("monitor: within follow_dist → brain_arrived exactly once (edge-triggered)", countEv("brain_arrived") == 1 and lastEvent("brain_arrived").target_userid == "KU_1")
+players[1] = nil
+pig._task.fn(); pig._task.fn()
+check("monitor: leader gone → brain_leader_lost once", countEv("brain_leader_lost") == 1 and lastEvent("brain_leader_lost").target_userid == "KU_1")
+players[1] = { userid = "KU_1", IsValid = function() return true end, Transform = { GetWorldPosition = function() return 5, 0, 5 end }, isplayer = true, HasTag = function(_, t) return t == "player" end }
+pig:PushEvent("death", { afflicter = spider })
+check("brain_dead with the killer", lastEvent("brain_dead") and lastEvent("brain_dead").killer_prefab == "spider")
+
 ok = FlowBrain.Apply(pig, { mode = "default" })
 check("default: original brain restored, state cleared", ok == true and pig.brainfn == orig and pig._dstp_brain == nil and pig._dstp_brain_orig == nil)
+check("default: listeners removed and monitor cancelled", #pig._listeners["newcombattarget"] == 0 and #pig._listeners["death"] == 0 and pig._task.cancelled == true)
 check("Restore on a plain mob is a no-op error", select(2, FlowBrain.Restore(rabbit)) == "not_flow_brained")
 
 -- ── command path ──
