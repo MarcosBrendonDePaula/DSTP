@@ -108,4 +108,21 @@ describe('example: Pet Chester', () => {
     await fire('brain_restored', { guid: 5, id: 'e_x', prefab: 'spider', mode: 'stay' })
     expect(String(mem.get(FLOW_ID, 'pet:KU_1'))).toBe('e_pet1')
   })
+
+  it('!petslots N sets the remembered pet size by stable id; the ack PMs the player', async () => {
+    const mem = new FlowMemoryRepository(SERVER)
+    mem.set(FLOW_ID, 'pet:KU_1', 'e_pet1')
+    await fire('chat_message', { userid: 'KU_1', name: 'Joe', message: '!petslots 25' })
+    const d = commands.find(c => c.type === 'entity_set_slots')?.data
+    expect(String(d?.id)).toBe('e_pet1')
+    expect(Number(d?.slots)).toBe(25)
+    expect(d?.token).toBe('petslots:KU_1')
+    await fire('entity_slots', { token: 'petslots:KU_1', ok: true, slots: 25, guid: 1 })
+    expect(String(commands.find(c => c.type === 'private_message')?.data?.message)).toContain('25')
+    commands.length = 0
+    mem.delete(FLOW_ID, 'pet:KU_1')
+    await fire('chat_message', { userid: 'KU_1', message: '!petslots 25' })
+    expect(commands.find(c => c.type === 'entity_set_slots')).toBeUndefined()
+    expect(String(commands.find(c => c.type === 'private_message')?.data?.message)).toContain('!pet')
+  })
 })
