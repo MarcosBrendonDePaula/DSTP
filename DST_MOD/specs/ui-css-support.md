@@ -103,3 +103,24 @@ Anything not in this list is **dropped** (logged once in DEBUG), never errors.
 We implement the **CSS-shaped subset the DST engine can actually draw**, with CSS names
 so authors (and the AI generator) reason in CSS terms. We do NOT promise full CSS — the
 matrix above is the contract. Impossible props are documented, not faked badly.
+
+## Box model — how HTML/CSS numbers map to the game textures
+
+The renderer (`ui_widgets.lua`) and the editor preview (`UIPreview.tsx`) share ONE box
+model; when a panel looks different in-game than in the preview, one of these numbers
+drifted. All values are HUD px at the 1280×720 virtual resolution (`SCALEMODE_PROPORTIONAL`).
+
+| Node | Rule |
+|------|------|
+| `panel` (fixed: `width` **and** `height`) | frame `panel_fill_tiny.tex` = the box; **padding 20** every side; a `title` reserves a **title strip of `title_size + 16` px** (default 24 → 40) at the top, content shifts down by half of it; declared size is a **minimum** — the box grows to `content + 40 (+ strip)` |
+| `panel` (auto: no `height`) | **padding 28**; min **160 × 80**; same title strip |
+| `panel` `closeable` | the X (`close.tex` at 0.4) sits at `(pw/2 − 18, ph/2 − 18)`, hit box 64×64 → leave ~64 px free on the right of the title bar |
+| `col` / `row` | no implicit padding; `gap` default 8 (col) / 12 (row); `padding` is explicit |
+| `button` | `button_carny_long_*.tex` scaled to `width × height` (default 160 × 44); label `size` default 20 |
+| `text` | measured by the engine (`GetRegionSize`); a `width` gives a fixed region + word wrap |
+| `icon` | inventory image scaled to `size` (square) |
+| `bar` | `width × height` (default 200 × 16) |
+
+Rule of thumb for a compact panel: `height ≥ 40 (padding) + 40 (title) + content`.
+The wallet (`title`, a 26-px row, a 30-px button, gap 6) needs **142**, not 64 — the
+mod grows it, so the declared 64 was only hiding the overlap.

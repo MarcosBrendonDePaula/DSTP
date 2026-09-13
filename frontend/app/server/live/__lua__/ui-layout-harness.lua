@@ -220,12 +220,13 @@ UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "flat", tree =
     tag = "panel", title = "Carteira", width = 200, height = 84, closeable = false, children = {
         { tag = "text", text = "x" } },
 } })
+-- width 200 kept; height = max(84, text 20 + padding 40 + title strip 40) = 100.
 local has200x84 = false
 for _, w in ipairs(created) do
     local sz = rawget(w, "size")
-    if w.kind == "Image" and type(sz) == "table" and sz[1] == 200 and sz[2] == 84 then has200x84 = true end
+    if w.kind == "Image" and type(sz) == "table" and sz[1] == 200 and sz[2] == 100 then has200x84 = true end
 end
-check("element panel with flat width/height (no style) renders fixed 200x84", has200x84)
+check("element panel with flat width/height (no style) renders fixed 200 wide, grown to 100 for the title strip", has200x84)
 
 -- ── task 1: border with only a width (HTML `border:2`) draws a frame; align:stretch ──
 -- A col 200x60 (pad 0) with border=2 → a square.tex frame sized 204x64 behind the bg.

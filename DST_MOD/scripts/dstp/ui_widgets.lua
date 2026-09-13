@@ -1320,13 +1320,18 @@ RenderNodeImpl = function(node, parent, ctx)
         local fixed = fw ~= nil and fh ~= nil
         local pw, ph
         local title_txt, body_txt
+        -- Title STRIP: a titled panel reserves `title_h` at the top (title font + 16),
+        -- the content box shrinks by it and shifts down by half, and the min-size growth
+        -- includes it — so the title never draws over the first row (in-game 2026-09-12:
+        -- the wallet's "Carteira" sat on top of its coin line). The title is positioned
+        -- from the FINAL height, after growth. `title_h` overrides the strip height.
+        local title_size = tonumber(node.title_size) or 24
+        local title_h = 0
+        if node.title ~= nil and tostring(node.title) ~= "" then
+            title_h = tonumber(node.title_h) or (title_size + 16)
+        end
         if fixed then
             pw, ph = fw, fh
-            if node.title then
-                title_txt = holder:AddChild(Text(_G.TITLEFONT, tonumber(node.title_size) or 24, tostring(node.title)))
-                title_txt:SetColour(1, 1, 0.8, 1)
-                title_txt:SetPosition(0, ph / 2 - 25, 0)
-            end
             if node.body then
                 body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, tonumber(node.body_size) or 18, tostring(node.body)))
                 body_txt:SetColour(1, 1, 1, 1)
@@ -1341,23 +1346,24 @@ RenderNodeImpl = function(node, parent, ctx)
             -- width:100% resolve against the PANEL (pw), not the screen (top-down width).
             local content = holder:AddChild(Widget("content"))
             local prevPW, prevPH = ctx.parent_w, ctx.parent_h
-            ctx.parent_w, ctx.parent_h = pw - 40, ph - 40
+            ctx.parent_w, ctx.parent_h = pw - 40, ph - 40 - title_h
             local ccw, cch = 0, 0
             if node.mode == "canvas" and HasChildXY(node) then CanvasChildren(node, content, ctx)
             elseif node.mode == "grid" then GridChildren(node, content, ctx)
             else
-                -- Lay the children out in the panel's CONTENT box (pw-40 × ph-40), not in
-                -- the panel's own box: LayoutChildren reads the node's width/height as the
+                -- Lay the children out in the panel's CONTENT box (pw-40 × ph-40-title), not
+                -- in the panel's own box: LayoutChildren reads the node's width/height as the
                 -- track, so handing it the panel node made the content report the FULL
                 -- panel width, and the "+40 grow" below inflated every fixed panel by 40px
                 -- (a 200x84 wallet rendered 240x124).
-                local inner = setmetatable({ width = pw - 40, height = ph - 40, width_ref = nil, height_ref = nil }, { __index = node })
+                local inner = setmetatable({ width = pw - 40, height = ph - 40 - title_h, width_ref = nil, height_ref = nil }, { __index = node })
                 ccw, cch = LayoutChildren(inner, content, ctx, "y")
             end
             ctx.parent_w, ctx.parent_h = prevPW, prevPH
             -- The fixed size is a MINIMUM: grow the panel so its content never spills out.
             pw = math.max(pw, (ccw or 0) + 40)
-            ph = math.max(ph, (cch or 0) + 40)
+            ph = math.max(ph, (cch or 0) + 40 + title_h)
+            if title_h > 0 then content:SetPosition(0, -title_h / 2, 0) end
         else
             local content = holder:AddChild(Widget("content"))
             local cw, ch
@@ -1366,7 +1372,14 @@ RenderNodeImpl = function(node, parent, ctx)
             else cw, ch = LayoutChildren(node, content, ctx, "y") end
             local padX, padY = 28, 28
             pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
-            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2)
+            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2 + title_h)
+            if title_h > 0 then content:SetPosition(0, -title_h / 2, 0) end
+        end
+        -- Title text: centred in the reserved strip, from the FINAL size (both modes).
+        if title_h > 0 then
+            title_txt = holder:AddChild(Text(_G.TITLEFONT, title_size, tostring(node.title)))
+            title_txt:SetColour(1, 1, 0.8, 1)
+            title_txt:SetPosition(0, ph / 2 - title_h / 2, 0)
         end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()

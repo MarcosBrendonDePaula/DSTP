@@ -199,16 +199,29 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
     // auto-size to content. So adjusting width/height reflects in the preview.
     const pw = Number(node.width) || undefined
     const ph = Number(node.height) || undefined
+    // Mirror the mod's panel box model (ui_widgets.lua `panel`): fixed mode pads 20 on
+    // every side, auto mode 28 (min 160x80); a title reserves a strip of title_size+16
+    // (default 40) at the top; the declared size is a MINIMUM (the box grows to fit).
+    const fixed = pw != null && ph != null
+    const pad = fixed ? 20 : 28
+    const titleSize = Number(node.title_size) || 24
+    const titleH = node.title ? (Number(node.title_h) || titleSize + 16) : 0
+    const gap = Number(node.gap) || 8
     return (
       <div onClick={pick} style={{
         position: 'relative', background: 'rgba(20,20,26,0.95)',
         border: listOutline || '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
-        padding: isCanvas ? 0 : '10px 12px', minWidth: 120, boxShadow: ring,
-        width: pw, height: ph,
-        display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        padding: isCanvas ? 0 : `${pad}px`, paddingTop: isCanvas ? 0 : pad + titleH,
+        minWidth: fixed ? pw : 160, minHeight: fixed ? ph : 80, boxShadow: ring,
+        width: isCanvas ? pw : undefined, height: isCanvas ? ph : undefined,
+        boxSizing: 'border-box',
+        display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap,
       }}>
         {listBadge}
-        {!isCanvas && node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{tmpl(node.title)}</div>}
+        {!isCanvas && node.title && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: titleH, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: titleSize * 0.7, pointerEvents: 'none' }}>{tmpl(node.title)}</div>
+        )}
         {!isCanvas && node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{tmpl(node.body)}</div>}
         {isCanvas ? canvasChildViews(node.children) : childViews(node.children)}
         {isCanvas && node.title && <div style={{ position: 'absolute', top: 4, left: 8, color: 'rgba(255,255,210,0.9)', fontWeight: 600, fontSize: 13, pointerEvents: 'none' }}>{tmpl(node.title)}</div>}
