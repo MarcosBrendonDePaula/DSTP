@@ -1,5 +1,5 @@
 {
-  "name": "Pet inicial — um Chester que segue cada jogador (cérebro pelo flow, renasce ao morrer)",
+  "name": "Pet inicial — Chester coletor por jogador (cérebro pelo flow; itens preservados ao sair; renasce ao morrer)",
   "version": "2.0",
   "exportedAt": "2026-09-12T00:00:00.000Z",
   "nodes": [
@@ -149,36 +149,6 @@
       "position": {
         "x": 800,
         "y": 320
-      }
-    },
-    {
-      "id": "kill_pet",
-      "type": "entity_kill",
-      "data": {
-        "action_type": "entity_kill",
-        "alias": "kill",
-        "params": {
-          "guid": "{{mem.value}}"
-        }
-      },
-      "position": {
-        "x": 800,
-        "y": 480
-      }
-    },
-    {
-      "id": "forget_pet",
-      "type": "memory",
-      "data": {
-        "action": "delete",
-        "alias": "forget",
-        "params": {
-          "key": "pet:{{left.userid}}"
-        }
-      },
-      "position": {
-        "x": 800,
-        "y": 640
       }
     },
     {
@@ -402,14 +372,167 @@
         "x": -800,
         "y": 800
       }
+    },
+    {
+      "id": "mem0",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem0",
+        "params": {
+          "key": "pet:{{p.userid}}"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 80
+      }
+    },
+    {
+      "id": "has_mem0",
+      "type": "condition",
+      "data": {
+        "field": "mem0.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_mem0"
+      },
+      "position": {
+        "x": 0,
+        "y": 120
+      }
+    },
+    {
+      "id": "probe",
+      "type": "get_entity",
+      "data": {
+        "action_type": "get_entity",
+        "alias": "probe",
+        "params": {
+          "guid": "{{mem0.value}}",
+          "token": "pet:{{p.userid}}"
+        }
+      },
+      "position": {
+        "x": 150,
+        "y": 160
+      }
+    },
+    {
+      "id": "t_probe",
+      "type": "trigger",
+      "data": {
+        "event_type": "entity_data",
+        "alias": "ed"
+      },
+      "position": {
+        "x": 1600,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_probe",
+      "type": "condition",
+      "data": {
+        "field": "ed.token",
+        "operator": "starts_with",
+        "value": "pet:",
+        "alias": "is_probe"
+      },
+      "position": {
+        "x": 1600,
+        "y": 160
+      }
+    },
+    {
+      "id": "tok2",
+      "type": "split",
+      "data": {
+        "alias": "tk2",
+        "params": {
+          "value": "{{ed.token}}",
+          "separator": ":",
+          "trim": "true"
+        }
+      },
+      "position": {
+        "x": 1600,
+        "y": 320
+      }
+    },
+    {
+      "id": "alive",
+      "type": "condition",
+      "data": {
+        "field": "ed.found",
+        "operator": "equals",
+        "value": "true",
+        "alias": "alive"
+      },
+      "position": {
+        "x": 1600,
+        "y": 480
+      }
+    },
+    {
+      "id": "rebind",
+      "type": "entity_brain",
+      "data": {
+        "action_type": "entity_set_brain",
+        "alias": "rebind",
+        "params": {
+          "guid": "{{ed.guid}}",
+          "mode": "collect",
+          "target": "{{tk2.part2}}",
+          "follow_min": "2",
+          "follow_dist": "3",
+          "follow_max": "6"
+        }
+      },
+      "position": {
+        "x": 1500,
+        "y": 640
+      }
+    },
+    {
+      "id": "respawn2",
+      "type": "spawn_at_player",
+      "data": {
+        "action_type": "spawn_at_player",
+        "alias": "respawn2",
+        "params": {
+          "userid": "{{tk2.part2}}",
+          "prefab": "chester",
+          "count": "1",
+          "offset_x": "2",
+          "offset_z": "0",
+          "token": "pet:{{tk2.part2}}",
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{tk2.part2}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+        }
+      },
+      "position": {
+        "x": 1750,
+        "y": 640
+      }
+    },
+    {
+      "id": "park_pet",
+      "type": "entity_brain",
+      "data": {
+        "action_type": "entity_set_brain",
+        "alias": "park",
+        "params": {
+          "guid": "{{mem.value}}",
+          "mode": "stay"
+        }
+      },
+      "position": {
+        "x": 800,
+        "y": 480
+      }
     }
   ],
   "edges": [
-    {
-      "id": "e1",
-      "source": "t_spawn",
-      "target": "spawn_pet"
-    },
     {
       "id": "e2",
       "source": "t_result",
@@ -440,17 +563,6 @@
       "id": "e7",
       "source": "read_pet",
       "target": "has_pet"
-    },
-    {
-      "id": "e8",
-      "source": "has_pet",
-      "sourceHandle": "true",
-      "target": "kill_pet"
-    },
-    {
-      "id": "e9",
-      "source": "kill_pet",
-      "target": "forget_pet"
     },
     {
       "id": "e10",
@@ -516,6 +628,62 @@
       "id": "e21",
       "source": "kill_pet2",
       "target": "forget_pet2"
+    },
+    {
+      "id": "e1",
+      "source": "t_spawn",
+      "target": "mem0"
+    },
+    {
+      "id": "e1b",
+      "source": "mem0",
+      "target": "has_mem0"
+    },
+    {
+      "id": "e1c",
+      "source": "has_mem0",
+      "sourceHandle": "true",
+      "target": "probe"
+    },
+    {
+      "id": "e1d",
+      "source": "has_mem0",
+      "sourceHandle": "false",
+      "target": "spawn_pet"
+    },
+    {
+      "id": "e8",
+      "source": "has_pet",
+      "sourceHandle": "true",
+      "target": "park_pet"
+    },
+    {
+      "id": "e22",
+      "source": "t_probe",
+      "target": "is_probe"
+    },
+    {
+      "id": "e23",
+      "source": "is_probe",
+      "sourceHandle": "true",
+      "target": "tok2"
+    },
+    {
+      "id": "e24",
+      "source": "tok2",
+      "target": "alive"
+    },
+    {
+      "id": "e25",
+      "source": "alive",
+      "sourceHandle": "true",
+      "target": "rebind"
+    },
+    {
+      "id": "e26",
+      "source": "alive",
+      "sourceHandle": "false",
+      "target": "respawn2"
     }
   ]
 }

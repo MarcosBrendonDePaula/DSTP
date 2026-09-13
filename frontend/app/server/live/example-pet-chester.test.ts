@@ -42,7 +42,7 @@ const fire = async (type: string, data: any, ms = 150) => { engine.evaluateEvent
 const spawns = () => commands.filter(c => c.type === 'spawn_at_player').map(c => c.data)
 
 describe('example: Pet Chester', () => {
-  it('spawns a flow-brained chester that follows the joining player', async () => {
+  it('first join (no memory) spawns a flow-brained chester in collect mode', async () => {
     await fire('player_spawn', { userid: 'KU_1', name: 'Joe' })
     const s = spawns()
     expect(s).toHaveLength(1)
@@ -68,10 +68,25 @@ describe('example: Pet Chester', () => {
     await fire('brain_dead', { guid: 5, prefab: 'spider', mode: 'attack' })
     expect(spawns()).toHaveLength(1)
 
-    // the owner leaves → the pet is killed and forgotten
+    // the owner leaves → the pet is PARKED (stay), items kept, memory kept
     await fire('player_left', { userid: 'KU_1' })
-    const kill = commands.find(c => c.type === 'entity_kill')?.data
-    expect(Number(kill?.guid)).toBe(777)
-    expect(mem.get(FLOW_ID, 'pet:KU_1')).toBeFalsy()
+    const park = commands.find(c => c.type === 'entity_set_brain')?.data
+    expect(park).toMatchObject({ guid: 777, mode: 'stay' })
+    expect(commands.find(c => c.type === 'entity_kill')).toBeUndefined()
+    expect(Number(mem.get(FLOW_ID, 'pet:KU_1'))).toBe(777)
+
+    // the owner comes back → the flow probes the remembered pet (get_entity) instead of spawning
+    commands.length = 0
+    await fire('player_spawn', { userid: 'KU_1', name: 'Joe' })
+    expect(commands.find(c => c.type === 'get_entity')?.data).toMatchObject({ guid: 777, token: 'pet:KU_1' })
+    expect(spawns()).toHaveLength(0)
+    // still alive → re-bind collect mode on the same pet
+    await fire('entity_data', { token: 'pet:KU_1', found: true, guid: 777, prefab: 'chester' })
+    expect(commands.filter(c => c.type === 'entity_set_brain').pop()?.data).toMatchObject({ guid: 777, mode: 'collect', target: 'KU_1' })
+    expect(spawns()).toHaveLength(0)
+    // gone (stale guid) → spawn a fresh one
+    await fire('entity_data', { token: 'pet:KU_1', found: false, reason: 'gone' })
+    expect(spawns()).toHaveLength(1)
+    expect(spawns()[0]).toMatchObject({ userid: 'KU_1', prefab: 'chester', token: 'pet:KU_1' })
   })
 })
