@@ -138,6 +138,7 @@ export const TRIGGER_EVENTS = [
   { value: 'brain_target_acquired', label: '🧠 Cérebro: alvo adquirido', category: 'economy' },
   { value: 'brain_target_lost', label: '🧠 Cérebro: alvo perdido', category: 'economy' },
   { value: 'brain_dead', label: '🧠 Cérebro: mob morreu', category: 'economy' },
+  { value: 'brain_collected', label: '🧠 Cérebro: coletou item', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },

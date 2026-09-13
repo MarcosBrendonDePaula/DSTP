@@ -18,8 +18,11 @@
 local M = {}
 local _G, Core
 local BRAIN_FILE = "brains/dstp_flowbrain"
+local Push   -- forward decl: defined in the events section, used by Collect above it
 
-local MODES = { follow = true, guard = true, attack = true, flee = true, wander = true, stay = true, default = true }
+--   collect — pick up ground items within `radius` into the mob's own container
+--             (`tags`/`prefabs` filter what); follows `target` when nothing to pick
+local MODES = { follow = true, guard = true, attack = true, flee = true, wander = true, stay = true, default = true, collect = true }
 
 local function list(v)
     if type(v) == "table" then return v end
@@ -52,6 +55,7 @@ function M.Normalize(spec)
     st.follow_dist = tonumber(spec.follow_dist) or 4
     st.follow_max = tonumber(spec.follow_max) or 6   -- start following at 6 (Klei-style 10-12 felt like "does not follow")
     if (mode == "follow") and not (st.target_userid or st.target_guid) then return nil, "follow_needs_target" end
+    if mode == "collect" then st.radius = tonumber(spec.brain_radius or spec.radius) or 8 end
     if (mode == "guard" or mode == "wander") and not (st.x and st.z) then return nil, "needs_anchor" end
     return st
 end
@@ -116,6 +120,70 @@ function M.FindTarget(inst, state)
     return nil
 end
 
+-- ── collect: ground items → the mob's own container ─────────────────────────
+--- Pure predicate: can `inst` pick `item` up right now under `state`?
+function M.CanCollect(inst, item, state)
+    if not (inst and item and state) or item == inst then return false end
+    if item.IsValid and not item:IsValid() then return false end
+    local ii = item.components and item.components.inventoryitem
+    if not ii or ii.canbepickedup == false then return false end
+    if ii.owner ~= nil or (ii.IsHeld and ii:IsHeld()) then return false end       -- someone holds it
+    if item.components and item.components.burnable and item.components.burnable.IsBurning and item.components.burnable:IsBurning() then return false end
+    local c = inst.components and inst.components.container
+    if not c then return false end
+    if c.IsFull and c:IsFull() then return false end
+    if c.CanTakeItemInSlot and not c:CanTakeItemInSlot(item) then return false end
+    if state.tags then
+        local ok = false
+        for _, t in ipairs(state.tags) do if item.HasTag and item:HasTag(t) then ok = true break end end
+        if not ok then return false end
+    end
+    if state.prefabs then
+        local ok = false
+        for _, p in ipairs(state.prefabs) do if item.prefab == p then ok = true break end end
+        if not ok then return false end
+    end
+    return true
+end
+
+--- Nearest collectable ground item within `radius` (or nil).
+function M.FindPickup(inst, state)
+    if not (inst and state and _G and _G.TheSim and inst.Transform) then return nil end
+    local x, _, z = inst.Transform:GetWorldPosition()
+    -- FindEntities returns nearest-first
+    local ents = _G.TheSim:FindEntities(x, 0, z, state.radius or 12, { "_inventoryitem" }, { "INLIMBO", "NOCLICK", "fire", "heavy", "irreplaceable" }, nil) or {}
+    for _, e in ipairs(ents) do
+        if M.CanCollect(inst, e, state) then return e end
+    end
+    return nil
+end
+
+--- Put `item` into the mob's container (called on arrival). Reports `brain_collected`.
+function M.Collect(inst, item)
+    local st = inst and inst._dstp_brain
+    if not (st and M.CanCollect(inst, item, st)) then return false end
+    local count = 1
+    if item.components.stackable and item.components.stackable.StackSize then count = item.components.stackable:StackSize() end
+    local prefab = item.prefab
+    local ok = inst.components.container:GiveItem(item)
+    if ok ~= false then
+        Push(inst, "brain_collected", { item = prefab, count = count })
+        return true
+    end
+    return false
+end
+
+--- For the brain's DoAction: a WALKTO to the nearest pickup that collects on arrival.
+function M.CollectAction(inst)
+    local st = inst and inst._dstp_brain
+    if not (st and st.mode == "collect") then return nil end
+    local item = M.FindPickup(inst, st)
+    if not item then return nil end
+    local ba = _G.BufferedAction(inst, item, _G.ACTIONS.WALKTO, nil, nil, nil, 1.5)
+    ba:AddSuccessAction(function() M.Collect(inst, item) end)
+    return ba
+end
+
 -- ── Events back to the flow ─────────────────────────────────────────────────
 -- Every event carries { guid, prefab, mode } + specifics. Pushed through Core.PushEvent
 -- (the normal event queue → next sync), only for flow-brained mobs, so no category gate.
@@ -127,7 +195,7 @@ local function Describe(ent)
     if not ent then return nil, nil, nil end
     return ent.GUID, ent.prefab, ent.userid
 end
-local function Push(inst, typ, extra)
+Push = function(inst, typ, extra)
     if not (Core and Core.PushEvent) then return end
     local d = Base(inst)
     for k, v in pairs(extra or {}) do d[k] = v end
@@ -142,7 +210,8 @@ function M.Monitor(inst)
     if not st then return end
     local mon = inst._dstp_brain_mon or {}
     inst._dstp_brain_mon = mon
-    if st.mode ~= "follow" then mon.arrived, mon.leader_lost = nil, nil return end
+    if st.mode ~= "follow" and st.mode ~= "collect" then mon.arrived, mon.leader_lost = nil, nil return end
+    if st.mode == "collect" and not (st.target_userid or st.target_guid) then return end
     local leader = M.ResolveLeader(st)
     if not leader then
         if not mon.leader_lost then

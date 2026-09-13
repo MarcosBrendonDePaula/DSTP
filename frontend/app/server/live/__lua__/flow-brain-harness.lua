@@ -140,6 +140,52 @@ check("default: original brain restored, state cleared", ok == true and pig.brai
 check("default: listeners removed and monitor cancelled", #pig._listeners["newcombattarget"] == 0 and #pig._listeners["death"] == 0 and pig._task.cancelled == true)
 check("Restore on a plain mob is a no-op error", select(2, FlowBrain.Restore(rabbit)) == "not_flow_brained")
 
+-- ── collect ──
+mock_G.BufferedAction = function(doer, target, action, inv, pos, recipe, dist)
+    local ba = { doer = doer, target = target, action = action, distance = dist, onsuccess = {} }
+    ba.AddSuccessAction = function(self, fn) self.onsuccess[#self.onsuccess + 1] = fn end
+    ba.Succeed = function(self) for _, f in ipairs(self.onsuccess) do f() end end
+    return ba
+end
+mock_G.ACTIONS = { WALKTO = { id = "WALKTO" } }
+local given = {}
+local chester = mkEnt(600, "chester", 0, 0, {})
+chester.components.container = { full = false, IsFull = function(self) return self.full end, GiveItem = function(self, item) given[#given + 1] = item; return true end }
+local function mkItem(guid, prefab, x, z, opts)
+    opts = opts or {}
+    local it = mkEnt(guid, prefab, x, z, opts.tags or {})
+    it.components = { inventoryitem = { canbepickedup = opts.canbepickedup ~= false, owner = opts.owner } }
+    if opts.stack then it.components.stackable = { StackSize = function() return opts.stack end } end
+    if opts.burning then it.components.burnable = { IsBurning = function() return true end } end
+    return it
+end
+local log = mkItem(601, "log", 2, 0, { stack = 3 })
+local held = mkItem(602, "rocks", 1, 0, { owner = players[1] })
+local hot = mkItem(603, "log", 1.5, 0, { burning = true })
+local far = mkItem(604, "log", 40, 0, {})
+local flint = mkItem(605, "flint", 3, 0, { tags = { "molebait" } })
+ok = FlowBrain.Apply(chester, { mode = "collect", target = "KU_1" })
+local cst = FlowBrain.GetState(chester)
+check("collect: normalises with radius 8 + leader kept", ok == true and cst.mode == "collect" and cst.radius == 8 and cst.target_userid == "KU_1")
+check("CanCollect: a free ground log → yes", FlowBrain.CanCollect(chester, log, cst) == true)
+check("CanCollect: a held item → no", FlowBrain.CanCollect(chester, held, cst) == false)
+check("CanCollect: a burning item → no", FlowBrain.CanCollect(chester, hot, cst) == false)
+check("CanCollect: the spider (no inventoryitem) → no", FlowBrain.CanCollect(chester, spider, cst) == false)
+-- FindEntities mock returns in table order; the harness only needs "some collectable within radius"
+local pick = FlowBrain.FindPickup(chester, cst)
+check("FindPickup: a collectable within 8 (not the far one, not the held/burning)", pick ~= nil and pick ~= far and pick ~= held and pick ~= hot)
+local ba = FlowBrain.CollectAction(chester)
+check("CollectAction: a WALKTO BufferedAction to the pickup, arrive at 1.5", ba and ba.action.id == "WALKTO" and ba.distance == 1.5 and ba.target == pick)
+ba:Succeed()
+check("arrival → container:GiveItem + brain_collected {item,count}", #given == 1 and given[1] == pick and lastEvent("brain_collected") and lastEvent("brain_collected").item == pick.prefab)
+chester.components.container.full = true
+check("container full → nothing to collect", FlowBrain.CollectAction(chester) == nil)
+chester.components.container.full = false
+FlowBrain.Apply(chester, { mode = "collect", prefabs = "flint" })
+check("collect with a prefabs filter: only flint", FlowBrain.FindPickup(chester, FlowBrain.GetState(chester)) == flint)
+FlowBrain.Apply(chester, { mode = "stay" })
+check("CollectAction outside collect mode → nil", FlowBrain.CollectAction(chester) == nil)
+
 -- ── command path ──
 run("entity_set_brain", { guid = 100, mode = "follow", target = "KU_1", token = "b1" })
 local ev = lastEvent("brain_result")

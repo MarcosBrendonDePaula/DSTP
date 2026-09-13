@@ -8,6 +8,7 @@ require "behaviours/wander"
 require "behaviours/runaway"
 require "behaviours/leash"
 require "behaviours/standstill"
+require "behaviours/doaction"
 
 local BrainCommon = require "brains/braincommon"
 local FlowBrain = require "dstp/flow_brain"
@@ -52,6 +53,20 @@ function DSTPFlowBrain:OnStart()
                     function() return state(inst).follow_min end,
                     function() return state(inst).follow_dist end,
                     function() return state(inst).follow_max end, true),
+                StandStill(inst),
+            }, .25)),
+
+        -- collect: walk to the nearest pickup and stash it (FlowBrain.CollectAction gives
+        -- a WALKTO whose success action stores the item); nothing to pick → follow the
+        -- leader (if any) → stand still
+        WhileNode(function() return mode(inst) == "collect" end, "FlowCollect",
+            PriorityNode({
+                DoAction(inst, function() return FlowBrain.CollectAction(inst) end, "Collect", true, 12),
+                WhileNode(function() return leader(inst) ~= nil end, "CollectFollow",
+                    Follow(inst, function() return leader(inst) end,
+                        function() return state(inst).follow_min end,
+                        function() return state(inst).follow_dist end,
+                        function() return state(inst).follow_max end, true)),
                 StandStill(inst),
             }, .25)),
 

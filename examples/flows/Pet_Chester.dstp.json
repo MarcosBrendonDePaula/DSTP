@@ -28,7 +28,7 @@
           "offset_x": "2",
           "offset_z": "0",
           "token": "pet:{{p.userid}}",
-          "brain": "{\"mode\":\"follow\",\"target\":\"{{p.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{p.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
         }
       },
       "position": {
@@ -263,7 +263,7 @@
           "offset_x": "2",
           "offset_z": "0",
           "token": "pet:{{own.value}}",
-          "brain": "{\"mode\":\"follow\",\"target\":\"{{own.value}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{own.value}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
         }
       },
       "position": {
@@ -310,7 +310,7 @@
           "offset_x": "2",
           "offset_z": "0",
           "token": "pet:{{chat.userid}}",
-          "brain": "{\"mode\":\"follow\",\"target\":\"{{chat.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{chat.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
         }
       },
       "position": {

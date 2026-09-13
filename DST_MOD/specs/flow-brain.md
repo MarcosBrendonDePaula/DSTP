@@ -20,7 +20,8 @@ self-contained Lua module, policy in the flow.
 
 | Key | Meaning |
 |-----|---------|
-| `mode` | `follow` · `guard` · `attack` · `flee` · `wander` · `stay` · `default` (restore the prefab's own brain) |
+| `mode` | `follow` · `guard` · `attack` · `flee` · `wander` · `stay` · `collect` · `default` (restore the prefab's own brain) |
+| `collect` | the mob must have a `container` (Chester, Hutch, Packim…): walks to the nearest free ground item within `brain_radius` (default 8) and stores it (`Container:GiveItem`); `tags`/`prefabs` filter what; skips held, burning, `heavy`, `irreplaceable`, `fire` items and stops when full. With a `target` it follows the leader when nothing is left to pick. Emits `brain_collected { item, count }` |
 | `target` | `follow`: a player userid (`KU_…`) or an entity guid (number) |
 | `anchor_x`, `anchor_z` | `guard` / `wander`: the point (required) |
 | `brain_radius` | action radius (default 12): guard zone, attack scan, flee "see" distance, wander range |

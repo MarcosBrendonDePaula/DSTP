@@ -48,7 +48,7 @@ describe('example: Pet Chester', () => {
     expect(s).toHaveLength(1)
     expect(s[0]).toMatchObject({ userid: 'KU_1', prefab: 'chester', token: 'pet:KU_1' })
     const brain = JSON.parse(s[0].brain)
-    expect(brain).toMatchObject({ mode: 'follow', target: 'KU_1' })
+    expect(brain).toMatchObject({ mode: 'collect', target: 'KU_1' })
   })
 
   it('spawn_result → remembers pet:<userid> and owner:<guid>; brain_dead → respawn for the owner; player_left → kill + forget', async () => {
