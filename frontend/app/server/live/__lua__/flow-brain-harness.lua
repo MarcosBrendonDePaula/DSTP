@@ -157,5 +157,6 @@ run("spawn_prefab", { prefab = "spider", x = 1, z = 1, token = "sp", brain = { m
 local born = ENTS[500]
 check("spawn_prefab brain: the spawned mob is flow-brained on birth", born and FlowBrain.GetState(born) and FlowBrain.GetState(born).mode == "follow" and count(born, "SetBrain") == 1)
 check("spawn_result still emitted", lastEvent("spawn_result") and lastEvent("spawn_result").guid == 500)
+check("spawn with brain + token also acks with brain_result", lastEvent("brain_result") and lastEvent("brain_result").token == "sp" and lastEvent("brain_result").ok == true and lastEvent("brain_result").mode == "follow")
 
 return C.report()

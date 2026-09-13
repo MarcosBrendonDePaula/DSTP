@@ -1011,6 +1011,11 @@ function Commands.RegisterAll(core)
         if type(spec) == "table" and core.FlowBrain and ent then
             local ok, err = core.FlowBrain.Apply(ent, spec)
             if not ok then LogError("spawn brain: " .. tostring(err)) end
+            -- ack like entity_set_brain does, so a flow can see the brain took (needs token)
+            if data.token then
+                DSTP.PushEvent("brain_result", { token = data.token, ok = ok and true or false, reason = ok and nil or err,
+                    guid = ent.GUID, prefab = ent.prefab, mode = ok and tostring(spec.mode) or nil })
+            end
         end
     end
 

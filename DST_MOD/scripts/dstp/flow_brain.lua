@@ -217,9 +217,18 @@ function M.Apply(inst, spec)
         end
         local ok, BrainClass = _G.pcall(_G.require, BRAIN_FILE)
         if ok and BrainClass then
-            inst:SetBrain(function() return BrainClass(inst) end)
+            local okSet, err = _G.pcall(function() inst:SetBrain(function() return BrainClass(inst) end) end)
+            if not okSet then
+                if Core and Core.LogError then Core.LogError("flow_brain: SetBrain failed: " .. tostring(err)) end
+                inst._dstp_brain_orig = nil
+                return false, "setbrain_failed"
+            end
         else
-            if Core and Core.Log then Core.Log("flow_brain: brain file missing: " .. tostring(BrainClass)) end
+            -- always visible (not debug-gated): a missing/broken brain file is the one
+            -- failure that leaves the mob silently idle
+            if Core and Core.LogError then Core.LogError("flow_brain: cannot load " .. BRAIN_FILE .. ": " .. tostring(BrainClass)) end
+            inst._dstp_brain_orig = nil
+            return false, "brain_file"
         end
         inst._dstp_brain_orig.hooks = InstallHooks(inst)
     end
