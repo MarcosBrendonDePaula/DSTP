@@ -134,16 +134,6 @@ class DSTStateStore {
   // True if this shard is currently known and online. Used by the sync route to
   // detect a (re)connection BEFORE handleSync flips it online, so it can recompute
   // the watch-key set and have it delivered in the SAME response.
-  /** Union of the categories the mod reports ACTIVE across a server's shards. */
-  getActiveEvents(server_id: string): Set<string> {
-    const out = new Set<string>()
-    for (const shard of this.shards.values()) {
-      if (shard.server_id !== server_id) continue
-      for (const [cat, on] of Object.entries(shard.active_events || {})) if (on) out.add(cat)
-    }
-    return out
-  }
-
   isShardOnline(shard_id: string): boolean {
     const entry = this.shards.get(shard_id)
     return !!entry && entry.online

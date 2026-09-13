@@ -124,8 +124,8 @@ export function startCategorySweep() {
   _categorySweep = setInterval(() => {
     try {
       for (const server_id of dstStateStore.getServerIds()) {
-        const active = dstStateStore.getActiveEvents(server_id)
-        const missing = [...neededCategoriesFor(server_id)].filter(c => !active.has(c))
+        const active = dstStateStore.getActiveEvents(server_id)   // Record<category, boolean>, merged over shards
+        const missing = [...neededCategoriesFor(server_id)].filter(c => !active[c])
         if (missing.length > 0) reconcileEventCategories(server_id)
       }
     } catch (e) {
