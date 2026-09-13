@@ -220,6 +220,38 @@ run("entity_take_item", { guid = 700, item_guid = 609 })
 check("entity_take_item on an inventory mob", #invGiven == 1 and invGiven[1] == twig)
 run("entity_drop_item", { guid = 700, item = "twigs", token = "d1" })
 check("entity_drop_item by prefab → dropped, item_dropped ack", #invGiven == 0 and lastEvent("item_dropped") and lastEvent("item_dropped").count == 1)
+
+-- ── entity_give_item: spawn straight into the holder ──
+local spawned = {}
+mock_G.SpawnPrefab = function(name)
+    local it = mkEnt(800 + #spawned, name, 0, 0, {})
+    it.components = { inventoryitem = { canbepickedup = true }, stackable = { size = 1, SetStackSize = function(self, n) self.size = n end, StackSize = function(self) return self.size end } }
+    spawned[#spawned + 1] = it
+    return it
+end
+run("entity_give_item", { guid = 700, item = "log", count = "5", token = "g1" })
+local gv = lastEvent("item_given")
+check("entity_give_item: spawned ×5 into the inventory, item_given ack", #invGiven == 1 and invGiven[1].prefab == "log" and invGiven[1].components.stackable.size == 5 and gv and gv.ok == true and gv.item == "log" and gv.count == 5)
+run("entity_give_item", { guid = 999999, item = "log", token = "g2" })
+check("entity_give_item: unknown entity → ok=false reason=gone", lastEvent("item_given").ok == false and lastEvent("item_given").reason == "gone")
+
+-- ── entity_transfer_item: holder → holder, no ground ──
+local chestGiven = {}
+local chest = mkEnt(900, "treasurechest", 0, 0, {})
+chest.components.container = { IsFull = function() return false end, GiveItem = function(self, it) chestGiven[#chestGiven + 1] = it; return true end,
+    GetAllItems = function(self) return chestGiven end,
+    RemoveItem = function(self, it) for i, x in ipairs(chestGiven) do if x == it then table.remove(chestGiven, i) return it end end end }
+pigInv.components.inventory.GetAllItems = function(self) return invGiven end
+pigInv.components.inventory.RemoveItem = function(self, it) for i, x in ipairs(invGiven) do if x == it then table.remove(invGiven, i) return it end end end
+run("entity_transfer_item", { guid = 700, target_guid = 900, item = "log", token = "t1" })
+local tr = lastEvent("entity_item_transferred")
+check("entity_transfer_item: the log moved pig → chest, ack moved=1", #invGiven == 0 and #chestGiven == 1 and chestGiven[1].prefab == "log" and tr and tr.moved == 1 and tr.refused == 0 and tr.ok == true)
+run("entity_transfer_item", { guid = 900, target_guid = 700, item = "all", token = "t2" })
+check("entity_transfer_item all: back to the pig", #chestGiven == 0 and #invGiven == 1 and lastEvent("entity_item_transferred").moved == 1)
+-- the target refuses → the item goes back to the source
+chest.components.container.GiveItem = function() return false end
+run("entity_transfer_item", { guid = 700, target_guid = 900, item = "log", token = "t3" })
+check("entity_transfer_item refused: item returned to the source, refused=1", #invGiven == 1 and lastEvent("entity_item_transferred").refused == 1 and lastEvent("entity_item_transferred").moved == 0)
 FlowBrain.Apply(chester, { mode = "stay" })
 
 -- ── command path ──

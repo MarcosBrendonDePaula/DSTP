@@ -142,6 +142,8 @@ export const TRIGGER_EVENTS = [
   { value: 'brain_item_reached', label: '🧠 Cérebro: chegou num item (store=event)', category: 'economy' },
   { value: 'item_taken', label: '📥 Item guardado (resultado)', category: 'economy' },
   { value: 'item_dropped', label: '📤 Item solto (resultado)', category: 'economy' },
+  { value: 'item_given', label: '🎁 Item dado a entidade (resultado)', category: 'economy' },
+  { value: 'entity_item_transferred', label: '🔁 Item transferido entre entidades (resultado)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },

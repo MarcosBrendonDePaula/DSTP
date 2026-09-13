@@ -31,6 +31,23 @@ local SLOT_COUNT = GLOBAL.tonumber(GetModConfigData("SLOT_COUNT")) or 0
 local SLOT_PRESET = GetModConfigData("SLOT_PRESET") or "mobs"
 local SLOT_PREFABS = GLOBAL.require("dstp/slot_prefabs").presets[SLOT_PRESET] or {}
 
+-- Bigger containers (scripts/dstp/container_slots.lua): grow Klei's containers.params
+-- at load, on BOTH sides (server sizes the container, clients draw the window from the
+-- same table). World config from modinfo — not runtime, not per flow.
+do
+    local overrides = {
+        treasurechest = GLOBAL.tonumber(GetModConfigData("CHEST_SLOTS")) or 9,
+        chester = GLOBAL.tonumber(GetModConfigData("CHESTER_SLOTS")) or 9,
+        backpack = GLOBAL.tonumber(GetModConfigData("BACKPACK_SLOTS")) or 8,
+        icebox = GLOBAL.tonumber(GetModConfigData("ICEBOX_SLOTS")) or 9,
+    }
+    local ok, err = GLOBAL.pcall(function()
+        local changed = GLOBAL.require("dstp/container_slots").Apply(GLOBAL.require("containers").params, overrides, GLOBAL.Vector3)
+        if #changed > 0 then print("[DSTP] container slots grown: " .. table.concat(changed, ", ")) end
+    end)
+    if not ok then print("[DSTP] container_slots failed: " .. tostring(err)) end
+end
+
 -- Client-side UI widget manager (loaded on client only)
 local UIWidgets = nil
 local DataFeed = nil   -- client half of scripts/dstp/data_feed.lua (lazy)

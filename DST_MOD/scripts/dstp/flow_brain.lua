@@ -207,6 +207,48 @@ function M.DropItem(inst, what)
     return 1
 end
 
+--- Generic: spawn `prefab` ×count straight into `inst`'s container/inventory.
+--- Returns the item (or nil, reason).
+function M.GiveNewItem(inst, prefab, count)
+    if not (inst and prefab and _G and _G.SpawnPrefab) then return nil, "bad_args" end
+    local holder = inst.components and (inst.components.container or inst.components.inventory)
+    if not holder then return nil, "no_container" end
+    local item = _G.SpawnPrefab(prefab)
+    if not item then return nil, "bad_prefab" end
+    count = math.max(1, math.floor(tonumber(count) or 1))
+    if count > 1 and item.components and item.components.stackable then item.components.stackable:SetStackSize(count) end
+    local ok, why = M.TakeItem(inst, item)
+    if not ok then if item.Remove then item:Remove() end return nil, why end
+    return item
+end
+
+--- Generic: move `what` (prefab | item guid | "all") from `src`'s holder to `dst`'s,
+--- never touching the ground; an item the target refuses goes back to the source.
+--- Returns moved, refused.
+function M.TransferItems(src, dst, what)
+    local from = src and src.components and (src.components.container or src.components.inventory)
+    local to = dst and dst.components and (dst.components.container or dst.components.inventory)
+    if not (from and to) then return 0, 0 end
+    local guid = tonumber(what)
+    local matches = function(it)
+        return it and it:IsValid() and (what == nil or what == "all" or (guid and it.GUID == guid) or it.prefab == what)
+    end
+    local items = {}
+    if from.GetAllItems then
+        for _, it in ipairs(from:GetAllItems()) do if matches(it) then items[#items + 1] = it end end
+    elseif from.FindItem then
+        local it = from:FindItem(matches); if it then items[1] = it end
+    end
+    local moved, refused = 0, 0
+    for _, it in ipairs(items) do
+        if what ~= "all" and what ~= nil and moved > 0 and not guid then break end   -- one stack per prefab call
+        local taken = from.RemoveItem and from:RemoveItem(it, true) or it
+        if taken and to:GiveItem(taken) ~= false then moved = moved + 1
+        else refused = refused + 1; if taken then from:GiveItem(taken) end end
+    end
+    return moved, refused
+end
+
 --- On arrival at a pickup. store="self": stash it and report `brain_collected`;
 --- store="event": only report `brain_item_reached` and let the flow act.
 function M.Collect(inst, item)

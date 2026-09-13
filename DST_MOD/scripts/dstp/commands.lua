@@ -552,6 +552,39 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- entity_give_item: spawn `prefab` ×count straight into the entity's container /
+    -- inventory (a chest, a Chester, a pigman). Ack: item_given (with token).
+    DSTP.RegisterCommand("entity_give_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local item, why = nil, reason
+        if inst then item, why = FlowBrain.GiveNewItem(inst, data.item or data.prefab_item, data.count) end
+        if not item then LogError("entity_give_item: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("item_given", { token = data.token, ok = item ~= nil, reason = item and nil or why,
+                guid = inst and inst.GUID or nil, item = item and item.prefab or data.item, item_guid = item and item.GUID or nil,
+                count = tonumber(data.count) or 1 })
+        end
+    end)
+
+    -- entity_transfer_item: move `item` (prefab | guid | "all") from this entity's
+    -- container/inventory into `target_guid`'s, never touching the ground.
+    -- Ack: entity_item_transferred { moved, refused } (with token).
+    DSTP.RegisterCommand("entity_transfer_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local src = ResolveEntity(data)
+        local dst = tonumber(data.target_guid) and _G.Ents[tonumber(data.target_guid)] or nil
+        if dst and dst.IsValid and not dst:IsValid() then dst = nil end
+        local moved, refused = 0, 0
+        if src and dst then moved, refused = FlowBrain.TransferItems(src, dst, data.item or "all") end
+        if data.token then
+            DSTP.PushEvent("entity_item_transferred", { token = data.token, ok = (src ~= nil and dst ~= nil),
+                guid = src and src.GUID or nil, target_guid = dst and dst.GUID or nil, item = data.item or "all", moved = moved, refused = refused })
+        end
+    end)
+
     -- entity_drop_item: drop `item` (prefab | item guid | "all") from the entity's
     -- container/inventory onto the ground.
     DSTP.RegisterCommand("entity_drop_item", function(data)

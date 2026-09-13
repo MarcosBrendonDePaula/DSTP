@@ -190,6 +190,10 @@ import { meta as entityTakeItemMeta } from '@shared/automation/nodes/actions/ent
 import { handler as entityTakeItemHandler } from '@shared/automation/nodes/actions/entity/entity_take_item/exec'
 import { meta as entityDropItemMeta } from '@shared/automation/nodes/actions/entity/entity_drop_item/meta'
 import { handler as entityDropItemHandler } from '@shared/automation/nodes/actions/entity/entity_drop_item/exec'
+import { meta as entityGiveItemMeta } from '@shared/automation/nodes/actions/entity/entity_give_item/meta'
+import { handler as entityGiveItemHandler } from '@shared/automation/nodes/actions/entity/entity_give_item/exec'
+import { meta as entityTransferItemMeta } from '@shared/automation/nodes/actions/entity/entity_transfer_item/meta'
+import { handler as entityTransferItemHandler } from '@shared/automation/nodes/actions/entity/entity_transfer_item/exec'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { handler as entityUnfreezeHandler } from '@shared/automation/nodes/actions/entity/entity_unfreeze/exec'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -326,6 +330,8 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: entityBrainMeta, handler: entityBrainHandler },
   { meta: entityTakeItemMeta, handler: entityTakeItemHandler },
   { meta: entityDropItemMeta, handler: entityDropItemHandler },
+  { meta: entityGiveItemMeta, handler: entityGiveItemHandler },
+  { meta: entityTransferItemMeta, handler: entityTransferItemHandler },
   { meta: entityUnfreezeMeta, handler: entityUnfreezeHandler },
   { meta: uiNotificationMeta, handler: uiNotificationHandler },
   { meta: uiLabelMeta, handler: uiLabelHandler },
