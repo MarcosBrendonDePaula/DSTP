@@ -336,6 +336,7 @@ saveEnt.DoTaskInTime = function(self, t, fn) fn() end
 FlowBrain.Apply(saveEnt, { mode = "collect", target = "KU_1", brain_radius = 5, prefabs = "log, rocks", follow_max = 4 })
 check("Apply adds the persistence component", saveEnt.components.dstp_flowbrain ~= nil)
 local saved = saveEnt.components.dstp_flowbrain:OnSave()
+check("OnSave: add_component_if_missing so Klei re-adds the runtime component on load", saved and saved.add_component_if_missing == true)
 check("OnSave: mode/target/radius/filters/follow saved (no task, no guid)", saved and saved.mode == "collect" and saved.target_userid == "KU_1" and saved.radius == 5 and #saved.prefabs == 2 and saved.follow_max == 4 and saved.target_guid == nil)
 -- a fresh entity (new guid after load) gets the state back + brain_restored with the new guid
 local loaded = mkEnt(951, "chester", 0, 0, {})

@@ -13,6 +13,11 @@ function DstpFlowBrain:OnSave()
     local st = self.inst._dstp_brain
     if not st then return nil end
     return {
+        -- Klei only calls a component's OnLoad if the freshly built entity HAS the
+        -- component, unless the saved data says so — this brain is added at runtime, so
+        -- without this flag the state was saved but never restored (in-game 2026-09-13:
+        -- the pet came back brainless after a load, the flow spawned a new empty one).
+        add_component_if_missing = true,
         mode = st.mode, target_userid = st.target_userid, target_guid = nil,   -- guids do not survive a load
         x = st.x, z = st.z, radius = st.radius, tags = st.tags, prefabs = st.prefabs,
         attack_players = st.attack_players, store = st.store,
