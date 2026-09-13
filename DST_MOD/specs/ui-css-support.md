@@ -124,3 +124,24 @@ drifted. All values are HUD px at the 1280×720 virtual resolution (`SCALEMODE_P
 Rule of thumb for a compact panel: `height ≥ 40 (padding) + 40 (title) + content`.
 The wallet (`title`, a 26-px row, a 30-px button, gap 6) needs **142**, not 64 — the
 mod grows it, so the declared 64 was only hiding the overlap.
+
+### Native texture sizes (ground truth from the game files)
+
+`bun run scripts/dst-atlas-sizes.ts` (in `frontend/`) reads the atlas `.xml` UVs + the
+KTEX header of the `.tex` straight from the DST install and prints the pixel size of
+every element. Numbers as of 2026-09-12 (atlases are 2048×2048):
+
+| Texture | Native px | How the mod sizes it |
+|---------|-----------|----------------------|
+| `fepanel_fills / panel_fill_tiny.tex` | 619 × 359 | `Image:SetSize(pw, ph)` — exact box, stretched |
+| `global_redux / button_carny_long_normal.tex` (+hover/down/disabled) | 320 × 89 | `ImageButton:ForceImageSize(w, h)` — exact px (the old `SetScale(w/340, h/70)` guessed 340×70 and squashed every button) |
+| `global_redux / button_carny_square_normal.tex` | 129 × 129 | (unused yet) |
+| `global_redux / close.tex` | 39 × 39 | `SetScale(0.4)` → ~16 px, hit box forced to 64×64 |
+| `global_redux / scrollbar_arrow_up/down.tex` | 89 × 89 | Klei's `TrueScrollArea` scales to 0.3 → ~27 px |
+| `global_redux / scrollbar_handle.tex` / `scrollbar_bar.tex` | 59 × 56 / 32 × 1133 | Klei's scrollbar |
+| `global / square.tex` | 63 × 63 | hit-target overlay, `ForceImageSize(w+pad, h+pad)` |
+
+Rule: size textures with an EXACT px API (`SetSize` / `ForceImageSize`), never with a
+`SetScale` ratio derived from an assumed native size — the native sizes are not round
+numbers. Fonts: `Text` reports its box via `GetRegionSize`, so text sizes are measured,
+not assumed.

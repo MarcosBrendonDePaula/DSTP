@@ -14,6 +14,7 @@ local function mkWidget(kind, ctorArgs)
     setmetatable(w, { __index = function(_, key)
         if key == "AddChild" then return function(self, c) self.children[#self.children + 1] = c; c.parent = self; return c end end
         if key == "SetSize" then return function(self, a, b) self.size = { a, b }; return self end end
+        if key == "ForceImageSize" then return function(self, a, b) self.size = { a, b }; return self end end
         if key == "SetPosition" then return function(self, x, y) self.pos = { x, y }; return self end end
         if key == "GetRegionSize" then return function() return 100, 20 end end
         if key == "GetSize" then return function() return 56, 56 end end
@@ -66,6 +67,11 @@ check("content shifted down by half the strip: y = -20 " .. f2(content and conte
 -- no overlap: the content box top (content.y + 62/2) must be below the strip bottom (ph/2 - 40)
 check("content top is below the title strip",
     content and content.pos and ph and (content.pos[2] + 31) <= (ph / 2 - TITLE_H) + 0.5)
+
+-- the button is sized EXACTLY (ForceImageSize 130x30), not by a guessed texture ratio
+local carny = find("ImageButton", function(w) return w.ctorArgs and w.ctorArgs[2] == "button_carny_long_normal.tex" end)
+check("button: ForceImageSize(130,30) " .. f2(carny and rawget(carny, "size")),
+    carny and rawget(carny, "size") and carny.size[1] == 130 and carny.size[2] == 30)
 
 -- ── auto-sized panel with a title draws it and reserves the strip ──
 created = {}

@@ -1169,7 +1169,10 @@ RenderNodeImpl = function(node, parent, ctx)
             "images/global_redux.xml",
             "button_carny_long_normal.tex", "button_carny_long_hover.tex",
             "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
-        btn:SetScale(bw / 340, bh / 70)
+        -- Exact px size, texture-independent (the carny long tex is 320x89 — the old
+        -- SetScale(bw/340, bh/70) assumed 340x70 and squashed every button:
+        -- `bun run scripts/dst-atlas-sizes.ts` reads the real sizes from the game files).
+        if btn.ForceImageSize then btn:ForceImageSize(bw, bh) else btn:SetScale(bw / 320, bh / 89) end
         local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, tostring(node.text or "OK")))
         local col = ResolveColor(node.color)
         label:SetColour(col[1], col[2], col[3], col[4])
