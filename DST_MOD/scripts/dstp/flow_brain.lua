@@ -50,7 +50,7 @@ function M.Normalize(spec)
     st.attack_players = truthy(spec.attack_players)
     st.follow_min = tonumber(spec.follow_min) or 2
     st.follow_dist = tonumber(spec.follow_dist) or 4
-    st.follow_max = tonumber(spec.follow_max) or 10
+    st.follow_max = tonumber(spec.follow_max) or 6   -- start following at 6 (Klei-style 10-12 felt like "does not follow")
     if (mode == "follow") and not (st.target_userid or st.target_guid) then return nil, "follow_needs_target" end
     if (mode == "guard" or mode == "wander") and not (st.x and st.z) then return nil, "needs_anchor" end
     return st

@@ -26,7 +26,7 @@ self-contained Lua module, policy in the flow.
 | `brain_radius` | action radius (default 12): guard zone, attack scan, flee "see" distance, wander range |
 | `tags`, `prefabs` | comma lists — what `attack`/`guard` hunt; `flee` runs from `tags` (default: players) |
 | `attack_players` | `true` to let `attack`/`guard` target players (default false — players are never targets) |
-| `follow_min`/`follow_dist`/`follow_max` | Follow distances (2 / 4 / 10) |
+| `follow_min`/`follow_dist`/`follow_max` | Follow distances (2 / 4 / 6): back off below min, stop at dist, START moving past max |
 
 ## Mechanics worth knowing
 
