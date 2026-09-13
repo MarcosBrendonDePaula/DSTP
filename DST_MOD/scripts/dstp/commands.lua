@@ -535,6 +535,34 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- entity_take_item: put a world item (item_guid) into the resolved entity's container
+    -- or inventory (the generic half of "collect" — the brain reports brain_item_reached
+    -- with store=event, the flow decides to take it, or not). Ack: item_taken (with token).
+    DSTP.RegisterCommand("entity_take_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local item = tonumber(data.item_guid) and _G.Ents[tonumber(data.item_guid)] or nil
+        local ok, why = false, reason
+        if inst then ok, why = FlowBrain.TakeItem(inst, item) end
+        if not ok then LogError("entity_take_item: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("item_taken", { token = data.token, ok = ok and true or false, reason = ok and nil or why,
+                guid = inst and inst.GUID or nil, item_guid = tonumber(data.item_guid), item = item and item.prefab or nil })
+        end
+    end)
+
+    -- entity_drop_item: drop `item` (prefab | item guid | "all") from the entity's
+    -- container/inventory onto the ground.
+    DSTP.RegisterCommand("entity_drop_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst = ResolveEntity(data)
+        if not inst then return end
+        local n = FlowBrain.DropItem(inst, data.item or "all")
+        if data.token then DSTP.PushEvent("item_dropped", { token = data.token, guid = inst.GUID, item = data.item or "all", count = n }) end
+    end)
+
     -- entity_unfreeze: thaw a frozen mob.
     DSTP.RegisterCommand("entity_unfreeze", function(data)
         local inst = ResolveEntity(data)

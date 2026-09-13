@@ -55,7 +55,13 @@ function M.Normalize(spec)
     st.follow_dist = tonumber(spec.follow_dist) or 4
     st.follow_max = tonumber(spec.follow_max) or 6   -- start following at 6 (Klei-style 10-12 felt like "does not follow")
     if (mode == "follow") and not (st.target_userid or st.target_guid) then return nil, "follow_needs_target" end
-    if mode == "collect" then st.radius = tonumber(spec.brain_radius or spec.radius) or 8 end
+    if mode == "collect" then
+        st.radius = tonumber(spec.brain_radius or spec.radius) or 8
+        -- store = "self" (default): stash into the mob's own container on arrival;
+        --         "event": only report brain_item_reached — the FLOW decides what to do
+        --         (entity_take_item / entity_drop_item / anything), policy stays in the flow
+        st.store = (tostring(spec.store or ""):lower() == "event") and "event" or "self"
+    end
     if (mode == "guard" or mode == "wander") and not (st.x and st.z) then return nil, "needs_anchor" end
     return st
 end
@@ -129,10 +135,13 @@ function M.CanCollect(inst, item, state)
     if not ii or ii.canbepickedup == false then return false end
     if ii.owner ~= nil or (ii.IsHeld and ii:IsHeld()) then return false end       -- someone holds it
     if item.components and item.components.burnable and item.components.burnable.IsBurning and item.components.burnable:IsBurning() then return false end
-    local c = inst.components and inst.components.container
-    if not c then return false end
-    if c.IsFull and c:IsFull() then return false end
-    if c.CanTakeItemInSlot and not c:CanTakeItemInSlot(item) then return false end
+    if state.store ~= "event" then
+        -- self-store: the mob must be able to hold it (container or inventory)
+        local c = inst.components and (inst.components.container or inst.components.inventory)
+        if not c then return false end
+        if c.IsFull and c:IsFull() then return false end
+        if c.CanTakeItemInSlot and not c:CanTakeItemInSlot(item) then return false end
+    end
     if state.tags then
         local ok = false
         for _, t in ipairs(state.tags) do if item.HasTag and item:HasTag(t) then ok = true break end end
@@ -161,19 +170,59 @@ function M.FindPickup(inst, state)
     return nil
 end
 
---- Put `item` into the mob's container (called on arrival). Reports `brain_collected`.
+local function StackOf(item)
+    if item.components and item.components.stackable and item.components.stackable.StackSize then return item.components.stackable:StackSize() end
+    return 1
+end
+
+--- Generic: put `item` (a ground item, or one the mob already holds) into `inst`'s
+--- container OR inventory — whichever it has. Any mob, any flow. Returns ok, reason.
+function M.TakeItem(inst, item)
+    if not (inst and item and item.IsValid and item:IsValid()) then return false, "gone" end
+    local ii = item.components and item.components.inventoryitem
+    if not ii then return false, "not_item" end
+    local holder = inst.components and (inst.components.container or inst.components.inventory)
+    if not holder then return false, "no_container" end
+    if holder.IsFull and holder:IsFull() then return false, "full" end
+    local ok = holder:GiveItem(item)
+    if ok == false then return false, "refused" end
+    return true
+end
+
+--- Generic: drop from `inst`'s container/inventory. `what` = a prefab name, an item
+--- guid, or "all". Returns the number of items dropped.
+function M.DropItem(inst, what)
+    local holder = inst and inst.components and (inst.components.container or inst.components.inventory)
+    if not holder then return 0 end
+    if what == nil or what == "all" then
+        if holder.DropEverything then holder:DropEverything() end
+        return -1
+    end
+    local guid = tonumber(what)
+    local item = holder.FindItem and holder:FindItem(function(it)
+        return it and it:IsValid() and ((guid and it.GUID == guid) or it.prefab == what)
+    end) or nil
+    if not item then return 0 end
+    if holder.DropItem then holder:DropItem(item, true) end
+    return 1
+end
+
+--- On arrival at a pickup. store="self": stash it and report `brain_collected`;
+--- store="event": only report `brain_item_reached` and let the flow act.
 function M.Collect(inst, item)
     local st = inst and inst._dstp_brain
     if not (st and M.CanCollect(inst, item, st)) then return false end
-    local count = 1
-    if item.components.stackable and item.components.stackable.StackSize then count = item.components.stackable:StackSize() end
-    local prefab = item.prefab
-    local ok = inst.components.container:GiveItem(item)
-    if ok ~= false then
-        Push(inst, "brain_collected", { item = prefab, count = count })
+    local count, prefab = StackOf(item), item.prefab
+    if st.store == "event" then
+        local x, z   -- NB: `t and f()` truncates multiple returns to one — assign in an if
+        if item.Transform then x, _, z = item.Transform:GetWorldPosition() end
+        Push(inst, "brain_item_reached", { item = prefab, item_guid = item.GUID, count = count,
+            x = x and math.floor(x + 0.5) or nil, z = z and math.floor(z + 0.5) or nil })
         return true
     end
-    return false
+    local ok = M.TakeItem(inst, item)
+    if ok then Push(inst, "brain_collected", { item = prefab, count = count }) end
+    return ok
 end
 
 --- For the brain's DoAction: a WALKTO to the nearest pickup that collects on arrival.

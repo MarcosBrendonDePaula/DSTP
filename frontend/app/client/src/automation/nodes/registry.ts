@@ -222,6 +222,10 @@ import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entit
 import { ui as entityFreezeUi } from '@shared/automation/nodes/actions/entity/entity_freeze/ui'
 import { meta as entityBrainMeta } from '@shared/automation/nodes/actions/entity/entity_brain/meta'
 import { ui as entityBrainUi } from '@shared/automation/nodes/actions/entity/entity_brain/ui'
+import { meta as entityTakeItemMeta } from '@shared/automation/nodes/actions/entity/entity_take_item/meta'
+import { ui as entityTakeItemUi } from '@shared/automation/nodes/actions/entity/entity_take_item/ui'
+import { meta as entityDropItemMeta } from '@shared/automation/nodes/actions/entity/entity_drop_item/meta'
+import { ui as entityDropItemUi } from '@shared/automation/nodes/actions/entity/entity_drop_item/ui'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -341,6 +345,8 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: entitySetFuelMeta, ui: entitySetFuelUi },
   { meta: entityFreezeMeta, ui: entityFreezeUi },
   { meta: entityBrainMeta, ui: entityBrainUi },
+  { meta: entityTakeItemMeta, ui: entityTakeItemUi },
+  { meta: entityDropItemMeta, ui: entityDropItemUi },
   { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
   { meta: uiNotificationMeta, ui: uiNotificationUi },
   { meta: uiLabelMeta, ui: uiLabelUi },

@@ -139,6 +139,9 @@ export const TRIGGER_EVENTS = [
   { value: 'brain_target_lost', label: '🧠 Cérebro: alvo perdido', category: 'economy' },
   { value: 'brain_dead', label: '🧠 Cérebro: mob morreu', category: 'economy' },
   { value: 'brain_collected', label: '🧠 Cérebro: coletou item', category: 'economy' },
+  { value: 'brain_item_reached', label: '🧠 Cérebro: chegou num item (store=event)', category: 'economy' },
+  { value: 'item_taken', label: '📥 Item guardado (resultado)', category: 'economy' },
+  { value: 'item_dropped', label: '📤 Item solto (resultado)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },

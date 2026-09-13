@@ -194,6 +194,34 @@ chester.Transform.SetPosition(chester.Transform, 0, 0, 0)
 FlowBrain.Apply(chester, { mode = "stay" })
 check("CollectAction outside collect mode → nil", FlowBrain.CollectAction(chester) == nil)
 
+-- ── store = "event": the brain only reports; the FLOW takes the item through the generic command ──
+given = {}
+local apple = mkItem(608, "apple", 1, 1, { stack = 2 })
+FlowBrain.Apply(chester, { mode = "collect", target = "KU_1", store = "event", prefabs = "apple" })
+local ba2 = FlowBrain.CollectAction(chester)
+check("event store: still walks to the item", ba2 and ba2.target == apple)
+ba2:Succeed()
+local reached = lastEvent("brain_item_reached")
+check("event store: brain_item_reached {item,item_guid,count,x,z}, NOT taken", #given == 0 and reached and reached.item == "apple" and reached.item_guid == 608 and reached.count == 2 and reached.x == 1 and reached.z == 1)
+run("entity_take_item", { guid = 600, item_guid = 608, token = "tk" })
+local taken = lastEvent("item_taken")
+check("entity_take_item: container:GiveItem + item_taken ack", #given == 1 and given[1] == apple and taken and taken.ok == true and taken.item == "apple" and taken.guid == 600)
+run("entity_take_item", { guid = 600, item_guid = 999999, token = "tk2" })
+check("entity_take_item: unknown item → ok=false reason=gone", lastEvent("item_taken").ok == false and lastEvent("item_taken").reason == "gone")
+-- a mob with an INVENTORY (not a container) works the same
+local pigInv = mkEnt(700, "pigman", 0, 0, {})
+local invGiven = {}
+pigInv.components.inventory = { IsFull = function() return false end, GiveItem = function(self, it) invGiven[#invGiven + 1] = it; return true end,
+    FindItem = function(self, fn) for _, it in ipairs(invGiven) do if fn(it) then return it end end end,
+    DropItem = function(self, it) for i, x in ipairs(invGiven) do if x == it then table.remove(invGiven, i) end end end,
+    DropEverything = function(self) invGiven = {} end }
+local twig = mkItem(609, "twigs", 0, 1, {})
+run("entity_take_item", { guid = 700, item_guid = 609 })
+check("entity_take_item on an inventory mob", #invGiven == 1 and invGiven[1] == twig)
+run("entity_drop_item", { guid = 700, item = "twigs", token = "d1" })
+check("entity_drop_item by prefab → dropped, item_dropped ack", #invGiven == 0 and lastEvent("item_dropped") and lastEvent("item_dropped").count == 1)
+FlowBrain.Apply(chester, { mode = "stay" })
+
 -- ── command path ──
 run("entity_set_brain", { guid = 100, mode = "follow", target = "KU_1", token = "b1" })
 local ev = lastEvent("brain_result")
