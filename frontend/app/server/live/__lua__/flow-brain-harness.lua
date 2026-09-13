@@ -27,7 +27,14 @@ end
 
 local Core = KIT.load(MOD_CORE, "core.lua")
 Core.Init(mock_G, KIT.fake_json, { server_id = "s" })
-local FlowBrain = KIT.load(MOD_FLOWBRAIN, "flow_brain.lua").Init({ GLOBAL = mock_G, core = Core })
+-- Klei Class shim (the persistence component is a Class) + load flow_brain through the
+-- kit's require shim so the component's require("dstp/flow_brain") shares THIS instance
+Class = function(ctor)
+    local c = {}; c.__index = c
+    setmetatable(c, { __call = function(_, ...) local o = setmetatable({}, c); ctor(o, ...); return o end })
+    return c
+end
+local FlowBrain = require("dstp/flow_brain").Init({ GLOBAL = mock_G, core = Core })
 Core.FlowBrain = FlowBrain
 local Commands = KIT.load(MOD_COMMANDS, "commands.lua")
 Commands.RegisterAll(Core)
@@ -312,6 +319,44 @@ pigPlain.brainfn = orig
 pigPlain.components.inventory = { IsFull = function() return false end, GiveItem = function() return true end }
 run("entity_goto", { guid = 710, target_guid = 600, token = "g2" })
 check("entity_goto on a plain mob: flow brain applied in stay + goto task to the target", FlowBrain.GetState(pigPlain) and FlowBrain.GetState(pigPlain).mode == "stay" and FlowBrain.GetTask(pigPlain).target_guid == 600)
+
+-- ── persistence: the flow-set state is saved with the entity and re-applied on load ──
+mock_G.GetTime = function() return 100 end
+local KIT_COMP = KIT.load(MOD_FLOWBRAIN_COMP, "components/dstp_flowbrain.lua")
+local saveEnt = mkEnt(950, "chester", 0, 0, {})
+saveEnt.brainfn = orig
+saveEnt.AddComponent = function(self, name) if name == "dstp_flowbrain" then self.components.dstp_flowbrain = KIT_COMP(self) end end
+saveEnt.RemoveComponent = function(self, name) self.components[name] = nil end
+saveEnt.DoTaskInTime = function(self, t, fn) fn() end
+FlowBrain.Apply(saveEnt, { mode = "collect", target = "KU_1", brain_radius = 5, prefabs = "log, rocks", follow_max = 4 })
+check("Apply adds the persistence component", saveEnt.components.dstp_flowbrain ~= nil)
+local saved = saveEnt.components.dstp_flowbrain:OnSave()
+check("OnSave: mode/target/radius/filters/follow saved (no task, no guid)", saved and saved.mode == "collect" and saved.target_userid == "KU_1" and saved.radius == 5 and #saved.prefabs == 2 and saved.follow_max == 4 and saved.target_guid == nil)
+-- a fresh entity (new guid after load) gets the state back + brain_restored with the new guid
+local loaded = mkEnt(951, "chester", 0, 0, {})
+loaded.brainfn = orig
+loaded.AddComponent = saveEnt.AddComponent; loaded.RemoveComponent = saveEnt.RemoveComponent; loaded.DoTaskInTime = saveEnt.DoTaskInTime
+loaded:AddComponent("dstp_flowbrain")
+loaded.components.dstp_flowbrain:OnLoad(saved)
+local rst = FlowBrain.GetState(loaded)
+check("OnLoad: state re-applied on the new entity (collect, target, radius, prefabs)", rst and rst.mode == "collect" and rst.target_userid == "KU_1" and rst.radius == 5 and rst.prefabs[2] == "rocks" and count(loaded, "SetBrain") == 1)
+local br = lastEvent("brain_restored")
+check("brain_restored carries the NEW guid + target_userid", br and br.guid == 951 and br.target_userid == "KU_1" and br.mode == "collect")
+-- follow of an entity guid cannot be restored → stay
+local l2 = mkEnt(952, "spider", 0, 0, {}); l2.brainfn = orig
+l2.AddComponent = saveEnt.AddComponent; l2.RemoveComponent = saveEnt.RemoveComponent; l2.DoTaskInTime = saveEnt.DoTaskInTime
+l2:AddComponent("dstp_flowbrain"); l2.components.dstp_flowbrain:OnLoad({ mode = "follow" })
+check("OnLoad: follow without a userid target degrades to stay", FlowBrain.GetState(l2).mode == "stay")
+FlowBrain.Apply(loaded, { mode = "default" })
+check("default removes the persistence component", loaded.components.dstp_flowbrain == nil)
+-- unreachable item → cooldown via the fail action
+local farItem = mkItem(953, "log", 3, 3, {})
+FlowBrain.Apply(chester, { mode = "collect", target = "KU_1", prefabs = "log" })
+local uba = FlowBrain.CollectAction(chester)
+check("collect action has a fail action", uba and #uba.onfail == 1)
+for _, f in ipairs(uba.onfail) do f() end
+check("unreachable → that item on cooldown", farItem._dstp_skip_until == 115 or (uba.target._dstp_skip_until == 115))
+FlowBrain.Apply(chester, { mode = "stay" })
 
 -- ── command path ──
 run("entity_set_brain", { guid = 100, mode = "follow", target = "KU_1", token = "b1" })

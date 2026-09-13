@@ -89,4 +89,13 @@ describe('example: Pet Chester', () => {
     expect(spawns()).toHaveLength(1)
     expect(spawns()[0]).toMatchObject({ userid: 'KU_1', prefab: 'chester', token: 'pet:KU_1' })
   })
+
+  it('brain_restored after a world load refreshes the memory with the NEW guid', async () => {
+    const mem = new FlowMemoryRepository(SERVER)
+    await fire('brain_restored', { guid: 4242, prefab: 'chester', mode: 'collect', target_userid: 'KU_1' })
+    expect(Number(mem.get(FLOW_ID, 'pet:KU_1'))).toBe(4242)
+    expect(String(mem.get(FLOW_ID, 'owner:4242'))).toBe('KU_1')
+    await fire('brain_restored', { guid: 5, prefab: 'spider', mode: 'stay' })
+    expect(Number(mem.get(FLOW_ID, 'pet:KU_1'))).toBe(4242)
+  })
 })

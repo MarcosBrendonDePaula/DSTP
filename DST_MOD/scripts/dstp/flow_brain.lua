@@ -332,8 +332,8 @@ function M.Collect(inst, item)
     if not (st and M.CanCollect(inst, item, st)) then return false end
     local count, prefab = StackOf(item), item.prefab
     if st.store == "event" then
-        local x, z   -- NB: `t and f()` truncates multiple returns to one — assign in an if
-        if item.Transform then x, _, z = item.Transform:GetWorldPosition() end
+        local x, z, _y   -- NB: `t and f()` truncates multiple returns; `_` must be declared (strict mode)
+        if item.Transform then x, _y, z = item.Transform:GetWorldPosition() end
         Push(inst, "brain_item_reached", { item = prefab, item_guid = item.GUID, count = count,
             x = x and math.floor(x + 0.5) or nil, z = z and math.floor(z + 0.5) or nil })
         return true
@@ -346,8 +346,8 @@ function M.Collect(inst, item)
     -- did not fit: report with the reason and back off from THIS item for a while, so
     -- the flow can act (unload / drop / stop) without the mob pacing to the same item
     item._dstp_skip_until = ((_G and _G.GetTime and _G.GetTime()) or 0) + 10
-    local x, z
-    if item.Transform then x, _, z = item.Transform:GetWorldPosition() end
+    local x, z, _y   -- strict mode: never assign to an undeclared `_`
+    if item.Transform then x, _y, z = item.Transform:GetWorldPosition() end
     Push(inst, "brain_item_reached", { item = prefab, item_guid = item.GUID, count = count, reason = why or "refused",
         x = x and math.floor(x + 0.5) or nil, z = z and math.floor(z + 0.5) or nil })
     return false
@@ -361,6 +361,9 @@ function M.CollectAction(inst)
     if not item then return nil end
     local ba = _G.BufferedAction(inst, item, _G.ACTIONS.WALKTO, nil, nil, nil, 1.5)
     ba:AddSuccessAction(function() M.Collect(inst, item) end)
+    -- unreachable / interrupted: back off from THIS item so the mob does not loop on it
+    -- forever and never gets to follow (mechanism, not policy)
+    ba:AddFailAction(function() item._dstp_skip_until = ((_G and _G.GetTime and _G.GetTime()) or 0) + 15 end)
     return ba
 end
 
@@ -485,6 +488,10 @@ function M.Apply(inst, spec)
             return false, "brain_file"
         end
         inst._dstp_brain_orig.hooks = InstallHooks(inst)
+        -- persistence: the flow-set state survives a world save/load (components/dstp_flowbrain.lua)
+        if inst.AddComponent and not (inst.components and inst.components.dstp_flowbrain) then
+            _G.pcall(function() inst:AddComponent("dstp_flowbrain") end)
+        end
     end
     inst._dstp_brain_mon = nil   -- a mode change re-arms the edge-triggered events
     -- a fresh target scan on every mode change (drop a target the new mode forbids)
@@ -494,6 +501,13 @@ function M.Apply(inst, spec)
     end
     if inst.brain and inst.brain.bt and inst.brain.bt.Reset then inst.brain.bt:Reset() end
     return true
+end
+
+--- After a world load re-applied a saved state: tell the flow, with the NEW guid.
+function M.AnnounceRestored(inst)
+    local st = inst and inst._dstp_brain
+    if not st then return end
+    Push(inst, "brain_restored", { target_userid = st.target_userid, x = st.x, z = st.z })
 end
 
 --- Put the prefab's own brain + retarget back.
@@ -508,6 +522,9 @@ function M.Restore(inst)
     RemoveHooks(inst, o.hooks)
     inst:SetBrain(o.brainfn)
     inst._dstp_brain, inst._dstp_brain_orig = nil, nil
+    if inst.RemoveComponent and inst.components and inst.components.dstp_flowbrain then
+        _G.pcall(function() inst:RemoveComponent("dstp_flowbrain") end)
+    end
     return true
 end
 

@@ -530,6 +530,78 @@
         "x": 800,
         "y": 480
       }
+    },
+    {
+      "id": "t_restored",
+      "type": "trigger",
+      "data": {
+        "event_type": "brain_restored",
+        "alias": "br"
+      },
+      "position": {
+        "x": 2000,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_pet_restored",
+      "type": "condition",
+      "data": {
+        "field": "br.prefab",
+        "operator": "equals",
+        "value": "chester",
+        "alias": "is_pet_restored"
+      },
+      "position": {
+        "x": 2000,
+        "y": 160
+      }
+    },
+    {
+      "id": "has_owner_r",
+      "type": "condition",
+      "data": {
+        "field": "br.target_userid",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_owner_r"
+      },
+      "position": {
+        "x": 2000,
+        "y": 320
+      }
+    },
+    {
+      "id": "mem_pet_r",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_pet_r",
+        "params": {
+          "key": "pet:{{br.target_userid}}",
+          "value": "{{br.guid}}"
+        }
+      },
+      "position": {
+        "x": 2000,
+        "y": 480
+      }
+    },
+    {
+      "id": "mem_owner_r",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_owner_r",
+        "params": {
+          "key": "owner:{{br.guid}}",
+          "value": "{{br.target_userid}}"
+        }
+      },
+      "position": {
+        "x": 2000,
+        "y": 640
+      }
     }
   ],
   "edges": [
@@ -684,6 +756,28 @@
       "source": "alive",
       "sourceHandle": "false",
       "target": "respawn2"
+    },
+    {
+      "id": "e30",
+      "source": "t_restored",
+      "target": "is_pet_restored"
+    },
+    {
+      "id": "e31",
+      "source": "is_pet_restored",
+      "sourceHandle": "true",
+      "target": "has_owner_r"
+    },
+    {
+      "id": "e32",
+      "source": "has_owner_r",
+      "sourceHandle": "true",
+      "target": "mem_pet_r"
+    },
+    {
+      "id": "e33",
+      "source": "mem_pet_r",
+      "target": "mem_owner_r"
     }
   ]
 }

@@ -147,6 +147,7 @@ export const TRIGGER_EVENTS = [
   { value: 'entity_capacity', label: '📏 Capacidade da entidade (resposta de Cabe?)', category: 'economy' },
   { value: 'brain_task_done', label: '🧺 Tarefa do mob concluída (ir buscar / ir até)', category: 'economy' },
   { value: 'entity_slots', label: '🗄 Slots do container alterados (resultado)', category: 'economy' },
+  { value: 'brain_restored', label: '🧠 Cérebro: restaurado após load (guid NOVO)', category: 'economy' },
   // Character
   { value: 'recipe_learned', label: '📖 Recipe Learned', category: 'character' },
   { value: 'character_transform', label: '🐻 Character Transform', category: 'character' },
