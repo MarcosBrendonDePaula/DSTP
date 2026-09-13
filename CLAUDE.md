@@ -424,6 +424,9 @@ Character avatars are static PNGs from DST Wiki in `frontend/app/client/public/a
 
 For real-time client-side features (HP bars following mobs, proximity HUDs) that the declarative rules engine can't express, write them as traditional hardcoded Lua in the mod — don't try to generate Lua from flows.
 
+### Bigger containers (`container_slots.lua`)
+Slot count + on-screen slot positions come from Klei's `containers.params[prefab].widget.slotpos`, read by the server (sizes the container) AND every client (draws the window). So chest/Chester/backpack/icebox sizes are **world configuration** (modinfo `CHEST_SLOTS` / `CHESTER_SLOTS` / `BACKPACK_SLOTS` / `ICEBOX_SLOTS`), applied at load on both sides by `container_slots.lua` (centred 80-px grid, only grows, aliases sharing the table grow together) — NOT runtime, NOT per flow; every client needs the same mod version. The frame art is left as-is (cosmetic mismatch for big counts). Player inventory (15 slots + HUD bar) is not covered.
+
 ### Hardcoded mechanics ARE fine — as clean, isolated mod modules
 
 The "flow > Lua" preference (above) is about *not spreading* logic, not a ban on Lua.
