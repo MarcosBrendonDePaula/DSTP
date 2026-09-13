@@ -1,0 +1,55 @@
+{
+  "name": "Pet inicial — um Chester que segue cada jogador (cérebro pelo flow, renasce ao morrer)",
+  "version": "2.0",
+  "exportedAt": "2026-09-12T00:00:00.000Z",
+  "nodes": [
+    { "id": "t_spawn", "type": "trigger", "data": { "event_type": "player_spawn", "alias": "p" }, "position": { "x": 0, "y": 0 } },
+    { "id": "spawn_pet", "type": "spawn_at_player", "data": { "action_type": "spawn_at_player", "alias": "pet", "params": {
+        "userid": "{{p.userid}}", "prefab": "chester", "count": "1", "offset_x": "2", "offset_z": "0",
+        "token": "pet:{{p.userid}}",
+        "brain": "{\"mode\":\"follow\",\"target\":\"{{p.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"12\"}"
+      } }, "position": { "x": 0, "y": 160 } },
+
+    { "id": "t_result", "type": "trigger", "data": { "event_type": "spawn_result", "alias": "sr" }, "position": { "x": 400, "y": 0 } },
+    { "id": "is_pet", "type": "condition", "data": { "field": "sr.token", "operator": "starts_with", "value": "pet:", "alias": "is_pet" }, "position": { "x": 400, "y": 160 } },
+    { "id": "tok", "type": "split", "data": { "alias": "tk", "params": { "value": "{{sr.token}}", "separator": ":", "trim": "true" } }, "position": { "x": 400, "y": 320 } },
+    { "id": "mem_pet", "type": "memory", "data": { "action": "write", "alias": "mem_pet", "params": { "key": "pet:{{tk.part2}}", "value": "{{sr.guid}}" } }, "position": { "x": 400, "y": 480 } },
+    { "id": "mem_owner", "type": "memory", "data": { "action": "write", "alias": "mem_owner", "params": { "key": "owner:{{sr.guid}}", "value": "{{tk.part2}}" } }, "position": { "x": 400, "y": 640 } },
+
+    { "id": "t_left", "type": "trigger", "data": { "event_type": "player_left", "alias": "left" }, "position": { "x": 800, "y": 0 } },
+    { "id": "read_pet", "type": "memory", "data": { "action": "read", "alias": "mem", "params": { "key": "pet:{{left.userid}}" } }, "position": { "x": 800, "y": 160 } },
+    { "id": "has_pet", "type": "condition", "data": { "field": "mem.value", "operator": "exists", "value": "", "alias": "has_pet" }, "position": { "x": 800, "y": 320 } },
+    { "id": "kill_pet", "type": "entity_kill", "data": { "action_type": "entity_kill", "alias": "kill", "params": { "guid": "{{mem.value}}" } }, "position": { "x": 800, "y": 480 } },
+    { "id": "forget_pet", "type": "memory", "data": { "action": "delete", "alias": "forget", "params": { "key": "pet:{{left.userid}}" } }, "position": { "x": 800, "y": 640 } },
+
+    { "id": "t_dead", "type": "trigger", "data": { "event_type": "brain_dead", "alias": "dead" }, "position": { "x": 1200, "y": 0 } },
+    { "id": "is_chester", "type": "condition", "data": { "field": "dead.prefab", "operator": "equals", "value": "chester", "alias": "is_chester" }, "position": { "x": 1200, "y": 160 } },
+    { "id": "read_owner", "type": "memory", "data": { "action": "read", "alias": "own", "params": { "key": "owner:{{dead.guid}}" } }, "position": { "x": 1200, "y": 320 } },
+    { "id": "has_owner", "type": "condition", "data": { "field": "own.value", "operator": "exists", "value": "", "alias": "has_owner" }, "position": { "x": 1200, "y": 480 } },
+    { "id": "wait", "type": "delay", "data": { "alias": "wait", "params": { "delay_ms": "3000" } }, "position": { "x": 1200, "y": 640 } },
+    { "id": "respawn_pet", "type": "spawn_at_player", "data": { "action_type": "spawn_at_player", "alias": "respawn", "params": {
+        "userid": "{{own.value}}", "prefab": "chester", "count": "1", "offset_x": "2", "offset_z": "0",
+        "token": "pet:{{own.value}}",
+        "brain": "{\"mode\":\"follow\",\"target\":\"{{own.value}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"12\"}"
+      } }, "position": { "x": 1200, "y": 800 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "t_spawn", "target": "spawn_pet" },
+
+    { "id": "e2", "source": "t_result", "target": "is_pet" },
+    { "id": "e3", "source": "is_pet", "sourceHandle": "true", "target": "tok" },
+    { "id": "e4", "source": "tok", "target": "mem_pet" },
+    { "id": "e5", "source": "mem_pet", "target": "mem_owner" },
+
+    { "id": "e6", "source": "t_left", "target": "read_pet" },
+    { "id": "e7", "source": "read_pet", "target": "has_pet" },
+    { "id": "e8", "source": "has_pet", "sourceHandle": "true", "target": "kill_pet" },
+    { "id": "e9", "source": "kill_pet", "target": "forget_pet" },
+
+    { "id": "e10", "source": "t_dead", "target": "is_chester" },
+    { "id": "e11", "source": "is_chester", "sourceHandle": "true", "target": "read_owner" },
+    { "id": "e12", "source": "read_owner", "target": "has_owner" },
+    { "id": "e13", "source": "has_owner", "sourceHandle": "true", "target": "wait" },
+    { "id": "e14", "source": "wait", "target": "respawn_pet" }
+  ]
+}
