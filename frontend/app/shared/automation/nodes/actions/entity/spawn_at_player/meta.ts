@@ -39,7 +39,9 @@ export const meta: NodeMeta = {
       "key": "offset_z",
       "label": "Offset Z",
       "placeholder": "0"
-    }
+    },
+    { "key": "token", "label": "Token (evento spawn_result devolve o GUID)", "placeholder": "" },
+    { "key": "brain", "label": "Cérebro do flow (JSON: {\"mode\":\"follow\",\"target\":\"{{trigger.userid}}\"})", "placeholder": "" }
   ],
   defaults: { action_type: 'spawn_at_player', params: {} },
   outputSchema: {

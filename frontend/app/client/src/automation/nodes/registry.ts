@@ -34,6 +34,8 @@ import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/
 import { ui as callComponentUi } from '@shared/automation/nodes/data/player/call_component/ui'
 import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
 import { ui as landClaimUi } from '@shared/automation/nodes/data/world/land_claim/ui'
+import { meta as dataFeedMeta } from '@shared/automation/nodes/data/world/data_feed/meta'
+import { ui as dataFeedUi } from '@shared/automation/nodes/data/world/data_feed/ui'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { ui as memoryUi } from '@shared/automation/nodes/data/store/memory/ui'
 import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
@@ -218,6 +220,28 @@ import { meta as entitySetFuelMeta } from '@shared/automation/nodes/actions/enti
 import { ui as entitySetFuelUi } from '@shared/automation/nodes/actions/entity/entity_set_fuel/ui'
 import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entity/entity_freeze/meta'
 import { ui as entityFreezeUi } from '@shared/automation/nodes/actions/entity/entity_freeze/ui'
+import { meta as entityBrainMeta } from '@shared/automation/nodes/actions/entity/entity_brain/meta'
+import { ui as entityBrainUi } from '@shared/automation/nodes/actions/entity/entity_brain/ui'
+import { meta as entityTakeItemMeta } from '@shared/automation/nodes/actions/entity/entity_take_item/meta'
+import { ui as entityTakeItemUi } from '@shared/automation/nodes/actions/entity/entity_take_item/ui'
+import { meta as entityDropItemMeta } from '@shared/automation/nodes/actions/entity/entity_drop_item/meta'
+import { ui as entityDropItemUi } from '@shared/automation/nodes/actions/entity/entity_drop_item/ui'
+import { meta as entityGiveItemMeta } from '@shared/automation/nodes/actions/entity/entity_give_item/meta'
+import { ui as entityGiveItemUi } from '@shared/automation/nodes/actions/entity/entity_give_item/ui'
+import { meta as entityTransferItemMeta } from '@shared/automation/nodes/actions/entity/entity_transfer_item/meta'
+import { ui as entityTransferItemUi } from '@shared/automation/nodes/actions/entity/entity_transfer_item/ui'
+import { meta as entityCanAcceptMeta } from '@shared/automation/nodes/actions/entity/entity_can_accept/meta'
+import { ui as entityCanAcceptUi } from '@shared/automation/nodes/actions/entity/entity_can_accept/ui'
+import { meta as entityCollectMeta } from '@shared/automation/nodes/actions/entity/entity_collect/meta'
+import { ui as entityCollectUi } from '@shared/automation/nodes/actions/entity/entity_collect/ui'
+import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/entity_goto/meta'
+import { ui as entityGotoUi } from '@shared/automation/nodes/actions/entity/entity_goto/ui'
+import { meta as entitySetSlotsMeta } from '@shared/automation/nodes/actions/entity/entity_set_slots/meta'
+import { ui as entitySetSlotsUi } from '@shared/automation/nodes/actions/entity/entity_set_slots/ui'
+import { meta as entityFindMeta } from '@shared/automation/nodes/actions/entity/entity_find/meta'
+import { ui as entityFindUi } from '@shared/automation/nodes/actions/entity/entity_find/ui'
+import { meta as entityTagIdMeta } from '@shared/automation/nodes/actions/entity/entity_tag_id/meta'
+import { ui as entityTagIdUi } from '@shared/automation/nodes/actions/entity/entity_tag_id/ui'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -228,6 +252,8 @@ import { meta as uiProgressBarMeta } from '@shared/automation/nodes/actions/inte
 import { ui as uiProgressBarUi } from '@shared/automation/nodes/actions/interface/ui_progress_bar/ui'
 import { meta as uiSetMeta } from '@shared/automation/nodes/actions/interface/ui_set/meta'
 import { ui as uiSetUi } from '@shared/automation/nodes/actions/interface/ui_set/ui'
+import { meta as uiDomMeta } from '@shared/automation/nodes/actions/interface/ui_dom/meta'
+import { ui as uiDomUi } from '@shared/automation/nodes/actions/interface/ui_dom/ui'
 import { meta as uiDestroyMeta } from '@shared/automation/nodes/actions/interface/ui_destroy/meta'
 import { ui as uiDestroyUi } from '@shared/automation/nodes/actions/interface/ui_destroy/ui'
 import { meta as uiClearMeta } from '@shared/automation/nodes/actions/interface/ui_clear/meta'
@@ -258,6 +284,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: playerStateMeta, ui: playerStateUi },
   { meta: callComponentMeta, ui: callComponentUi },
   { meta: landClaimMeta, ui: landClaimUi },
+  { meta: dataFeedMeta, ui: dataFeedUi },
   { meta: memoryMeta, ui: memoryUi },
   { meta: listFlowsMeta, ui: listFlowsUi },
   { meta: httpMeta, ui: httpUi },
@@ -333,11 +360,23 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: entityIgniteMeta, ui: entityIgniteUi },
   { meta: entitySetFuelMeta, ui: entitySetFuelUi },
   { meta: entityFreezeMeta, ui: entityFreezeUi },
+  { meta: entityBrainMeta, ui: entityBrainUi },
+  { meta: entityTakeItemMeta, ui: entityTakeItemUi },
+  { meta: entityDropItemMeta, ui: entityDropItemUi },
+  { meta: entityGiveItemMeta, ui: entityGiveItemUi },
+  { meta: entityTransferItemMeta, ui: entityTransferItemUi },
+  { meta: entityCanAcceptMeta, ui: entityCanAcceptUi },
+  { meta: entityCollectMeta, ui: entityCollectUi },
+  { meta: entityGotoMeta, ui: entityGotoUi },
+  { meta: entitySetSlotsMeta, ui: entitySetSlotsUi },
+  { meta: entityFindMeta, ui: entityFindUi },
+  { meta: entityTagIdMeta, ui: entityTagIdUi },
   { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
   { meta: uiNotificationMeta, ui: uiNotificationUi },
   { meta: uiLabelMeta, ui: uiLabelUi },
   { meta: uiProgressBarMeta, ui: uiProgressBarUi },
   { meta: uiSetMeta, ui: uiSetUi },
+  { meta: uiDomMeta, ui: uiDomUi },
   { meta: uiDestroyMeta, ui: uiDestroyUi },
   { meta: uiClearMeta, ui: uiClearUi },
   { meta: ruleInstallMeta, ui: ruleInstallUi },
@@ -399,6 +438,7 @@ export const registryCatalog = ENTRIES
     description: e.meta.description,
     category: e.meta.category,
     subgroup: e.meta.subgroup,
+    legacy: e.meta.legacy,
     family: e.meta.kind,
     icon: e.meta.icon,
     accent: e.meta.accent ?? 'text-gray-400',

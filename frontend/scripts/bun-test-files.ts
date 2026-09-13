@@ -10,7 +10,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const ROOT = join(import.meta.dirname, '..')
-const SEARCH_DIR = join(ROOT, 'app', 'server')
+// Node modules keep their exec tests next to exec.ts under app/shared — scan both.
+const SEARCH_DIRS = [join(ROOT, 'app', 'server'), join(ROOT, 'app', 'shared')]
 const BUN_IMPORT = /from\s+['"]bun:test['"]/
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -25,7 +26,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 // Absolute paths of every server test that imports `bun:test`.
 export function findBunTestFiles(): string[] {
-  return walk(SEARCH_DIR).filter(f => BUN_IMPORT.test(readFileSync(f, 'utf8'))).sort()
+  return SEARCH_DIRS.flatMap(d => walk(d)).filter(f => BUN_IMPORT.test(readFileSync(f, 'utf8'))).sort()
 }
 
 // Same set, as paths relative to the frontend root (for vitest's `exclude`).

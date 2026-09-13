@@ -15,6 +15,8 @@ export const meta: NodeMeta = {
   aiDescription: "Dedicated node for the entity_ignite game action.",
   kind: 'action',
   params: [
+    { "key": "id", "label": "ID estável (sobrevive ao reload)", "placeholder": "{{pet.id}}" },
+
     {
       "key": "guid",
       "label": "GUID",

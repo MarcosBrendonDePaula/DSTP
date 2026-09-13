@@ -29,6 +29,7 @@ local Survival    = require("dstp/events/survival")
 local Gathering   = require("dstp/events/gathering")
 local Exploration = require("dstp/events/exploration")
 local Griefing    = require("dstp/events/griefing")
+local Interaction = require("dstp/events/interaction")  -- every player action (performaction / actionfailed)
 local Character   = require("dstp/events/character")
 local World       = require("dstp/events/world")
 local Weather     = require("dstp/events/weather")
@@ -39,7 +40,7 @@ local NonPlayer   = require("dstp/events/nonplayer")  -- combat/trader hooks (no
 -- Per-player fan-out order = original registration order (players -> combat -> ...).
 local PER_PLAYER = {
     Players, Combat, Crafting, Inventory, Health,
-    Survival, Gathering, Exploration, Griefing, Character,
+    Survival, Gathering, Exploration, Griefing, Character, Interaction,
 }
 
 -- The per-player retry+guard, owned centrally (was the top of RegisterPerPlayerEvents).

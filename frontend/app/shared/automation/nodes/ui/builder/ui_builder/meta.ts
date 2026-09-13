@@ -1,5 +1,15 @@
 import type { NodeMeta } from '@shared/automation/nodeMeta'
 
+// HTML is the default authoring mode (task 9): a new node seeds `ui_html` (what the
+// editor opens on) AND the matching `tree` (what the exec renders). The two must stay
+// in sync — uiBuilderDefaults.client.test.ts parses this HTML and compares.
+const DEFAULT_HTML = [
+  '<panel title="Painel" width="280" gap="10">',
+  '  <text size="18">Ola {{trigger.name}}!</text>',
+  '  <button callback="ok" width="200" height="44">OK</button>',
+  '</panel>',
+].join('\n')
+
 export const meta: NodeMeta = {
   type: 'ui_builder',
   label: 'UI Builder',
@@ -7,13 +17,23 @@ export const meta: NodeMeta = {
   color: '#8b5cf6',
   accent: 'text-violet-300',
   category: 'UI',
-  description: 'Monta uma UI por arvore visual.',
+  description: 'Monta uma UI em HTML (padrao) — ou pela arvore/canvas visual.',
   aiDescription: 'Render a complete UI tree (built in the node editor) to a player, then continue the flow.',
   aiParamDescriptions: { userid: 'Player to show the UI to.', id: 'UI/group id.', anchor: 'Screen anchor (center, top, ...).' },
   kind: 'ui',
 
   subgroup: 'Builder',
-  defaults: { params: { userid: '{{trigger.userid}}', id: 'ui', anchor: 'center' }, tree: { type: 'panel', title: 'Painel', children: [] } },
+  defaults: {
+    params: { userid: '{{trigger.userid}}', id: 'ui', anchor: 'center' },
+    ui_html: DEFAULT_HTML,
+    tree: {
+      type: 'panel', title: 'Painel', width: 280, gap: 10,
+      children: [
+        { type: 'text', size: 18, text: 'Ola {{trigger.name}}!' },
+        { type: 'button', callback: 'ok', width: 200, height: 44, text: 'OK' },
+      ],
+    },
+  },
   aiEnums: {
     'params.anchor': ['center', 'top', 'topleft', 'topright', 'left', 'right', 'bottom', 'bottomleft', 'bottomright'],
   },

@@ -1,0 +1,147 @@
+# DSTP UI — CSS Support Matrix (what the DST engine can render)
+
+Status: **design spec.** Defines which CSS-like `style` properties the DSTP UI engine
+supports, which can be FAKED with DST primitives, and which are IMPOSSIBLE (the Klei
+widget engine has no equivalent). The element model (`ui-element-model.md`) carries
+these under `style`; the renderer (`ui_widgets.lua`) implements the supported set.
+
+**This is NOT a browser.** DST UI is built from a tiny widget set: `Image` (tintable
+texture, SetTint/SetSize/SetScale), `Text` (SetColour/size/align), `ImageButton`,
+`TextEdit`, `Widget` (container). Everything below is bounded by those.
+
+## Legend
+- ✅ **native** — a direct widget capability
+- 🟡 **fake** — composable from primitives (e.g. a tinted Image behind a container)
+- ❌ **impossible** — no engine primitive; won't implement
+
+## Layout (DONE — phases 1–2)
+
+| CSS | Status | Notes |
+|-----|--------|-------|
+| `display: flex` | ✅ | col/row via LayoutChildren |
+| `display: grid` | ✅ | `grid-template-columns` with px / `fr` / `%`, `column-gap`/`row-gap`, `grid-column: span N`, `justify-items`/`align-items` (`LayoutGrid`); the legacy uniform `cols` / `grid_rows` weights still work |
+| `display: block` | ✅ | single column |
+| `position: absolute` + `x/y` | ✅ | canvas mode |
+| `flex-direction` | ✅ | row/column |
+| `gap` | ✅ | between children |
+| `justify-content` | ✅ | start/center/end/between/around/evenly (`layout_math.lua`, ported from rts-dom) |
+| `align-items` | ✅ | start/center/end (stretch = start: no imposed size yet) |
+| `width`/`height` | ✅ | px or `%` (ref: screen/panel/parent). A declared size is a MINIMUM — content grows the box, never clips |
+| `padding` | ✅ | shrinks content box |
+| `margin` | ✅ | `margin` (all sides) + `margin_top/right/bottom/left`; a side may be `"auto"` (main axis: absorbs free space before justify; cross axis: beats align) |
+| `flex-grow` | ✅ | `grow` (or `flex`) on a child of a fixed-size container: the slot grows, the child's widget is centered in it (leaf textures are not resized) |
+| `flex-shrink` | ✅ | `shrink` — implemented in the math, but never triggers today because a fixed size is a minimum (nothing overflows) |
+| `min-width`/`max-width` (`*-height` in a column) | ✅ | `min_width`/`max_width`/`min_height`/`max_height` on the MAIN axis, clamp after grow |
+| `flex-wrap` / `align-content` / `row-gap` | ✅ | `wrap:true` (needs a fixed main size), `align_content` start/center/end/between/around/evenly/stretch, `row_gap` — `LayoutLines` |
+| baseline alignment | ❌ | no text metrics for baseline; `align:center` is the practical stand-in |
+| `border` | ✅ | `border: <w> <r,g,b,a>` / `border: <w>` / `border-width`+`border-color` → frame Image |
+| `align-items: stretch` | ✅ | children without a cross size fill the container's cross content box (fixed-size containers only) |
+
+**Where the math lives:** `DST_MOD/scripts/dstp/layout_math.lua` (pure, no widgets) mirrored by
+`frontend/app/shared/automation/layoutMath.ts`; both pinned to
+`layout-math-fixtures.json` by `layout-math.test.ts`. All layout is computed in CSS space
+(top-left origin, y down) and converted to DST space once, by `ToDst`.
+
+## Visual box (NEXT — to implement)
+
+| CSS | Status | How |
+|-----|--------|-----|
+| `color` | ✅ | Text:SetColour (already on text/button/label) |
+| `background` / `background-color` | 🟡 | a tinted `Image(square.tex)` sized to the container box, inserted BEHIND children |
+| `opacity` | 🟡 | multiply the widget colour/tint alpha; for a container, alpha on its bg image + SetScale doesn't carry alpha to children → apply per-leaf or via bg only |
+| `border` (solid) | 🟡 | a slightly larger tinted Image behind the bg (frame), or 4 thin Images; width+color only |
+| `border-radius` | 🟡 | ONLY with a pre-made rounded texture (e.g. panel.tex); arbitrary radius ❌ |
+| `box-shadow` | 🟡 | a blurred/offset dark Image behind — crude; usually skip |
+| `transform: scale` | ✅ | SetScale (already: node.scale) |
+| `transform: rotate/translate/3d` | ❌ | no widget rotate; translate = position only |
+| `gradient` | ❌ | no gradient fill; could fake with a gradient texture asset only |
+| `transition` / `animation` | ❌ | no tween in the declarative tree (the mod CAN MoveTo/scale in code, but not as a style prop) |
+| `font-family` (web fonts) | 🟡 | only DST's built-in fonts via `font: title|body|ui|outline|chat|talking|small` (or the raw TITLEFONT… names) |
+| `font-size` | ✅ | Text size |
+| `text-align` / `vertical-align` | ✅ | `halign`/`valign` = left/center/right, top/middle/bottom (SetHAlign/SetVAlign); needs a `width` to have a region to align in |
+| `line-height` | ❌ | parsed (`line_height`) but the DST Text widget has no line-height API — ignored |
+| `overflow: scroll` (+ fixed `height`) | ✅ | `TrueScrollArea` scissored viewport + scrollbar; `scroll_step` = wheel step. `overflow:hidden` alone still ❌ |
+| `z-index` | 🟡 | child order + MoveToFront; no arbitrary stacking context |
+| `cursor`, `hover`, `:focus` (CSS) | 🟡 | hover/focus exist as ENGINE behavior (clickable/focus), not as style selectors |
+
+## The supported `style` set (target)
+
+```
+style: {
+  // layout (done)
+  display, direction, gap, justify, align, cols, grid_template, position, x, y,
+  width, height, width_ref, height_ref, padding,
+  // visual (next)
+  margin,            // px | {t,r,b,l}
+  background,        // color [r,g,b,a] or hex → tinted square.tex behind
+  border,            // { width, color }  → frame Image
+  radius,            // only maps to a rounded texture preset; arbitrary = ignored
+  opacity,           // 0..1
+  color,             // text/leaf colour
+  font, size,        // text
+  align_text,        // text h/v align
+  scale,             // SetScale
+}
+```
+
+Anything not in this list is **dropped** (logged once in DEBUG), never errors.
+
+## Implementation plan (visual box)
+
+1. **background** — in RenderNodeImpl for `div`/panel, before rendering children, add a
+   tinted `Image("images/global.xml","square.tex")` sized to the (resolved) box,
+   `MoveToBack`. Color from `style.background`.
+2. **border** — same, a frame Image one `border.width` larger, behind the bg.
+3. **opacity** — fold into the bg/leaf colour alpha.
+4. **margin** — in LayoutChildren, add the child's margin to its measured extent and
+   offset its position.
+5. **radius/shadow/gradient** — map `radius` to a rounded preset texture if one exists;
+   otherwise no-op. Document as engine-limited.
+
+## Rule
+
+We implement the **CSS-shaped subset the DST engine can actually draw**, with CSS names
+so authors (and the AI generator) reason in CSS terms. We do NOT promise full CSS — the
+matrix above is the contract. Impossible props are documented, not faked badly.
+
+## Box model — how HTML/CSS numbers map to the game textures
+
+The renderer (`ui_widgets.lua`) and the editor preview (`UIPreview.tsx`) share ONE box
+model; when a panel looks different in-game than in the preview, one of these numbers
+drifted. All values are HUD px at the 1280×720 virtual resolution (`SCALEMODE_PROPORTIONAL`).
+
+| Node | Rule |
+|------|------|
+| `panel` (fixed: `width` **and** `height`) | frame `panel_fill_tiny.tex` = the box; **padding 20** every side; a `title` reserves a **title strip of `title_size + 16` px** (default 24 → 40) at the top, content shifts down by half of it; declared size is a **minimum** — the box grows to `content + 40 (+ strip)` |
+| `panel` (auto: no `height`) | **padding 28**; min **160 × 80**; same title strip |
+| `panel` `closeable` | the X (`close.tex`) drawn at **28×28** exact (`close_size` overrides) at `(pw/2 − 18, ph/2 − 18)`; the drag bar leaves 64 px free on the right for it |
+| `col` / `row` | no implicit padding; `gap` default 8 (col) / 12 (row); `padding` is explicit |
+| `button` | `button_carny_long_*.tex` scaled to `width × height` (default 160 × 44); label `size` default 20 |
+| `text` | measured by the engine (`GetRegionSize`); a `width` gives a fixed region + word wrap |
+| `icon` | inventory image scaled to `size` (square) |
+| `bar` | `width × height` (default 200 × 16) |
+
+Rule of thumb for a compact panel: `height ≥ 40 (padding) + 40 (title) + content`.
+The wallet (`title`, a 26-px row, a 30-px button, gap 6) needs **142**, not 64 — the
+mod grows it, so the declared 64 was only hiding the overlap.
+
+### Native texture sizes (ground truth from the game files)
+
+`bun run scripts/dst-atlas-sizes.ts` (in `frontend/`) reads the atlas `.xml` UVs + the
+KTEX header of the `.tex` straight from the DST install and prints the pixel size of
+every element. Numbers as of 2026-09-12 (atlases are 2048×2048):
+
+| Texture | Native px | How the mod sizes it |
+|---------|-----------|----------------------|
+| `fepanel_fills / panel_fill_tiny.tex` | 619 × 359 | `Image:SetSize(pw, ph)` — exact box, stretched |
+| `global_redux / button_carny_long_normal.tex` (+hover/down/disabled) | 320 × 89 | `ImageButton:ForceImageSize(w, h)` — exact px, for the tree `button` AND the `tabs` bar buttons (120×40) (the old `SetScale(w/340, h/70)` guessed 340×70 and squashed them) |
+| `global_redux / button_carny_square_normal.tex` | 129 × 129 | (unused yet) |
+| `global_redux / close.tex` | 39 × 39 | `ForceImageSize(28, 28)` — image AND hit region 28 px (the old `SetScale(0.4)` + `ForceImageSize(64,64)` really gave ~26 px) |
+| `global_redux / scrollbar_arrow_up/down.tex` | 89 × 89 | Klei's `TrueScrollArea` scales to 0.3 → ~27 px |
+| `global_redux / scrollbar_handle.tex` / `scrollbar_bar.tex` | 59 × 56 / 32 × 1133 | Klei's scrollbar |
+| `global / square.tex` | 63 × 63 | hit-target overlay, `ForceImageSize(w+pad, h+pad)` |
+
+Rule: size textures with an EXACT px API (`SetSize` / `ForceImageSize`), never with a
+`SetScale` ratio derived from an assumed native size — the native sizes are not round
+numbers. Fonts: `Text` reports its box via `GetRegionSize`, so text sizes are measured,
+not assumed.

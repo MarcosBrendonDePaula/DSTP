@@ -1,7 +1,7 @@
 name = "DSTP - Admin Panel"
 description = "Web-based admin panel for Don't Starve Together servers. Manage players, inventory, stats and more from your browser.\n\nGitHub: https://github.com/MarcosBrendonDePaula/DSTP"
 author = "MarcosBrendonDePaula"
-version = "0.8.0"
+version = "0.9.0"
 
 -- Steam Workshop ID (published 2026): 3737234840
 -- https://steamcommunity.com/sharedfiles/filedetails/?id=3737234840
@@ -59,6 +59,58 @@ configuration_options = {
             {description = "30s (Slow)", data = 30},
         },
         default = 5,
+    },
+    {
+        name = "SLOT_COUNT",
+        label = "Data slots por entidade",
+        hover = "Slots numéricos EXTRAS (net_float) por entidade, além do canal composto que toda entidade da lista já tem. Só vale para campos que mudam muitas vezes por segundo (4 bytes por mudança em vez da string inteira). 0 = só o canal composto (padrão). Custo: ~200 bytes de memória por slot por entidade. Precisa ser igual no servidor e nos clientes (o DST sincroniza esta config).",
+        options = {
+            {description = "0 — só o canal composto (padrão)", data = 0},
+            {description = "4", data = 4},
+            {description = "8", data = 8},
+            {description = "10", data = 10},
+            {description = "16", data = 16},
+        },
+        default = 0,
+    },
+    {
+        name = "CHEST_SLOTS",
+        label = "Slots: baú",
+        hover = "Slots do baú (treasurechest e variantes). Configuração de mundo: todos os clientes precisam da mesma versão do mod.",
+        options = {{description = "9 (padrão)", data = 9}, {description = "16", data = 16}, {description = "25", data = 25}, {description = "36", data = 36}},
+        default = 9,
+    },
+    {
+        name = "CHESTER_SLOTS",
+        label = "Slots: Chester",
+        hover = "Slots do Chester.",
+        options = {{description = "9 (padrão)", data = 9}, {description = "12", data = 12}, {description = "16", data = 16}, {description = "25", data = 25}},
+        default = 9,
+    },
+    {
+        name = "BACKPACK_SLOTS",
+        label = "Slots: mochila",
+        hover = "Slots da mochila comum.",
+        options = {{description = "8 (padrão)", data = 8}, {description = "12", data = 12}, {description = "16", data = 16}},
+        default = 8,
+    },
+    {
+        name = "ICEBOX_SLOTS",
+        label = "Slots: geladeira",
+        hover = "Slots da geladeira.",
+        options = {{description = "9 (padrão)", data = 9}, {description = "16", data = 16}, {description = "25", data = 25}},
+        default = 9,
+    },
+    {
+        name = "SLOT_PRESET",
+        label = "Entidades com canal de dados",
+        hover = "Quais prefabs recebem o canal de dados por entidade (campos + eventos escolhidos pelos fluxos, replicados por frame) e os slots extras. Lista em scripts/dstp/slot_prefabs.lua. 'Mobs' = criaturas e chefes. 'Mobs + estruturas' inclui fogueiras, baús, máquinas, plantas e paredes.",
+        options = {
+            {description = "Desligado", data = "off"},
+            {description = "Mobs (padrão)", data = "mobs"},
+            {description = "Mobs + estruturas", data = "mobs_structures"},
+        },
+        default = "mobs",
     },
     {
         name = "DEBUG_LOGS",
@@ -135,6 +187,13 @@ configuration_options = {
         name = "EVT_GATHERING",
         label = "Events: Gathering",
         hover = "Track resource gathering (chop, mine, harvest, loot drops with details).",
+        options = {{description = "On", data = true}, {description = "Off", data = false}},
+        default = false,
+    },
+    {
+        name = "EVT_INTERACTION",
+        label = "Events: Interaction",
+        hover = "Report every action a player performs on the world (examine, pick up, attack, open, ...) with the target entity.",
         options = {{description = "On", data = true}, {description = "Off", data = false}},
         default = false,
     },

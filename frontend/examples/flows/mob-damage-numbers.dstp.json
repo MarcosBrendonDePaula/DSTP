@@ -1,0 +1,44 @@
+{
+  "name": "Números de dano — cada hit num mob mostra '-N' flutuando sobre ele, 100% no cliente",
+  "nodes": [
+    {
+      "id": "trg",
+      "type": "trigger",
+      "position": { "x": 0, "y": 0 },
+      "data": { "event_type": "player_spawn", "alias": "p" }
+    },
+    {
+      "id": "feed",
+      "type": "data_feed",
+      "position": { "x": 340, "y": 0 },
+      "data": {
+        "params": {
+          "operation": "start",
+          "userid": "{{p.userid}}",
+          "id": "combat",
+          "prefabs": "spider, spider_warrior, hound, pigman, deerclops, bearger",
+          "fields": "hp, hp_max",
+          "events": "hit, burn, death",
+          "radius": "25",
+          "interval": "0.4"
+        }
+      }
+    },
+    {
+      "id": "rules",
+      "type": "action",
+      "position": { "x": 680, "y": 0 },
+      "data": {
+        "action_type": "rule_install",
+        "params": {
+          "userid": "{{p.userid}}",
+          "rules": "[{\"id\":\"dmg_number\",\"when\":{\"event\":\"entity_event\",\"conditions\":[{\"field\":\"event.kind\",\"op\":\"equals\",\"value\":\"hit\"}]},\"do\":[{\"action\":\"show_widget\",\"id\":\"dmg_{{event.guid}}_{{event.seq}}\",\"type\":\"label\",\"text\":\"-{{event.amount}}\",\"color\":[1,0.3,0.3,1],\"follow\":{\"guid\":\"{{event.guid}}\",\"offset_y\":90},\"ttl\":0.8}]},{\"id\":\"burn_flash\",\"when\":{\"event\":\"entity_event\",\"conditions\":[{\"field\":\"event.kind\",\"op\":\"equals\",\"value\":\"burn\"}]},\"do\":[{\"action\":\"show_widget\",\"id\":\"burn_{{event.guid}}\",\"type\":\"label\",\"text\":\"PEGOU FOGO\",\"color\":[1,0.6,0.1,1],\"follow\":{\"guid\":\"{{event.guid}}\",\"offset_y\":110},\"ttl\":1.5}]}]"
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e_trg_feed", "source": "trg", "target": "feed" },
+    { "id": "e_feed_rules", "source": "feed", "target": "rules" }
+  ]
+}

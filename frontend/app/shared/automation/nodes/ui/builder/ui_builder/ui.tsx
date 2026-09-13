@@ -37,6 +37,7 @@ export const ui = function UIBuilderNode({ id, data, selected }: any) {
       {field('Player', data.params?.userid ?? '{{trigger.userid}}', v => set('userid', v), '{{trigger.userid}}')}
       {field('ID da UI', data.params?.id ?? '', v => set('id', v), 'loja')}
       {selectField('Âncora (posição na tela)', data.params?.anchor ?? 'center', v => set('anchor', v), ANCHOR_OPTIONS)}
+      {field('HTML em runtime (opcional, vence o editor)', data.params?.html ?? '', v => set('html', v), '{{meuscript.html}}')}
       <div className="text-[9px] text-gray-400 mt-1">
         {count > 0 ? `${count} componentes` : 'UI vazia'} — <span className="text-indigo-300">duplo-clique para editar</span>
       </div>

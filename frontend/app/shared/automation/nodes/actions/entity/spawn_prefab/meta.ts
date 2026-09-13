@@ -32,7 +32,9 @@ export const meta: NodeMeta = {
       "key": "count",
       "label": "Qtd",
       "placeholder": "1"
-    }
+    },
+    { "key": "token", "label": "Token (evento spawn_result devolve o GUID)", "placeholder": "" },
+    { "key": "brain", "label": "Cérebro do flow (JSON: {\"mode\":\"follow\",\"target\":\"KU_...\"})", "placeholder": "" }
   ],
   defaults: { action_type: 'spawn_prefab', params: {} },
   outputSchema: {

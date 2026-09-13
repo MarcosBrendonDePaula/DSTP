@@ -1,0 +1,25 @@
+{
+  "name": "Baús grandes — todo baú que um jogador coloca nasce com 25 slots (fluxo, não config do mundo)",
+  "version": "2.0",
+  "exportedAt": "2026-09-13T00:00:00.000Z",
+  "nodes": [
+    { "id": "t_built", "type": "trigger", "data": { "event_type": "structure_built", "alias": "built" }, "position": { "x": 0, "y": 0 } },
+    { "id": "is_chest", "type": "condition", "data": { "field": "built.prefab", "operator": "equals", "value": "treasurechest", "alias": "is_chest" }, "position": { "x": 0, "y": 160 } },
+    { "id": "grow", "type": "entity_set_slots", "data": { "action_type": "entity_set_slots", "alias": "grow", "params": {
+        "prefab": "{{built.prefab}}", "x": "{{built.x}}", "z": "{{built.z}}", "radius": "3", "slots": "25", "token": "chest:{{built.userid}}"
+      } }, "position": { "x": 0, "y": 320 } },
+    { "id": "t_ack", "type": "trigger", "data": { "event_type": "entity_slots", "alias": "ack" }, "position": { "x": 400, "y": 0 } },
+    { "id": "ack_ok", "type": "condition", "data": { "field": "ack.ok", "operator": "equals", "value": "true", "alias": "ack_ok" }, "position": { "x": 400, "y": 160 } },
+    { "id": "is_chest_ack", "type": "condition", "data": { "field": "ack.token", "operator": "starts_with", "value": "chest:", "alias": "is_chest_ack" }, "position": { "x": 400, "y": 320 } },
+    { "id": "who", "type": "split", "data": { "alias": "who", "params": { "value": "{{ack.token}}", "separator": ":", "trim": "true" } }, "position": { "x": 400, "y": 480 } },
+    { "id": "pm", "type": "action", "data": { "action_type": "private_message", "alias": "pm", "params": { "userid": "{{who.part2}}", "message": "Seu bau nasceu com {{ack.slots}} slots." } }, "position": { "x": 400, "y": 640 } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "t_built", "target": "is_chest" },
+    { "id": "e2", "source": "is_chest", "sourceHandle": "true", "target": "grow" },
+    { "id": "e3", "source": "t_ack", "target": "ack_ok" },
+    { "id": "e4", "source": "ack_ok", "sourceHandle": "true", "target": "is_chest_ack" },
+    { "id": "e5", "source": "is_chest_ack", "sourceHandle": "true", "target": "who" },
+    { "id": "e6", "source": "who", "target": "pm" }
+  ]
+}

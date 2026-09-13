@@ -8,6 +8,7 @@ export const ui = function UIIconNode({ id, data, selected }: any) {
       {field('Tamanho', String(data.params?.size ?? ''), v => set('size', v), '56')}
       {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), '')}
       {field('Callback (clicável)', data.params?.callback ?? '', v => set('callback', v), '')}
+      {field('Bind (prop=entity.campo)', data.params?.bind ?? '', v => set('bind', v), 'prefab=entity.prefab')}
       <div className="text-[8px] text-gray-500">Ícone do item (atlas resolvido pelo prefab).</div>
     </UIBox>
   )

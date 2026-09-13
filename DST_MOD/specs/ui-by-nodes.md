@@ -44,8 +44,28 @@ generic prop/action covers it:
   client-side (Show/Hide), no round-trip.
 - **Follow a world entity** — `ui_track` (`follow` block). Modes: `guid`,
   `prefab` (nearest matching), `nearest`, `combat_target` (the player's current
-  combat target, with nearest-creature fallback). Reads `inst.dstp_hp` for real
-  mob health (see constraints doc).
+  combat target, with nearest-creature fallback), and **`all`** (one follower per
+  entity within `radius` matching `prefabs`/`tags`; enter/leave handled
+  client-side, `require_hp` skips entities without the HP netvar). Reads
+  `inst.dstp_hp` for real mob health (see constraints doc).
+- **Per-entity template + local `bind`** — wire `ui_*` children under `ui_track`
+  and they become the follower's tree, rendered once per entity. Any node may carry
+  `bind` (`value=entity.hp; max=entity.hp_max`, `text=entity.name`); the client
+  re-evaluates it every frame against the tracked entity and patches through the
+  same `Register` path `ui_set` uses — no backend round-trip. Paths:
+  `entity.name|prefab|hp|hp_max|hp_pct|has_hp|distance|<any dstp_* field>`.
+  Example: `examples/flows/mob-lifebars-nearby.dstp.json`.
+- **Any server field, chosen by the flow** — the `data_feed` node (mod
+  `data_feed.lua`) ships fields like `hunger`, `temperature`, `fuel`, `burning` or a
+  plain `component.field` of the entities around a player as `inst.dstp_<field>`,
+  so `bind: text=entity.dstp_temperature` just works. No netvar, no reload. Example:
+  `examples/flows/mob-lifebars-feed.dstp.json`.
+- **Entity events → client rules** — `data_feed` `events: hit, burn, …` ship each
+  frame's events over the entity's own channel; the client fires the synthetic rule
+  trigger `entity_event` ({kind, guid, prefab, seq, amount, actor}). A `rule_install`
+  with `when.event = entity_event` + `show_widget { follow: { guid: "{{event.guid}}" },
+  ttl }` gives floating damage numbers with zero backend round-trips. Example:
+  `examples/flows/mob-damage-numbers.dstp.json`.
 
 **Principle:** if a new UI needs new Lua, the renderer isn't generic enough —
 the missing capability should become a prop/action, not a special widget type.

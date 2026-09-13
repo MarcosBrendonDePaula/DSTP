@@ -33,6 +33,8 @@ import { meta as callComponentMeta } from '@shared/automation/nodes/data/player/
 import { handler as callComponentHandler } from '@shared/automation/nodes/data/player/call_component/exec'
 import { meta as landClaimMeta } from '@shared/automation/nodes/data/world/land_claim/meta'
 import { handler as landClaimHandler } from '@shared/automation/nodes/data/world/land_claim/exec'
+import { meta as dataFeedMeta } from '@shared/automation/nodes/data/world/data_feed/meta'
+import { handler as dataFeedHandler } from '@shared/automation/nodes/data/world/data_feed/exec'
 import { meta as memoryMeta } from '@shared/automation/nodes/data/store/memory/meta'
 import { handler as memoryHandler } from '@shared/automation/nodes/data/store/memory/exec'
 import { meta as listFlowsMeta } from '@shared/automation/nodes/data/store/list_flows/meta'
@@ -182,6 +184,28 @@ import { meta as entitySetFuelMeta } from '@shared/automation/nodes/actions/enti
 import { handler as entitySetFuelHandler } from '@shared/automation/nodes/actions/entity/entity_set_fuel/exec'
 import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entity/entity_freeze/meta'
 import { handler as entityFreezeHandler } from '@shared/automation/nodes/actions/entity/entity_freeze/exec'
+import { meta as entityBrainMeta } from '@shared/automation/nodes/actions/entity/entity_brain/meta'
+import { handler as entityBrainHandler } from '@shared/automation/nodes/actions/entity/entity_brain/exec'
+import { meta as entityTakeItemMeta } from '@shared/automation/nodes/actions/entity/entity_take_item/meta'
+import { handler as entityTakeItemHandler } from '@shared/automation/nodes/actions/entity/entity_take_item/exec'
+import { meta as entityDropItemMeta } from '@shared/automation/nodes/actions/entity/entity_drop_item/meta'
+import { handler as entityDropItemHandler } from '@shared/automation/nodes/actions/entity/entity_drop_item/exec'
+import { meta as entityGiveItemMeta } from '@shared/automation/nodes/actions/entity/entity_give_item/meta'
+import { handler as entityGiveItemHandler } from '@shared/automation/nodes/actions/entity/entity_give_item/exec'
+import { meta as entityTransferItemMeta } from '@shared/automation/nodes/actions/entity/entity_transfer_item/meta'
+import { handler as entityTransferItemHandler } from '@shared/automation/nodes/actions/entity/entity_transfer_item/exec'
+import { meta as entityCanAcceptMeta } from '@shared/automation/nodes/actions/entity/entity_can_accept/meta'
+import { handler as entityCanAcceptHandler } from '@shared/automation/nodes/actions/entity/entity_can_accept/exec'
+import { meta as entityCollectMeta } from '@shared/automation/nodes/actions/entity/entity_collect/meta'
+import { handler as entityCollectHandler } from '@shared/automation/nodes/actions/entity/entity_collect/exec'
+import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/entity_goto/meta'
+import { handler as entityGotoHandler } from '@shared/automation/nodes/actions/entity/entity_goto/exec'
+import { meta as entitySetSlotsMeta } from '@shared/automation/nodes/actions/entity/entity_set_slots/meta'
+import { handler as entitySetSlotsHandler } from '@shared/automation/nodes/actions/entity/entity_set_slots/exec'
+import { meta as entityFindMeta } from '@shared/automation/nodes/actions/entity/entity_find/meta'
+import { handler as entityFindHandler } from '@shared/automation/nodes/actions/entity/entity_find/exec'
+import { meta as entityTagIdMeta } from '@shared/automation/nodes/actions/entity/entity_tag_id/meta'
+import { handler as entityTagIdHandler } from '@shared/automation/nodes/actions/entity/entity_tag_id/exec'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { handler as entityUnfreezeHandler } from '@shared/automation/nodes/actions/entity/entity_unfreeze/exec'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -192,6 +216,8 @@ import { meta as uiProgressBarMeta } from '@shared/automation/nodes/actions/inte
 import { handler as uiProgressBarHandler } from '@shared/automation/nodes/actions/interface/ui_progress_bar/exec'
 import { meta as uiSetMeta } from '@shared/automation/nodes/actions/interface/ui_set/meta'
 import { handler as uiSetHandler } from '@shared/automation/nodes/actions/interface/ui_set/exec'
+import { meta as uiDomMeta } from '@shared/automation/nodes/actions/interface/ui_dom/meta'
+import { handler as uiDomHandler } from '@shared/automation/nodes/actions/interface/ui_dom/exec'
 import { meta as uiDestroyMeta } from '@shared/automation/nodes/actions/interface/ui_destroy/meta'
 import { handler as uiDestroyHandler } from '@shared/automation/nodes/actions/interface/ui_destroy/exec'
 import { meta as uiClearMeta } from '@shared/automation/nodes/actions/interface/ui_clear/meta'
@@ -237,6 +263,7 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: playerStateMeta, handler: playerStateHandler },
   { meta: callComponentMeta, handler: callComponentHandler },
   { meta: landClaimMeta, handler: landClaimHandler },
+  { meta: dataFeedMeta, handler: dataFeedHandler },
   { meta: memoryMeta, handler: memoryHandler },
   { meta: listFlowsMeta, handler: listFlowsHandler },
   { meta: httpMeta, handler: httpHandler },
@@ -312,11 +339,23 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: entityIgniteMeta, handler: entityIgniteHandler },
   { meta: entitySetFuelMeta, handler: entitySetFuelHandler },
   { meta: entityFreezeMeta, handler: entityFreezeHandler },
+  { meta: entityBrainMeta, handler: entityBrainHandler },
+  { meta: entityTakeItemMeta, handler: entityTakeItemHandler },
+  { meta: entityDropItemMeta, handler: entityDropItemHandler },
+  { meta: entityGiveItemMeta, handler: entityGiveItemHandler },
+  { meta: entityTransferItemMeta, handler: entityTransferItemHandler },
+  { meta: entityCanAcceptMeta, handler: entityCanAcceptHandler },
+  { meta: entityCollectMeta, handler: entityCollectHandler },
+  { meta: entityGotoMeta, handler: entityGotoHandler },
+  { meta: entitySetSlotsMeta, handler: entitySetSlotsHandler },
+  { meta: entityFindMeta, handler: entityFindHandler },
+  { meta: entityTagIdMeta, handler: entityTagIdHandler },
   { meta: entityUnfreezeMeta, handler: entityUnfreezeHandler },
   { meta: uiNotificationMeta, handler: uiNotificationHandler },
   { meta: uiLabelMeta, handler: uiLabelHandler },
   { meta: uiProgressBarMeta, handler: uiProgressBarHandler },
   { meta: uiSetMeta, handler: uiSetHandler },
+  { meta: uiDomMeta, handler: uiDomHandler },
   { meta: uiDestroyMeta, handler: uiDestroyHandler },
   { meta: uiClearMeta, handler: uiClearHandler },
   { meta: ruleInstallMeta, handler: ruleInstallHandler },

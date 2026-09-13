@@ -58,6 +58,19 @@ Core.ProcessCommands({
 })
 check("co-tick: both subs kept", actionsOf("joe") == "rules_install,state_set")
 
+-- ── ui_command subs must ALSO lose the backend seq (in-game 2026-09-12: the login
+-- panel's create carried seq <= the wallet's and UIWidgets' per-command dedup dropped
+-- it silently). Same-ms / out-of-order seqs must not matter inside an envelope. ──
+reset()
+Core.ProcessCommands({
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "create", type = "tree", id = "wallet", seq = 500 } } },
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "create", type = "tree", id = "auth", seq = 500 } } },
+    { type = "ui_command", data = { userid = "joe", cmd = { action = "batch", seq = 400, commands = { { action = "set", id = "x", seq = 400 } } } } },
+})
+check("ui subs: all three kept", actionsOf("joe") == "create,create,set")
+check("ui subs: NO sub carries a seq", subs("joe")[1].seq == nil and subs("joe")[2].seq == nil and subs("joe")[3].seq == nil)
+check("ui subs: ids intact", subs("joe")[1].id == "wallet" and subs("joe")[2].id == "auth")
+
 -- ── Broadcast + per-player overlap: install_rules_all + per-player ui_command ──
 reset()
 Core.ProcessCommands({
@@ -110,5 +123,31 @@ Core.ProcessCommands({
 })
 check("passthrough: 2 non-UI commands executed", #passthrough == 2)
 check("passthrough: joe still got his UI envelope", env("joe") ~= nil)
+
+-- ── CROSS-POLL outbox: two syncs 100 ms apart must NOT :set twice back-to-back ──
+-- In-game (2026-09-12) the login panel's envelope, sent one poll after the wallet's,
+-- never reached the client: two :set() on the same net_string inside one network
+-- tick → the first is overwritten before it replicates. With a world clock available
+-- (TheWorld:DoTaskInTime) the coalescer holds an OUTBOX per player and flushes it
+-- once per `ui_flush_delay`, merging everything that arrived meanwhile.
+reset()
+local scheduled = {}
+mock_G.TheWorld.DoTaskInTime = function(_, delay, fn) scheduled[#scheduled + 1] = { delay = delay, fn = fn }; return { Cancel = function() end } end
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "wallet" } } } })
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "auth" } } } })
+check("outbox: nothing :set before the flush fires", (envelopes["joe"] and envelopes["joe"].sets or 0) == 0)
+check("outbox: ONE flush scheduled for the two polls", #scheduled == 1)
+scheduled[1].fn()
+check("outbox: one :set carrying BOTH creates in order", envelopes["joe"] and envelopes["joe"].sets == 1 and actionsOf("joe") == "create,create"
+    and subs("joe")[1].id == "wallet" and subs("joe")[2].id == "auth")
+-- after the flush a new poll schedules a new flush (not silently dropped)
+Core.ProcessCommands({ { type = "ui_command", data = { userid = "joe", cmd = { action = "create", id = "later" } } } })
+check("outbox: next poll schedules a fresh flush", #scheduled == 2)
+scheduled[2].fn()
+check("outbox: second flush delivers the later create", envelopes["joe"].sets == 2 and subs("joe")[1].id == "later")
+local s1 = nil
+-- seq keeps increasing across flushes
+check("outbox: envelope seq is monotonic", env("joe").seq == 2 or env("joe").seq > 1)
+mock_G.TheWorld.DoTaskInTime = nil
 
 return C.report()

@@ -60,6 +60,8 @@ export const EVENT_FIELDS: Record<string, string[]> = {
   structure_built: ['prefab', 'x', 'z'],
 
   player_work: ['target', 'action'],
+  player_action: ['action', 'guid', 'prefab', 'x', 'z', 'target_userid', 'item', 'item_guid', 'recipe'],
+  player_action_failed: ['action', 'guid', 'prefab', 'x', 'z', 'item', 'reason'],
   resource_gathered: ['source', 'action', 'loot', 'count'],
   player_harvest: ['source'],
   player_startfire: ['target'],

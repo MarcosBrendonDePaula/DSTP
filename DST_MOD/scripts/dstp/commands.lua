@@ -331,6 +331,12 @@ function Commands.RegisterAll(core)
     -- a GUID from an event goes stale (the entity may already be removed), so we never
     -- index a nil and always validate IsValid — handlers branch on the reason.
     local function ResolveEntity(data)
+        -- stable id first (survives world loads — see dstp/entity_ids.lua)
+        if data.id ~= nil and data.id ~= "" and core.EntityIds then
+            local inst = core.EntityIds.Get(tostring(data.id))
+            if inst then return inst, nil end
+            return nil, "gone"
+        end
         local guid = tonumber(data.guid or data.container_guid)
         if guid then
             local inst = _G.Ents[guid]
@@ -363,6 +369,7 @@ function Commands.RegisterAll(core)
             found = true,
             prefab = inst.prefab,
             guid = inst.GUID,
+            id = core.EntityIds and core.EntityIds.IdOf(inst) or nil,   -- stable id, if the entity has one
             name = (inst.GetDisplayName and inst:GetDisplayName()) or inst.name or inst.prefab,
             x = math.floor(x), z = math.floor(z),
             age = inst.GetTimeAlive and math.floor(inst:GetTimeAlive()) or 0,
@@ -513,6 +520,217 @@ function Commands.RegisterAll(core)
         local inst = ResolveEntity(data)
         if not (inst and inst.components.freezable) then return end
         inst.components.freezable:AddColdness(tonumber(data.coldness) or 1)
+    end)
+
+    -- entity_set_brain: hand a mob's brain to the flow (dstp/flow_brain). data = the
+    -- resolver keys (guid | prefab+x+z+radius) + the brain spec: mode (follow/guard/
+    -- attack/flee/wander/stay/default), target (userid|guid), anchor_x/anchor_z,
+    -- brain_radius, tags, prefabs, attack_players. `default` restores the original brain.
+    DSTP.RegisterCommand("entity_set_brain", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then LogError("entity_set_brain: flow_brain not initialised") return end
+        local inst, reason = ResolveEntity(data)
+        if not inst then
+            if data.token then DSTP.PushEvent("brain_result", { token = data.token, ok = false, reason = reason }) end
+            return
+        end
+        local ok, err = FlowBrain.Apply(inst, data)
+        if not ok then LogError("entity_set_brain: " .. tostring(err)) end
+        if data.token then
+            DSTP.PushEvent("brain_result", { token = data.token, ok = ok and true or false, reason = ok and nil or err,
+                guid = inst.GUID, prefab = inst.prefab, mode = ok and tostring(data.mode) or nil })
+        end
+    end)
+
+    -- entity_take_item: put a world item (item_guid) into the resolved entity's container
+    -- or inventory (the generic half of "collect" — the brain reports brain_item_reached
+    -- with store=event, the flow decides to take it, or not). Ack: item_taken (with token).
+    DSTP.RegisterCommand("entity_take_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local item = tonumber(data.item_guid) and _G.Ents[tonumber(data.item_guid)] or nil
+        local ok, why = false, reason
+        if inst then ok, why = FlowBrain.TakeItem(inst, item) end
+        if not ok then LogError("entity_take_item: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("item_taken", { token = data.token, ok = ok and true or false, reason = ok and nil or why,
+                guid = inst and inst.GUID or nil, item_guid = tonumber(data.item_guid), item = item and item.prefab or nil })
+        end
+    end)
+
+    -- entity_give_item: spawn `prefab` ×count straight into the entity's container /
+    -- inventory (a chest, a Chester, a pigman). Ack: item_given (with token).
+    DSTP.RegisterCommand("entity_give_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local item, why = nil, reason
+        if inst then item, why = FlowBrain.GiveNewItem(inst, data.item or data.prefab_item, data.count) end
+        if not item then LogError("entity_give_item: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("item_given", { token = data.token, ok = item ~= nil, reason = item and nil or why,
+                guid = inst and inst.GUID or nil, item = item and item.prefab or data.item, item_guid = item and item.GUID or nil,
+                count = tonumber(data.count) or 1 })
+        end
+    end)
+
+    -- entity_transfer_item: move `item` (prefab | guid | "all") from this entity's
+    -- container/inventory into `target_guid`'s, never touching the ground.
+    -- Ack: entity_item_transferred { moved, refused } (with token).
+    DSTP.RegisterCommand("entity_transfer_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local src = ResolveEntity(data)
+        local dst = tonumber(data.target_guid) and _G.Ents[tonumber(data.target_guid)] or nil
+        if dst and dst.IsValid and not dst:IsValid() then dst = nil end
+        local moved, refused = 0, 0
+        if src and dst then moved, refused = FlowBrain.TransferItems(src, dst, data.item or "all") end
+        if data.token then
+            DSTP.PushEvent("entity_item_transferred", { token = data.token, ok = (src ~= nil and dst ~= nil),
+                guid = src and src.GUID or nil, target_guid = dst and dst.GUID or nil, item = data.item or "all", moved = moved, refused = refused })
+        end
+    end)
+
+    -- One-shot brain tasks (any flow-brained mob, any mode; a mob without a flow brain
+    -- gets one in `stay` first). Outcome → brain_task_done { kind, ok, reason, token }.
+    --   entity_collect { resolver, item_guid | item (prefab) + brain_radius, store, timeout, token }
+    --   entity_goto    { resolver, target_guid | x + z, timeout, token }
+    local function EnsureFlowBrain(inst)
+        if inst._dstp_brain then return true end
+        return core.FlowBrain.Apply(inst, { mode = "stay" })
+    end
+    DSTP.RegisterCommand("entity_collect", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local function fail(why) if data.token then DSTP.PushEvent("brain_task_done", { kind = "pickup", ok = false, reason = why, token = data.token, guid = inst and inst.GUID or nil }) end end
+        if not inst then fail(reason) return end
+        local ok, err = EnsureFlowBrain(inst)
+        if not ok then fail(err) return end
+        local item_guid = tonumber(data.item_guid)
+        if not item_guid and data.item then
+            -- nearest matching ground item around the mob
+            local st = { mode = "collect", radius = tonumber(data.brain_radius or data.radius) or 8, prefabs = { data.item }, store = "event" }
+            local it = FlowBrain.FindPickup(inst, st)
+            item_guid = it and it.GUID or nil
+        end
+        if not item_guid then fail("no_item") return end
+        local it = _G.Ents[item_guid]
+        if not (it and it:IsValid()) then fail("gone") return end
+        local ok2, err2 = FlowBrain.SetTask(inst, { kind = "pickup", item_guid = item_guid, store = data.store, timeout = data.timeout, token = data.token })
+        if not ok2 then fail(err2) end
+    end)
+    DSTP.RegisterCommand("entity_goto", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local function fail(why) if data.token then DSTP.PushEvent("brain_task_done", { kind = "goto", ok = false, reason = why, token = data.token, guid = inst and inst.GUID or nil }) end end
+        if not inst then fail(reason) return end
+        local ok, err = EnsureFlowBrain(inst)
+        if not ok then fail(err) return end
+        -- goto_x/goto_z (the node) or x/z (raw command) — x/z also serve the mob RESOLVER, so
+        -- the node uses goto_* to keep "where the mob is" apart from "where to go"
+        local ok2, err2 = FlowBrain.SetTask(inst, { kind = "goto", target_guid = data.target_guid, x = data.goto_x or data.x, z = data.goto_z or data.z, timeout = data.timeout, token = data.token })
+        if not ok2 then fail(err2) end
+    end)
+
+    -- entity_set_slots: grow a container's slot count at RUNTIME (flow-controlled; a
+    -- per-instance layout replicated by netvar, persisted). Only grows. Ack:
+    -- entity_slots { guid, slots, ok, reason } (with token).
+    DSTP.RegisterCommand("entity_set_slots", function(data)
+        local CS, params = core.ContainerSlots, core.ContainerParams
+        if not (CS and params) then return end
+        local inst, reason = ResolveEntity(data)
+        local ok, why = false, reason
+        if inst then
+            local pok, r1, r2 = _G.pcall(CS.SetInstance, inst, data.slots, params, _G.Vector3)
+            if pok then ok, why = r1, r2 else ok, why = false, "error: " .. tostring(r1) end
+        end
+        if not ok then LogError("entity_set_slots: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("entity_slots", { token = data.token, ok = ok and true or false, reason = ok and nil or why,
+                guid = inst and inst.GUID or nil, prefab = inst and inst.prefab or nil, slots = tonumber(data.slots) })
+        end
+    end)
+
+    -- entity_tag_id: give an entity a stable id (or read the one it has). Ack:
+    -- entity_id { token, ok, guid, prefab, id }. Any later command can use `id` as the
+    -- resolver key — it survives world loads, the guid does not.
+    DSTP.RegisterCommand("entity_tag_id", function(data)
+        local inst, reason = ResolveEntity(data)
+        local sid = inst and core.EntityIds and core.EntityIds.Ensure(inst) or nil
+        DSTP.PushEvent("entity_id", { token = data.token, ok = sid ~= nil, reason = sid and nil or (reason or "no_id"),
+            guid = inst and inst.GUID or nil, prefab = inst and inst.prefab or nil, id = sid })
+    end)
+
+    -- entity_find: QUERY — entities by prefab (comma list ok), optionally only those whose
+    -- flow brain targets `owner_userid`, optionally within `radius` of a player (`near_userid`)
+    -- or a point (x,z). Answer: entity_found { token, count, guid (nearest), entities[] }.
+    -- The primitive that lets a flow ask "is there already a pet of mine?" instead of
+    -- guessing from a remembered guid (guids change on every world load).
+    DSTP.RegisterCommand("entity_find", function(data)
+        local want = {}
+        for p in tostring(data.prefab or ""):gmatch("[^,%s]+") do want[p] = true end
+        local cx, cz, _y, radius = nil, nil, nil, tonumber(data.radius)   -- `_y`: strict mode, never a bare `_`
+        if data.near_userid then
+            local p = FindPlayer(data.near_userid)
+            if p and p.Transform then cx, _y, cz = p.Transform:GetWorldPosition() end
+        elseif data.x ~= nil and data.z ~= nil then cx, cz = tonumber(data.x), tonumber(data.z) end
+        local found = {}
+        for _, e in pairs(_G.Ents) do
+            if e and e.prefab and want[e.prefab] and e.IsValid and e:IsValid() and e.Transform then
+                local ok = true
+                if data.owner_userid then
+                    local st = e._dstp_brain
+                    ok = st ~= nil and st.target_userid == data.owner_userid
+                end
+                local ex, _ey, ez = e.Transform:GetWorldPosition()
+                local dist = (cx and cz) and math.sqrt((ex - cx) ^ 2 + (ez - cz) ^ 2) or nil
+                if ok and radius and dist and dist > radius then ok = false end
+                if ok then found[#found + 1] = { guid = e.GUID, id = core.EntityIds and core.EntityIds.IdOf(e) or nil, prefab = e.prefab, x = math.floor(ex), z = math.floor(ez), dist = dist and math.floor(dist) or nil, mode = e._dstp_brain and e._dstp_brain.mode or nil } end
+            end
+        end
+        table.sort(found, function(a, b) return (a.dist or 0) < (b.dist or 0) end)
+        local cap = math.min(#found, 20)
+        local list = {}
+        for i = 1, cap do list[i] = found[i] end
+        DSTP.PushEvent("entity_found", { token = data.token, prefab = data.prefab, owner_userid = data.owner_userid,
+            count = #found, guid = found[1] and found[1].guid or nil, id = found[1] and found[1].id or nil, entities = list })
+    end)
+
+    -- entity_can_accept: capability query — how many of `item_guid` (a world item) or of a
+    -- fresh `item` prefab fit in the entity's container/inventory now (free slots + room
+    -- in stacks). Answer: entity_capacity { count, is_full, num_items } (token).
+    DSTP.RegisterCommand("entity_can_accept", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local out = { token = data.token, ok = inst ~= nil, reason = inst and nil or reason, guid = inst and inst.GUID or nil, count = 0 }
+        if inst then
+            local item = tonumber(data.item_guid) and _G.Ents[tonumber(data.item_guid)] or nil
+            local temp = nil
+            if not item and data.item and _G.SpawnPrefab then temp = _G.SpawnPrefab(data.item); item = temp end
+            if item then out.count = FlowBrain.CanAccept(inst, item) end
+            if temp and temp.Remove then temp:Remove() end
+            local c = inst.components and (inst.components.container or inst.components.inventory)
+            if c then
+                out.is_full = c.IsFull and c:IsFull() or false
+                out.num_items = c.NumItems and c:NumItems() or nil
+            end
+        end
+        DSTP.PushEvent("entity_capacity", out)
+    end)
+
+    -- entity_drop_item: drop `item` (prefab | item guid | "all") from the entity's
+    -- container/inventory onto the ground.
+    DSTP.RegisterCommand("entity_drop_item", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst = ResolveEntity(data)
+        if not inst then return end
+        local n = FlowBrain.DropItem(inst, data.item or "all")
+        if data.token then DSTP.PushEvent("item_dropped", { token = data.token, guid = inst.GUID, item = data.item or "all", count = n }) end
     end)
 
     -- entity_unfreeze: thaw a frozen mob.
@@ -980,12 +1198,36 @@ function Commands.RegisterAll(core)
     -- Report a spawned entity's GUID back so a flow can then control it (the
     -- spawn -> control -> react loop). Echoes the token for correlation; fired only
     -- when the spawn provided a token, so existing fire-and-forget spawns are unchanged.
+    -- spawn_* `brain` param: a mob can be BORN with a flow brain ({ mode=..., ... } table,
+    -- or a JSON string of it) so spawn → control needs no second command.
+    local function ApplySpawnBrain(data, ent)
+        local spec = data.brain
+        if type(spec) == "string" and spec ~= "" then
+            local ok, dec = _G.pcall(_G.json.decode, spec)
+            spec = ok and dec or nil
+        end
+        if type(spec) == "table" and core.FlowBrain and ent then
+            local ok, err = core.FlowBrain.Apply(ent, spec)
+            if not ok then LogError("spawn brain: " .. tostring(err)) end
+            -- ack like entity_set_brain does, so a flow can see the brain took (needs token)
+            if data.token then
+                DSTP.PushEvent("brain_result", { token = data.token, ok = ok and true or false, reason = ok and nil or err,
+                    guid = ent.GUID, prefab = ent.prefab, mode = ok and tostring(spec.mode) or nil })
+            end
+        end
+    end
+
     local function ReportSpawn(data, ent)
+        ApplySpawnBrain(data, ent)
         if not (data.token and ent) then return end
         local x, _, z = 0, 0, 0
         if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end
+        -- a spawn the flow cares about (it gave a token) gets a STABLE id right away, so
+        -- the flow can remember `id` instead of the load-volatile guid
+        local sid = core.EntityIds and core.EntityIds.Ensure(ent) or nil
         DSTP.PushEvent("spawn_result", {
             token = data.token,
+            id = sid,
             guid = ent.GUID,
             prefab = ent.prefab,
             x = math.floor(x), z = math.floor(z),

@@ -1,0 +1,55 @@
+<panel title="Loja" min_width="340" gap="8">
+  <div style="display:flex; direction:row; gap:8; align:center">
+    <icon prefab="goldnugget" size="28"></icon>
+    <text id="saldo_txt" size="24" color="1,0.85,0.2,1">{{coins.value}}</text>
+    <text size="14" color="0.7,0.7,0.7,1">moedas</text>
+  </div>
+
+  <tabs active="0">
+    <div tab_label="Comprar" style="display:flex; direction:column; gap:6">
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="carrot" size="32"></icon>
+        <text size="16" width="150">Cenoura (10)</text>
+        <button callback="buy:carrot" width="90" height="34">Comprar</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="berries" size="32"></icon>
+        <text size="16" width="150">Frutas (10)</text>
+        <button callback="buy:berries" width="90" height="34">Comprar</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="axe" size="32"></icon>
+        <text size="16" width="150">Machado (10)</text>
+        <button callback="buy:axe" width="90" height="34">Comprar</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="spear" size="32"></icon>
+        <text size="16" width="150">Lanca (10)</text>
+        <button callback="buy:spear" width="90" height="34">Comprar</button>
+      </div>
+    </div>
+
+    <div tab_label="Vender" style="display:flex; direction:column; gap:6">
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="log" size="32"></icon>
+        <text size="16" width="150">Madeira (+5)</text>
+        <button callback="sell:log" width="90" height="34">Vender</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="rocks" size="32"></icon>
+        <text size="16" width="150">Pedra (+5)</text>
+        <button callback="sell:rocks" width="90" height="34">Vender</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="cutgrass" size="32"></icon>
+        <text size="16" width="150">Grama (+5)</text>
+        <button callback="sell:cutgrass" width="90" height="34">Vender</button>
+      </div>
+      <div style="display:flex; direction:row; gap:8; align:center">
+        <icon prefab="twigs" size="32"></icon>
+        <text size="16" width="150">Gravetos (+5)</text>
+        <button callback="sell:twigs" width="90" height="34">Vender</button>
+      </div>
+    </div>
+  </tabs>
+</panel>

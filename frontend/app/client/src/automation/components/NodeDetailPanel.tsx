@@ -11,6 +11,8 @@ import { ACTION_TYPES } from '../nodes/actions/actionTypes'
 import { registryMetaByType, registryNodeTypes, registryOutputSchemas } from '../nodes/registry'
 import { ConfigOnlyContext, NodePrefabInput } from '../nodes/BaseNode'
 import { UITreeEditor } from './UITreeEditor'
+import { treeToHtml } from './htmlParser'
+import { toElement } from './elementModel'
 import { nodeIcon } from '../nodes/nodeIcons'
 import { triggerShape } from '../nodes/eventSchemas'
 import { LuChevronDown, LuCheck, LuChevronRight, LuX, LuArrowRight, LuPanelLeftClose, LuPanelRightClose, LuPanelLeftOpen, LuPanelRightOpen } from 'react-icons/lu'
@@ -740,13 +742,25 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
   // the root's `mode` (chosen in Config), never both.
   const isUIBuilder = type === 'ui_builder'
   const [midTab, setMidTab] = useState<'config' | 'editor'>('config')
-  useEffect(() => { setMidTab('config') }, [node.id])
-  // The ui_builder edit mode lives on the tree root: mode==='canvas' → visual designer,
-  // else → structured tree. Toggled from Config.
+  // The ui_builder edit mode: 'html' when the node carries HTML source (data.ui_html —
+  // the default for new nodes, task 9); otherwise it lives on the tree root:
+  // mode==='canvas' → visual designer, else → structured tree. Toggled from Config.
   const uiTree = (data as any)?.tree as any
-  const uiMode: 'canvas' | 'layout' = uiTree?.mode === 'canvas' ? 'canvas' : 'layout'
-  const setUIMode = (m: 'canvas' | 'layout') => {
+  const uiHtml = (data as any)?.ui_html
+  type UIMode = 'html' | 'canvas' | 'layout'
+  const uiMode: UIMode = typeof uiHtml === 'string' ? 'html' : uiTree?.mode === 'canvas' ? 'canvas' : 'layout'
+  // An HTML-mode ui_builder opens straight on its editor; everything else on Config.
+  useEffect(() => { setMidTab(isUIBuilder && uiMode === 'html' ? 'editor' : 'config') }, [node.id])
+  const setUIMode = (m: UIMode) => {
     const base = uiTree && uiTree.type ? uiTree : { type: 'panel', title: 'Painel', children: [] }
+    if (m === 'html') {
+      // tree → HTML once; from here the HTML is the node's source of truth (the editor
+      // re-parses it into data.tree on every edit).
+      let html = ''
+      try { html = treeToHtml(toElement(base)) } catch { html = '' }
+      onUpdateData?.(node.id, { ...(data as any), ui_html: html })
+      return
+    }
     const next = { ...base }
     if (m === 'canvas') {
       next.mode = 'canvas'
@@ -755,7 +769,13 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
     } else {
       delete next.mode
     }
-    onUpdateTree?.(node.id, next)
+    if (typeof uiHtml === 'string') {
+      // leaving HTML mode: the tree (synced from the last parse) becomes the truth
+      const { ui_html: _drop, ...rest } = (data as any)
+      onUpdateData?.(node.id, { ...rest, tree: next })
+    } else {
+      onUpdateTree?.(node.id, next)
+    }
   }
   // Collapse the Input/Output side columns to give the middle column more room.
   // Output starts collapsed — without a capture it's just the schema, rarely the
@@ -898,7 +918,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
             <div className="flex items-center justify-between mb-3">
               {isUIBuilder ? (
                 <div className="flex gap-1">
-                  {([['config', 'Config'], ['editor', uiMode === 'canvas' ? '🎨 Editor visual' : '🌳 Editor (árvore)']] as const).map(([k, lbl]) => (
+                  {([['config', 'Config'], ['editor', uiMode === 'html' ? '</> Editor HTML' : uiMode === 'canvas' ? '🎨 Editor visual' : '🌳 Editor (árvore)']] as const).map(([k, lbl]) => (
                     <button key={k} onClick={() => setMidTab(k)}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${midTab === k ? 'bg-indigo-500/20 text-indigo-300' : 'text-gray-500 hover:text-gray-300'}`}>
                       {lbl}
@@ -916,9 +936,12 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
                 tree={uiTree ?? null}
                 onChange={tree => onUpdateTree?.(node.id, tree)}
                 forceTab={uiMode === 'canvas' ? 'render' : 'tree'}
+                forceCode={uiMode === 'html'}
                 pctX={(node.data as any)?.params?.pct_x ?? ''}
                 pctY={(node.data as any)?.params?.pct_y ?? ''}
                 onSetParam={(kv) => onUpdateData?.(node.id, { ...(node.data as any), params: { ...((node.data as any)?.params || {}), ...kv } })}
+                html={(node.data as any)?.ui_html}
+                onHtmlChange={(h) => onUpdateData?.(node.id, { ...(node.data as any), ui_html: h })}
               />
             ) : (
               <div className="space-y-3">
@@ -927,7 +950,7 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
                   <div className="pb-3 mb-1 border-b border-white/10">
                     <span className="text-[10px] text-gray-400 block mb-1.5">Modo de edição da UI</span>
                     <div className="flex gap-1.5">
-                      {([['canvas', '🎨 Visual (posição livre)'], ['layout', '🌳 Estruturado (empilhado)']] as const).map(([m, lbl]) => (
+                      {([['html', '</> HTML (padrão)'], ['canvas', '🎨 Visual (posição livre)'], ['layout', '🌳 Estruturado (empilhado)']] as const).map(([m, lbl]) => (
                         <button key={m} onClick={() => { setUIMode(m); setMidTab('editor') }}
                           className={`flex-1 px-2 py-1.5 rounded-md text-[10px] font-medium border transition-colors ${uiMode === m ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-200' : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200'}`}>
                           {lbl}
@@ -935,9 +958,11 @@ export function NodeDetailPanel({ node, onClose, onUpdateData, captureTrace, cap
                       ))}
                     </div>
                     <p className="text-[9px] text-gray-600 mt-1.5 leading-tight">
-                      {uiMode === 'canvas'
-                        ? 'Arrasta os componentes livremente no formulário (estilo Visual Basic).'
-                        : 'Empilha os componentes em colunas/linhas automaticamente.'}
+                      {uiMode === 'html'
+                        ? 'Escreve a UI como HTML com preview ao vivo — o modo padrão. O HTML é a fonte da verdade do nó.'
+                        : uiMode === 'canvas'
+                          ? 'Arrasta os componentes livremente no formulário (estilo Visual Basic).'
+                          : 'Empilha os componentes em colunas/linhas automaticamente.'}
                     </p>
                   </div>
                 )}

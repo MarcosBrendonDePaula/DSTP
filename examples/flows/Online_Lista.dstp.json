@@ -1,0 +1,50 @@
+{
+  "name": "!online — lista de jogadores (script JS → HTML → ui_builder)",
+  "version": "2.0",
+  "exportedAt": "2026-09-12T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "trigger_1",
+      "type": "trigger",
+      "data": { "event_type": "chat_message", "alias": "chat" },
+      "position": { "x": 300, "y": 50 }
+    },
+    {
+      "id": "condition_1",
+      "type": "condition",
+      "data": { "field": "chat.message", "operator": "starts_with", "value": "!online", "alias": "pediu" },
+      "position": { "x": 300, "y": 200 }
+    },
+    {
+      "id": "script_1",
+      "type": "script",
+      "data": {
+        "alias": "s",
+        "params": {
+          "code": "// Monta a lista de quem está online como HTML, no BACKEND (Bun + jsdom).\n// ctx.getPlayers() = jogadores de todos os shards deste servidor, como o mod reporta.\n// O ui_builder recebe o HTML pronto pelo campo \"HTML em runtime\" ({{s.html}}).\nasync function run(ctx) {\n  const players = ctx.getPlayers()\n  const doc = await ctx.dom(\n    '<panel title=\"Online\" width=\"380\" gap=\"6\">' +\n    '  <text id=\"total\" size=\"16\" color=\"0.8,0.8,0.8,1\"></text>' +\n    '  <div id=\"lista\" style=\"overflow:scroll; height:220; gap:4; width:340\"></div>' +\n    '  <button callback=\"close\" width=\"140\" height=\"40\">Fechar</button>' +\n    '</panel>')\n  doc.querySelector('#total').textContent = players.length + ' jogador(es) online'\n  const lista = doc.querySelector('#lista')\n  for (const p of players) {\n    const row = doc.createElement('div')\n    row.setAttribute('style', 'display:flex; flex-direction:row; gap:8; align-items:center')\n    const icon = doc.createElement('icon')\n    icon.setAttribute('prefab', p.prefab || 'wilson'); icon.setAttribute('size', '28')\n    const name = doc.createElement('text')\n    name.setAttribute('size', '16'); name.setAttribute('width', '170')\n    name.textContent = (p.admin ? '[ADM] ' : '') + (p.name || p.userid)\n    const hp = doc.createElement('bar')\n    hp.setAttribute('value', String(p.health ? p.health.current : 0))\n    hp.setAttribute('max', String(p.health ? p.health.max : 1))\n    hp.setAttribute('width', '90'); hp.setAttribute('height', '12'); hp.setAttribute('color', '0.2,0.8,0.2,1')\n    row.append(icon, name, hp)\n    lista.appendChild(row)\n  }\n  return { html: ctx.html(doc), count: players.length }\n}"
+        }
+      },
+      "position": { "x": 300, "y": 360 }
+    },
+    {
+      "id": "ui_1",
+      "type": "ui_builder",
+      "data": {
+        "alias": "painel",
+        "params": { "userid": "{{chat.userid}}", "id": "online", "anchor": "center", "html": "{{s.html}}" },
+        "ui_html": "<panel title=\"Online\" width=\"380\">\n  <text>(preenchido em runtime por {{s.html}})</text>\n  <button callback=\"close\">Fechar</button>\n</panel>",
+        "tree": { "type": "panel", "title": "Online", "width": 380, "children": [
+          { "type": "text", "text": "(preenchido em runtime por {{s.html}})" },
+          { "type": "button", "callback": "close", "text": "Fechar" }
+        ] }
+      },
+      "position": { "x": 300, "y": 560 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger_1", "target": "condition_1" },
+    { "id": "e2", "source": "condition_1", "sourceHandle": "true", "target": "script_1" },
+    { "id": "e3", "source": "script_1", "target": "ui_1" },
+    { "id": "e4", "source": "ui_1", "sourceHandle": "cb:close", "target": "ui_1", "targetHandle": "close" }
+  ]
+}

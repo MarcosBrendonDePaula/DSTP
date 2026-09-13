@@ -13,16 +13,30 @@ import { createLoopGuard, recordVisit, type LoopGuard } from './loop-guard'
 import { installVaultAccessors, maskSecrets } from './vault-context'
 import { executeAIAgent } from './ai/executeAIAgent'
 import { getNodeEntry } from './nodes/registry'
+import { resolveRuleHtml, domOf, htmlOf, htmlToNode } from './ui/htmlToNode'
 import type { NodeRunContext } from './nodes/types'
 
-// Does a ui_builder tree declare this callback anywhere? (used to route ui_callback to the
-// node's `cb:<callback>` output handle). Walks children + tab children.
-function uiTreeHasCallback(tree: any, callback: string): boolean {
-  if (!tree || typeof tree !== 'object') return false
-  if (String(tree.callback ?? '') === callback) return true
-  if (Array.isArray(tree.children) && tree.children.some((c: any) => uiTreeHasCallback(c, callback))) return true
-  if (Array.isArray(tree.tabs) && tree.tabs.some((t: any) => uiTreeHasCallback(t?.child, callback))) return true
-  return false
+// Which callback declared in a ui_builder tree does this fired callback belong to?
+// (used to route ui_callback to the node's `cb:<declared>` output handle). A declared
+// name is exact, OR a wildcard `prefix:*` that catches every `prefix:<rest>` — the way
+// to wire buttons that only exist at runtime (dom_append / script-generated HTML).
+// Returns the declared name (the handle suffix) + the wildcard rest, or null.
+// Walks children + tab children; an exact match wins over a wildcard.
+function uiTreeMatchCallback(tree: any, callback: string): { declared: string; rest?: string } | null {
+  let wild: { declared: string; rest: string } | null = null
+  const walk = (t: any): boolean => {
+    if (!t || typeof t !== 'object') return false
+    const d = t.callback == null ? '' : String(t.callback)
+    if (d === callback) return true
+    if (!wild && d.endsWith(':*') && callback.startsWith(d.slice(0, -1)) && callback.length > d.length - 1) {
+      wild = { declared: d, rest: callback.slice(d.length - 1) }
+    }
+    if (Array.isArray(t.children) && t.children.some(walk)) return true
+    if (Array.isArray(t.tabs) && t.tabs.some((x: any) => walk(x?.child))) return true
+    return false
+  }
+  if (walk(tree)) return { declared: callback }
+  return wild
 }
 
 // ─── Host interface ──────────────────────────────────
@@ -90,6 +104,31 @@ const NUMERIC_PARAM_KEYS = new Set([
   'guid', 'percent', 'delta', 'coldness',
 ])
 const BOOLEAN_PARAM_KEYS = new Set(['enabled', 'drop', 'visible'])
+
+// A UI node's `bind` param → { prop: path }. Accepts a JSON object, an object already,
+// or the shorthand 'prop=path; prop2=path2' (also newline-separated). Empty → undefined.
+export function parseBind(v: any): Record<string, string> | undefined {
+  if (v == null || v === '') return undefined
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const o: Record<string, string> = {}
+    for (const [k, x] of Object.entries(v)) if (typeof x === 'string' && x.trim()) o[k] = x.trim()
+    return Object.keys(o).length ? o : undefined
+  }
+  if (typeof v !== 'string') return undefined
+  const s = v.trim()
+  if (!s) return undefined
+  if (s.startsWith('{')) {
+    try { return parseBind(JSON.parse(s)) } catch { return undefined }
+  }
+  const o: Record<string, string> = {}
+  for (const part of s.split(/[;\n]+/)) {
+    const i = part.indexOf('=')
+    if (i < 0) continue
+    const k = part.slice(0, i).trim(), path = part.slice(i + 1).trim()
+    if (k && path) o[k] = path
+  }
+  return Object.keys(o).length ? o : undefined
+}
 
 function coerceParam(key: string, v: any): any {
   if (typeof v !== 'string') return v
@@ -205,17 +244,19 @@ export class FlowEngine {
       if (event.type === 'ui_callback') {
         const cb = String(event.data?.callback ?? '')
         if (cb) {
-          const startHandle = `cb:${cb}`
           for (const node of flow.nodes as FlowNode[]) {
             if (node.type !== 'ui_builder') continue
-            if (!uiTreeHasCallback((node.data as any)?.tree, cb)) continue
+            const m = uiTreeMatchCallback((node.data as any)?.tree, cb)
+            if (!m) continue
+            const startHandle = `cb:${m.declared}`
             // ONLY act as an entry point when the matching `cb:<callback>` handle is actually
             // WIRED to something. Otherwise a flow that handles ui_callback via a manual
             // trigger (e.g. the shop) would fire twice. No wire → not an entry here.
             const wired = (flow.edges as FlowEdge[]).some(e => e.source === node.id && e.sourceHandle === startHandle)
             if (!wired) continue
             const analysis = getAnalysis(flow.id, { nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] })
-            const ev = { ...event, _startHandle: startHandle }
+            // a wildcard handle also exposes what came after the prefix ({{trigger.callback_rest}})
+            const ev = { ...event, _startHandle: startHandle, data: m.rest != null ? { ...event.data, callback_rest: m.rest } : event.data }
             if (analysis.isSimple) this.executeFlow(flow, node, ev, server_id)
             else this.executeStatefulBranch(flow, node, ev, server_id, analysis)
           }
@@ -438,7 +479,7 @@ export class FlowEngine {
       },
       pushCommand: (type, data) => this.host.pushCommand(serverId, type, data),
       log: (message) => console.log(`[DSTP Flow] ${maskSecrets(String(message), context)}`),
-      runFlowAction: () => this.runFlowAction(serverId, node, context),
+      runFlowAction: (extra) => this.runFlowAction(serverId, node, context, extra),
       executeHttpRequest: () => this.executeHttpRequest(node, context),
       executeSetVariable: () => this.executeSetVariable(node, context),
       executeScript: () => this.executeScript(node, context, serverId),
@@ -1005,6 +1046,10 @@ export class FlowEngine {
     // ui_set, and a callback makes ANY node clickable (emits ui_callback).
     if (p.node_id) out.id = String(p.node_id)
     if (p.callback) out.callback = String(r(p.callback))
+    // `bind` = props the CLIENT re-evaluates every frame against local data (e.g. the
+    // entity a follower tracks): '{"value":"entity.hp"}' or 'value=entity.hp; text=entity.name'.
+    const bind = parseBind(p.bind)
+    if (bind) out.bind = bind
 
     if (type === 'panel') {
       if (p.title) out.title = r(p.title)
@@ -1238,7 +1283,7 @@ export class FlowEngine {
 
   // ─── Game action executor ──────────────────────────
 
-  private runFlowAction(serverId: string, node: FlowNode, context: Record<string, any>) {
+  private runFlowAction(serverId: string, node: FlowNode, context: Record<string, any>, extra?: Record<string, any>) {
     const actionType = node.data.action_type
     if (!actionType) return
 
@@ -1246,6 +1291,7 @@ export class FlowEngine {
     for (const [key, val] of Object.entries(node.data.params || {})) {
       actionData[key] = coerceParam(key, this.resolveValue(val, context))
     }
+    if (extra) Object.assign(actionData, extra)
 
     // UI widget actions: convert to ui_command for per-player delivery
     if (actionType.startsWith('ui_')) {
@@ -1316,19 +1362,37 @@ export class FlowEngine {
         // HUD that follows a world entity (e.g. health bar over a boss).
         // The mod resolves the entity client-side and repositions each tick.
         // Delivered as a normal widget create with a `follow` block the mod reads.
+        // A comma/space/JSON list param → string[] (prefabs, tags).
+        const list = (v: any): string[] | undefined => {
+          if (Array.isArray(v)) return v.map(String).filter(Boolean)
+          if (typeof v !== 'string' || !v.trim()) return undefined
+          const s = v.trim()
+          if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(String) } catch { /* fall through */ } }
+          return s.split(/[\s,;]+/).filter(Boolean)
+        }
+        const flag = (v: any) => v === true || v === 'true' || v === 1 || v === '1'
         cmd = {
           action: 'create',
           id: actionData.id || `track_${Date.now()}`,
           type: actionData.widget || 'progress_bar',
           follow: {
-            mode: actionData.mode || undefined,  // 'combat_target' = segue quem você ataca
+            // 'all' = one follower per entity in range; 'combat_target' = segue quem você ataca
+            mode: actionData.mode || undefined,
             prefab: actionData.prefab || undefined,
+            prefabs: list(actionData.prefabs),
+            tags: list(actionData.tags),
             guid: actionData.guid ? Number(actionData.guid) : undefined,
-            nearest: actionData.nearest === true || actionData.nearest === 'true',
+            nearest: flag(actionData.nearest),
             offset_y: Number(actionData.offset_y) || 60,
             max_dist: Number(actionData.max_dist) || 0,
+            radius: Number(actionData.radius) || undefined,
+            require_hp: flag(actionData.require_hp) || undefined,
+            scan_every: Number(actionData.scan_every) || undefined,
             bind: actionData.bind || undefined,
           },
+          // per-entity template (from the ui_* children wired under the node); the
+          // client renders it per follower and evaluates its `bind` props locally.
+          tree: actionData.template || undefined,
           label: actionData.label,
           width: Number(actionData.width) || 80,
           height: Number(actionData.height) || 10,
@@ -1366,9 +1430,17 @@ export class FlowEngine {
           try { rules = JSON.parse(rules) } catch { return }
         }
         if (!Array.isArray(rules)) rules = [rules]
-        this.host.pushCommand(serverId, userid ? 'install_rules' : 'install_rules_all', {
-          userid, rules, seq: Date.now(),
-        })
+        const cmdType = userid ? 'install_rules' : 'install_rules_all'
+        // dom_* rule actions may carry `html` instead of `node`: parse on the backend
+        // (jsdom) so the client only ever receives tree JSON. Async only when needed.
+        const needsHtml = rules.some((r: any) => Array.isArray(r?.do) && r.do.some((a: any) => typeof a?.html === 'string' && a.node == null))
+        if (needsHtml) {
+          resolveRuleHtml(rules).then(resolved => {
+            this.host.pushCommand(serverId, cmdType, { userid, rules: resolved, seq: Date.now() })
+          }).catch(err => console.error('[FlowEngine] rule_install html parse failed:', err))
+        } else {
+          this.host.pushCommand(serverId, cmdType, { userid, rules, seq: Date.now() })
+        }
       } else if (actionType === 'rule_uninstall') {
         let ids = actionData.ids
         if (typeof ids === 'string') ids = ids.split(',').map((s: string) => s.trim())
@@ -1587,6 +1659,13 @@ export class FlowEngine {
         return g ? g.all_players : []
       }
 
+      // context.dom(html) → a jsdom document to build/edit UI HTML server-side;
+      // context.html(doc|el) → back to a string (feed it to ui_builder's `html` param);
+      // context.htmlToNode(html) → the tree JSON the client renders (for ui_dom/rules).
+      context.dom = domOf
+      context.html = htmlOf
+      context.htmlToNode = htmlToNode
+
       const wrappedCode = `
         ${code}
         return typeof run === 'function' ? run(context) : { error: 'no run() function defined' }
@@ -1605,7 +1684,8 @@ export class FlowEngine {
 
   // ─── Auto-enable event categories ──────────────────
 
-  ensureEventCategories(flow: any) {
+  /** The DST event categories a flow's triggers gate on (pure — no toggles requested). */
+  neededCategories(flow: any): Set<string> {
     const categoryMap: Record<string, string> = {
       player_spawn: 'players', player_left: 'players', player_death: 'players',
       player_ghost: 'players', player_respawn: 'players', player_disconnected: 'players',
@@ -1646,6 +1726,7 @@ export class FlowEngine {
       player_enlightened: 'survival', player_lunacy_normal: 'survival', player_wet: 'survival',
       player_work: 'gathering', resource_gathered: 'gathering', player_harvest: 'gathering', player_startfire: 'gathering',
       player_pick: 'gathering', player_mine_chop_start: 'gathering',
+      player_action: 'interaction', player_action_failed: 'interaction',
       health_delta: 'health', hunger_delta: 'health', sanity_delta: 'health',
       recipe_learned: 'character', character_transform: 'character',
       player_sleep_start: 'character', player_sleep_end: 'character',
@@ -1661,8 +1742,12 @@ export class FlowEngine {
     // NOTE: key_pressed is intentionally NOT in categoryMap. Keys are not a DST
     // event category (no Lua listener gates on them) — they're a parallel channel
     // reconciled by collectWatchKeys() below.
+    return needed
+  }
 
-    for (const cat of needed) {
+  /** Request every event category the flow's triggers need (delivered on the next sync). */
+  ensureEventCategories(flow: any) {
+    for (const cat of this.neededCategories(flow)) {
       this.host.requestEventToggle(flow.server_id, cat, true)
     }
   }

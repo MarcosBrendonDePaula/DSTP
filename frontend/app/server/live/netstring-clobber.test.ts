@@ -46,7 +46,11 @@ describe('mod #3 — structural guards (router present, no double fan-out)', () 
   it('modmain fans out a batch envelope (iterates cmd.commands and dispatches each)', () => {
     // The router must branch on action=="batch" and iterate sub-commands.
     expect(modmain).toContain('cmd.action == "batch"')
-    expect(modmain).toContain('for _, sub in ipairs(cmd.commands) do dispatch(sub) end')
+    expect(modmain).toContain('for _, sub in ipairs(cmd.commands) do')
+    expect(modmain).toContain('dispatch(sub)')
+    // and every sub loses its seq before dispatch (the envelope seq is the dedup key —
+    // a sub-level seq made UIWidgets drop the login panel in-game, 2026-09-12)
+    expect(modmain).toContain('sub.seq = nil')
   })
 
   it('modmain dedups the envelope by seq', () => {

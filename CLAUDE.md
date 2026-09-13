@@ -119,9 +119,10 @@ cd frontend && bun run db:studio    # Open Drizzle Studio
 # Lua syntax check
 bun -e "require('luaparse').parse(require('fs').readFileSync('DST_MOD/scripts/dstp/client.lua','utf8'),{luaVersion:'5.1'})"
 
-# Copy mod to DST (do this after any Lua change)
-cp DST_MOD/scripts/dstp/*.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/scripts/dstp/"
-cp DST_MOD/modinfo.lua DST_MOD/modmain.lua "E:/SteamLibrary/steamapps/common/Don't Starve Together/mods/DSTP/"
+# The game loads the mod STRAIGHT from this repo: `mods/DSTP` in the DST install
+# (D:\SteamLibrary\steamapps\common\Don't Starve Together) is a directory junction to
+# DST_MOD/. No copy step — edit DST_MOD/ and restart the world. Recreate if broken:
+#   cmd /c mklink /J "<dst>\mods\DSTP" "<repo>\DST_MOD"
 ```
 
 ## DST Modding Tools (Klei)
@@ -159,6 +160,11 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `foreach` | Iterate a list: run the `each` branch per item (`{{loop.item}}`/`{{loop.index}}`) then `done`. Capped at 40 items |
 | `action` | Game action (respawn, heal, kick, tp, spawn_prefab, etc — 50+ subtypes via `action_type`) |
 | `get_entity` / `entity_*` | **Entity control** — read/mutate a NON-player entity keyed by `guid` (from an entity event) OR `prefab`+`x`/`z`+`radius`. `get_entity` reads a flat per-component object (→ `entity_data` event); mutators: `entity_set_health`/`entity_kill`/`entity_extinguish`/`entity_ignite`/`entity_set_fuel`/`entity_freeze`/`entity_unfreeze`. Resolver = `Ents[guid]` + `IsValid` guard (`found:false` on stale GUID) in `commands.lua`. `spawn_prefab`/`spawn_at_player` now return the GUID via `spawn_result` when a `token` is given (the spawn→control→react loop). See `DST_MOD/specs/entity-control-catalog.md`. |
+| `entity_brain` | **Flow-driven mob brain**: set a mob's behaviour mode (`follow` a player/guid, `guard` a point, `attack` by tags/prefabs, `collect` ground items into its own container, `flee`, `wander`, `stay`, `default` = restore). The behaviour tree is hardcoded Lua running in-frame (`brains/dstp_flowbrain.lua` reading `flow_brain.lua` state); the flow only writes the mode + params via `entity_set_brain`. `spawn_prefab`/`spawn_at_player` take a `brain` JSON so a mob is born controlled. See `DST_MOD/specs/flow-brain.md` |
+| `entity_take_item` / `entity_drop_item` | Generic item moves for ANY entity with a container or inventory: take a world item by `item_guid` (the flow half of `collect store=event` → `brain_item_reached`), drop a prefab/guid/"all". Acks `item_taken` / `item_dropped` with `token` |
+| `entity_give_item` / `entity_transfer_item` | Spawn an item straight into ANY entity's container/inventory (ack `item_given`); move items holder → holder without touching the ground, refused items go back (ack `entity_item_transferred { moved, refused }`) |
+| `entity_tag_id` / `entity_find` | **Stable ids + lookup.** DST guids are reassigned on every world load, so a flow must never remember an entity by guid. `dstp_id` (`scripts/dstp/entity_ids.lua` + `components/dstp_id.lua`, saved with the entity, re-indexed on load) is the key that survives: every entity node's resolver accepts `id`, and `spawn_result` / brain events / `entity_data` / `entity_found` carry it. `entity_find { prefab, owner_userid?, near_userid?/x,z, radius? }` → `entity_found` answers "is there already a pet of mine?" instead of guessing |
+| `entity_collect` / `entity_goto` / `entity_can_accept` | **One-shot brain tasks** (any mob the flow controls, any mode; a plain mob gets a `stay` flow brain first): go get THAT item (by guid or nearest prefab; `store=event` = only report) / walk to a point or entity → `brain_task_done { kind, ok, reason, token, item }`. `entity_can_accept` answers `entity_capacity { count, is_full }`. Primitives: the flow decides what happens next (owner's rule — no behaviour policy in Lua) |
 | `delay` | Wait N ms before continuing (capped at 1h) |
 | `http_request` | External HTTP call (GET/POST with templates) |
 | `set_variable` | Store custom key-value in context |
@@ -177,7 +183,8 @@ Each node is a **module** (one folder) — see **Node Module System** below.
 | `wait` | Multi-trigger merge: waits for N branches, 3 correlation modes, timeout support |
 | `ai_agent` | LLM agent (Vercel AI SDK). Nodes wired to its `tools` handle become callable tools; agentic loop (`stopWhen: stepCountIs`). See **AI Agent Node** below. |
 | `ai_memory` | The AI's own key/value store, used as a tool by `ai_agent` (save/get/list/delete, free-form key). |
-| `ui_*` | In-game UI: `ui_builder`, `ui_panel`, `ui_menu`, `ui_rule`, and primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`) |
+| `ui_*` | In-game UI: `ui_builder` (HTML is the default authoring mode; `data.ui_html` is the node's truth, re-parsed into `data.tree`; a runtime `html` param wins over the editor), `ui_rule`, primitives (`ui_col/row/tabs/text/icon/button/bar/spacer`, still used by `ui_track`). `ui_panel`/`ui_menu` are **legacy** (`NodeMeta.legacy`: badge, out of the AI catalog; `ui_panel` hidden). A `ui_builder` button `callback="prefix:*"` is a **wildcard handle** `cb:prefix:*` catching every runtime `prefix:<rest>` click (`{{trigger.callback_rest}}`) |
+| `ui_dom` | **Micro-DOM**: mutate a UI already open on the player's screen by node id — `append` (node written as HTML, parsed on the backend via jsdom → tree JSON; the client never parses HTML), `remove`, `set` (props JSON), `toggle`. Mod side: `dom_*` commands keep the tree DEFINITION and rebuild in place (`ui_widgets.lua` `RebuildTree`); the same `dom_*` are rule actions in `rules_engine.lua` (`ui_rule` `do`, `html` converted at install). See `DST_MOD/specs/ui-html-tasks.md` items 10–11 |
 
 All nodes support `alias` for friendly context keys (`{{myAlias.field}}` instead of `{{node_id.field}}`).
 
@@ -271,6 +278,7 @@ Events are grouped and hot-toggleable at runtime. Backend auto-activates categor
 - **health**: health_delta, hunger_delta, sanity_delta (debounced)
 - **survival**: player_eat, insane/sane, starving/fed, freezing/warm, overheating/cooled, mounted/dismounted
 - **gathering**: player_work, resource_gathered, player_harvest, player_startfire
+- **interaction**: player_action (EVERY action the player performs — `performaction`: LOOK/PICKUP/ATTACK/OPEN/HARVEST/CHOP/GIVE/… with the SERVER `guid`+`prefab`+`x/z` of the target, `item`, `recipe`; ground WALKTO dropped), player_action_failed (+`reason`). "The player clicked THAT entity" without client Lua — see `DST_MOD/specs/player-events-inventory.md`
 - **world**: new_day, phase_changed, season_changed, rift_closed, nightmare_phase, item_planted, object_activated, machine_toggled
 - **weather**: storm_changed, precipitation, lightning_strike
 - **bosses**: boss_event, boss_killed, toadstool_state_changed
@@ -417,6 +425,12 @@ Character avatars are static PNGs from DST Wiki in `frontend/app/client/public/a
 - A replacement for traditional DST mods
 
 For real-time client-side features (HP bars following mobs, proximity HUDs) that the declarative rules engine can't express, write them as traditional hardcoded Lua in the mod — don't try to generate Lua from flows.
+
+### Bigger containers (`container_slots.lua`) — world default + per-instance from the flow
+Slot count + on-screen slot positions come from Klei's `containers.params[prefab].widget.slotpos`, read by the server (sizes the container) AND every client (draws the window). Two layers:
+- **World default** (modinfo `CHEST_SLOTS` / `CHESTER_SLOTS` / `BACKPACK_SLOTS` / `ICEBOX_SLOTS`): `container_slots.Apply` grows the params table at load on both sides (centred 80-px grid, only grows, aliases sharing the table grow together).
+- **Per instance, at runtime, from the flow** (`entity_set_slots { guid, slots }` → node + `entity_slots` ack): Klei's `Container:WidgetSetup(prefab, data)` takes a per-instance layout but nothing ships it to clients, so the mod adds the transport — a `net_byte "dstp.slots"` declared on BOTH sides for every prefab in `containers.params` (pure-data predicate = positional rule safe); the server applies + sets it, the client re-runs the replica `WidgetSetup` on dirty. Persisted by `components/dstp_slots.lua` and re-applied in an `OnPreLoad` hook BEFORE `Container:OnLoad` puts items back by slot index (else items in grown slots would be lost). Only grows (Klei asserts).
+The frame art is left as-is (cosmetic mismatch for big counts). Player inventory (15 slots + HUD bar) is not covered.
 
 ### Hardcoded mechanics ARE fine — as clean, isolated mod modules
 

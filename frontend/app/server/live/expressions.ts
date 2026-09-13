@@ -142,7 +142,12 @@ export function evaluateCondition(
     // AI chat agent doesn't reply to itself (announce is global → comes back as chat).
     case 'not_starts_with': return !String(actual).startsWith(String(resolvedValue))
     case 'ends_with': return String(actual).endsWith(String(resolvedValue))
-    case 'exists': return actual != null
+    // exists: null/undefined are absent, and so is an UNRESOLVED template — a pure
+    // "{{path}}" whose path resolved to nothing comes back as its literal text (kept
+    // for debuggability), which must not read as "a value exists" (a login flow
+    // opened the Login panel for a never-registered player because memory's null
+    // value became the literal "{{acc.value}}").
+    case 'exists': return actual != null && !(typeof actual === 'string' && /^\s*\{\{[^}]*\}\}\s*$/.test(actual))
     default: return true
   }
 }

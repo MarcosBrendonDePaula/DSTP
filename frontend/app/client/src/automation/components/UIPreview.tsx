@@ -8,6 +8,8 @@
 // branch of RenderNode. Templates ({{...}}) are shown literally — the preview can't
 // resolve flow context.
 
+import { normalizeElement } from './elementModel'
+
 type UINode = Record<string, any>
 type Step = { kind: 'child' | 'tab'; i: number }
 
@@ -57,6 +59,39 @@ function toCss(color: any, fallback = 'rgba(255,255,255,1)'): string {
   return fallback
 }
 
+// Map our style props to CSS, matching how the Lua renderer interprets them.
+function cssJustify(j: any): string {
+  switch (j) { case 'start': return 'flex-start'; case 'end': return 'flex-end'; case 'between': return 'space-between'; default: return 'center' }
+}
+function cssAlign(a: any): string {
+  switch (a) { case 'start': return 'flex-start'; case 'end': return 'flex-end'; case 'stretch': return 'stretch'; default: return 'center' }
+}
+function cssColor(v: any): string | undefined {
+  if (v == null) return undefined
+  if (Array.isArray(v)) { const [r = 1, g = 1, b = 1, a = 1] = v; return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a})` }
+  return toCss(v, undefined as any) || undefined
+}
+// A size prop → CSS. Percent = exact (width/height: fills the parent). Pixels = a
+// MINIMUM (min-width/height) so the box grows to fit content, like the renderer.
+function sizeStyle(v: any, dim: 'width' | 'height'): React.CSSProperties {
+  if (v == null || v === '') return {}
+  const s = String(v)
+  if (s.includes('%')) return { [dim]: s }
+  const n = Number(s)
+  if (Number.isNaN(n)) return {}
+  return { [dim === 'width' ? 'minWidth' : 'minHeight']: n }
+}
+
+// px number → px; "50%" → "50%"; else undefined (auto).
+function cssSize(v: any): number | string | undefined {
+  if (v == null || v === '') return undefined
+  if (typeof v === 'number') return v
+  const s = String(v)
+  if (s.includes('%')) return s
+  const n = Number(s)
+  return Number.isNaN(n) ? undefined : n
+}
+
 const samePath = (a: Step[], b: Step[]) =>
   a.length === b.length && a.every((s, i) => s.kind === b[i].kind && s.i === b[i].i)
 
@@ -76,12 +111,18 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
   editor?: boolean  // when true, grid containers draw the cell table + accept cell drops
   onCellDrop?: CellDrop
 }): React.ReactNode {
+  node = normalizeElement(node)   // accept element model { tag, style } too
   if (!node || !node.type) return null
   const isSel = samePath(path, sel)
   const ring = isSel ? '0 0 0 2px #6366f1' : undefined
   const pick = (e: React.MouseEvent) => { e.stopPropagation(); onSelect(path) }
   const t = node.type
-  const isCanvas = node.mode === 'canvas' && (t === 'panel' || t === 'col' || t === 'row')
+  // Canvas = absolute x/y placement. But if NO child declares x/y, treating it as canvas
+  // would stack everything at (0,0) — so fall back to normal (flex) stacking. This makes
+  // a stray display:absolute without coords behave sanely instead of overlapping.
+  // flat x/y OR element-model style.x/y (children are raw here; normalized when rendered)
+  const childrenHaveXY = Array.isArray(node.children) && node.children.some((c: any) => c?.x != null || c?.y != null || c?.style?.x != null || c?.style?.y != null)
+  const isCanvas = node.mode === 'canvas' && childrenHaveXY && (t === 'panel' || t === 'col' || t === 'row')
   // A container with `repeat` is a LIST (loop): mark it with a distinct dashed purple
   // border + a 🔁 badge so it's obvious the first child is a per-item template.
   const isList = !!node.repeat && (t === 'panel' || t === 'col' || t === 'row')
@@ -158,16 +199,29 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
     // auto-size to content. So adjusting width/height reflects in the preview.
     const pw = Number(node.width) || undefined
     const ph = Number(node.height) || undefined
+    // Mirror the mod's panel box model (ui_widgets.lua `panel`): fixed mode pads 20 on
+    // every side, auto mode 28 (min 160x80); a title reserves a strip of title_size+16
+    // (default 40) at the top; the declared size is a MINIMUM (the box grows to fit).
+    const fixed = pw != null && ph != null
+    const pad = fixed ? 20 : 28
+    const titleSize = Number(node.title_size) || 24
+    const titleH = node.title ? (Number(node.title_h) || titleSize + 16) : 0
+    const gap = Number(node.gap) || 8
     return (
       <div onClick={pick} style={{
         position: 'relative', background: 'rgba(20,20,26,0.95)',
         border: listOutline || '1px solid rgba(120,90,150,0.6)', borderRadius: 6,
-        padding: isCanvas ? 0 : '10px 12px', minWidth: 120, boxShadow: ring,
-        width: pw, height: ph,
-        display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        padding: isCanvas ? 0 : `${pad}px`, paddingTop: isCanvas ? 0 : pad + titleH,
+        minWidth: fixed ? pw : 160, minHeight: fixed ? ph : 80, boxShadow: ring,
+        width: isCanvas ? pw : undefined, height: isCanvas ? ph : undefined,
+        boxSizing: 'border-box',
+        display: isCanvas ? 'block' : 'inline-flex', flexDirection: 'column', alignItems: 'center', gap,
       }}>
         {listBadge}
-        {!isCanvas && node.title && <div style={{ color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: 13 }}>{tmpl(node.title)}</div>}
+        {!isCanvas && node.title && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: titleH, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(255,255,210,1)', fontWeight: 600, fontSize: titleSize * 0.7, pointerEvents: 'none' }}>{tmpl(node.title)}</div>
+        )}
         {!isCanvas && node.body && <div style={{ color: '#fff', fontSize: 11, maxWidth: ph ? '100%' : 220, textAlign: 'left' }}>{tmpl(node.body)}</div>}
         {isCanvas ? canvasChildViews(node.children) : childViews(node.children)}
         {isCanvas && node.title && <div style={{ position: 'absolute', top: 4, left: 8, color: 'rgba(255,255,210,0.9)', fontWeight: 600, fontSize: 13, pointerEvents: 'none' }}>{tmpl(node.title)}</div>}
@@ -302,9 +356,38 @@ export function NodeView({ node, path, sel, onSelect, onReorder, onMove, editor,
       <div onClick={pick} style={{
         position: 'relative',
         display: 'flex', flexDirection: t === 'col' ? 'column' : 'row',
-        gap, alignItems: 'center', justifyContent: 'center',
-        padding: isList ? '8px 4px 4px' : 2, borderRadius: 4, boxShadow: ring,
-        width: Number(node.width) || undefined, height: Number(node.height) || undefined,
+        gap,
+        // honour the same box-model props the Lua renderer reads (justify/align/
+        // padding/background/opacity/size — incl. percent sizes which CSS takes as-is).
+        justifyContent: cssJustify(node.justify),
+        alignItems: cssAlign(node.align),
+        flexWrap: (node.wrap === true || node.wrap === 'true' || node.wrap === 'wrap') ? 'wrap' : undefined,
+        rowGap: node.row_gap != null ? Number(node.row_gap) : undefined,
+        alignContent: node.align_content ? cssJustify(node.align_content) : undefined,
+        // CSS grid (grid_columns) — the same columns the Lua LayoutGrid resolves
+        ...(node.mode === 'grid' && Array.isArray(node.grid_columns) ? {
+          display: 'grid',
+          gridTemplateColumns: node.grid_columns.map((c: any) => typeof c === 'number' ? `${c}px` : String(c)).join(' '),
+          columnGap: node.column_gap != null ? Number(node.column_gap) : gap,
+          justifyItems: node.justify_items || 'start',
+          alignItems: node.align_items || node.align || 'start',
+        } : {}),
+        padding: node.padding != null ? Number(node.padding) : (isList ? 8 : 2),
+        // overflow:scroll with a fixed height = a scrolling viewport (Lua: TrueScrollArea)
+        ...(node.overflow === 'scroll' && Number(node.height) ? { overflowY: 'auto' as const, overflowX: 'hidden' as const } : {}),
+        background: cssColor(node.background),
+        // border: { width, color } or a bare width (default colour), like the Lua AddBox
+        border: node.border != null && node.border !== false
+          ? `${typeof node.border === 'object' ? (Number(node.border.width) || 2) : (Number(node.border) || 2)}px solid ${cssColor(typeof node.border === 'object' ? node.border.color : undefined) ?? 'rgba(255,255,255,0.6)'}`
+          : undefined,
+        opacity: node.opacity != null ? Number(node.opacity) : undefined,
+        borderRadius: 4, boxShadow: ring,
+        // % width = exact (fills parent); px width = MINIMUM (grows to fit content,
+        // matching the renderer). Same for height.
+        ...sizeStyle(node.width, 'width'),
+        ...sizeStyle(node.height, 'height'),
+        zIndex: node.z != null ? Number(node.z) : undefined,
+        boxSizing: 'border-box',
         outline: listOutline || '1px dashed rgba(255,255,255,0.08)',
       }}>
         {listBadge}

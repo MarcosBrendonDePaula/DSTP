@@ -90,6 +90,52 @@ export function reconcileWatchKeys(server_id: string) {
   }
 }
 
+// (Re)request every event category the server's ENABLED flows need. Categories used
+// to be activated only inside saveFlow, so a flow written straight to the DB (import
+// scripts, examples) or a DST restart (the mod boots with the modinfo defaults —
+// crafting/interaction OFF) left triggers silently mute (in-game 2026-09-13:
+// structure_built never fired for the chest-slots flow). Called on shard
+// (re)connection and by the 30 s sweep below (which only acts when something needed
+// is not reported active by the mod).
+export function reconcileEventCategories(server_id: string) {
+  try {
+    const engine = _getEngine()
+    for (const f of new FlowRepository(server_id).findEnabled()) {
+      engine.ensureEventCategories({ ...(f as any), server_id })
+    }
+  } catch (e) {
+    console.error('[DSTP Automation] reconcileEventCategories', e)
+  }
+}
+
+export function neededCategoriesFor(server_id: string): Set<string> {
+  const engine = _getEngine()
+  const needed = new Set<string>()
+  for (const f of new FlowRepository(server_id).findEnabled()) {
+    for (const c of engine.neededCategories({ ...(f as any), server_id })) needed.add(c)
+  }
+  return needed
+}
+
+const CATEGORY_SWEEP_MS = 30_000
+let _categorySweep: ReturnType<typeof setInterval> | null = null
+export function startCategorySweep() {
+  if (_categorySweep) return
+  _categorySweep = setInterval(() => {
+    try {
+      for (const server_id of dstStateStore.getServerGroups().map(g => g.server_id)) {
+        const active = dstStateStore.getActiveEvents(server_id)   // Record<category, boolean>, merged over shards
+        const missing = [...neededCategoriesFor(server_id)].filter(c => !active[c])
+        if (missing.length > 0) reconcileEventCategories(server_id)
+      }
+    } catch (e) {
+      console.error('[DSTP Automation] category sweep', e)
+    }
+  }, CATEGORY_SWEEP_MS)
+  ;(_categorySweep as any).unref?.()
+}
+startCategorySweep()
+
 // ─── Component ───────────────────────────────────────
 
 export class LiveAutomation extends LiveComponent<AutomationState> {

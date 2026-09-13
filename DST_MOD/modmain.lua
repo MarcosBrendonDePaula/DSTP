@@ -20,10 +20,66 @@ local function DebugLog(...)
 end
 local POLL_INTERVAL = GetModConfigData("POLL_INTERVAL") or 5
 
+-- Netvar SLOT POOL (scripts/dstp/data_feed.lua): SLOT_COUNT generic net_floats on every
+-- prefab of the chosen preset (scripts/dstp/slot_prefabs.lua). Both values come from
+-- the mod config, which DST syncs from the server to every client — so both sides
+-- declare exactly the same slots at PostInit (the positional rule). The MEANING of a
+-- slot is assigned at runtime by flows (data_feed node); only this shape is fixed.
+-- NB: `tonumber` is NOT in the mod environment (only via GLOBAL) — a bare call here
+-- killed the dedicated server at mod load (2026-09-12). Guarded by modmain-env.test.ts.
+local SLOT_COUNT = GLOBAL.tonumber(GetModConfigData("SLOT_COUNT")) or 0
+local SLOT_PRESET = GetModConfigData("SLOT_PRESET") or "mobs"
+local SLOT_PREFABS = GLOBAL.require("dstp/slot_prefabs").presets[SLOT_PRESET] or {}
+
+-- Bigger containers (scripts/dstp/container_slots.lua): grow Klei's containers.params
+-- at load, on BOTH sides (server sizes the container, clients draw the window from the
+-- same table). World config from modinfo — not runtime, not per flow.
+do
+    local overrides = {
+        treasurechest = GLOBAL.tonumber(GetModConfigData("CHEST_SLOTS")) or 9,
+        chester = GLOBAL.tonumber(GetModConfigData("CHESTER_SLOTS")) or 9,
+        backpack = GLOBAL.tonumber(GetModConfigData("BACKPACK_SLOTS")) or 8,
+        icebox = GLOBAL.tonumber(GetModConfigData("ICEBOX_SLOTS")) or 9,
+    }
+    local ok, err = GLOBAL.pcall(function()
+        local changed = GLOBAL.require("dstp/container_slots").Apply(GLOBAL.require("containers").params, overrides, GLOBAL.Vector3)
+        -- reserve the item-netvar pool so entity_set_slots can grow any container up to MAX_SLOTS
+        GLOBAL.require("dstp/container_slots").ReservePool(GLOBAL.require("containers"))
+        if #changed > 0 then print("[DSTP] container slots grown: " .. table.concat(changed, ", ")) end
+    end)
+    if not ok then print("[DSTP] container_slots failed: " .. tostring(err)) end
+end
+
 -- Client-side UI widget manager (loaded on client only)
 local UIWidgets = nil
+local DataFeed = nil   -- client half of scripts/dstp/data_feed.lua (lazy)
 -- Client-side rules engine (loaded on client only)
 local RulesEngine = nil
+
+-- Lazy accessor for the client rules engine (shared by the UI router below and the
+-- entity-event hook), so a rule can react to a mob event before any UI arrived.
+local function GetRulesEngine()
+    if not RulesEngine then
+        RulesEngine = GLOBAL.require("dstp/rules_engine")
+        RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
+        if UIWidgets then RulesEngine.SetUIWidgets(UIWidgets) end
+    end
+    return RulesEngine
+end
+-- Client half of data_feed, lazily required; its entity-event hook feeds the rules.
+local function GetDataFeed()
+    if not DataFeed then
+        DataFeed = GLOBAL.require("dstp/data_feed")
+        DataFeed.Init({ GLOBAL = GLOBAL, slot_count = SLOT_COUNT })
+        DataFeed.on_entity_event = function(inst, kind, args)
+            GetRulesEngine().HandleEvent("entity_event", {
+                kind = kind, guid = inst.GUID, prefab = inst.prefab, seq = inst._dstp_ent_seq,
+                amount = args[1], actor = args[2], args = args,
+            })
+        end
+    end
+    return DataFeed
+end
 -- Last _dstp_ui envelope seq we processed. The net_string replays its last value on
 -- reconnect/dirty re-fire; the backend stamps a monotonic seq on each batch envelope
 -- (mod-side counter), so we skip an envelope whose seq we've already applied. Dedup
@@ -107,6 +163,11 @@ AddPrefabPostInit("player_classified", function(inst)
     -- sets the same JSON array on every player; the client rebuilds its TheInput filter.
     inst._dstp_keys = GLOBAL.net_string(inst.GUID, "dstp.keys", "dstp_keys_dirty")
 
+    -- Data feed (server → client): flow-chosen fields of nearby entities, one JSON
+    -- packet per player (scripts/dstp/data_feed.lua). Declared once here; the SET of
+    -- fields/prefabs is dynamic — that is the whole point (no per-field netvars).
+    inst._dstp_feed = GLOBAL.net_string(inst.GUID, "dstp.feed", "dstp_feed_dirty")
+
     -- Client: show PM in chat / auto-open URLs
     if not GLOBAL.TheWorld.ismastersim then
         inst:ListenForEvent("dstp_pm_dirty", function()
@@ -133,6 +194,14 @@ AddPrefabPostInit("player_classified", function(inst)
                     "default", false, true, nil
                 )
             end
+        end)
+
+        -- Client: apply a data-feed packet → inst.dstp_<field> on the matching entities
+        inst:ListenForEvent("dstp_feed_dirty", function()
+            local s = inst._dstp_feed:value()
+            if not s or s == "" then return end
+            local ok, packet = GLOBAL.pcall(GLOBAL.json.decode, s)
+            if ok and type(packet) == "table" then GetDataFeed().Apply(packet) end
         end)
 
         -- Client: process UI widget commands from backend
@@ -164,6 +233,11 @@ AddPrefabPostInit("player_classified", function(inst)
                         RulesEngine.OnUIButtonClick(callback_name, widget_id, payload)
                     end
                 end)
+                -- Hover (focus in/out on a hit target) → local rules only (no RPC: the
+                -- server doesn't need mouse-over traffic). Rules react via `ui_hover`.
+                UIWidgets.SetHoverHandler(function(node_id, ui_id, hovered, callback)
+                    GetRulesEngine().HandleEvent("ui_hover", { id = node_id, ui = ui_id, hovered = hovered, callback = callback })
+                end)
             end
 
             local ok, cmd = GLOBAL.pcall(GLOBAL.json.decode, cmd_str)
@@ -175,12 +249,9 @@ AddPrefabPostInit("player_classified", function(inst)
                 if not (c and c.action) then return end
                 local a = tostring(c.action)
                 if a:sub(1, 6) == "rules_" or a:sub(1, 6) == "state_" then
-                    if not RulesEngine then
-                        RulesEngine = GLOBAL.require("dstp/rules_engine")
-                        RulesEngine.Init({ GLOBAL = GLOBAL, modname = modname })
-                        RulesEngine.SetUIWidgets(UIWidgets)
-                    end
-                    RulesEngine.ProcessCommand(c)
+                    local re = GetRulesEngine()
+                    re.SetUIWidgets(UIWidgets)   -- UIWidgets exists by now (this is its router)
+                    re.ProcessCommand(c)
                 else
                     UIWidgets.ProcessCommand(c)
                 end
@@ -196,7 +267,12 @@ AddPrefabPostInit("player_classified", function(inst)
                     _dstp_ui_seq = cmd.seq
                 end
                 if cmd.commands then
-                    for _, sub in ipairs(cmd.commands) do dispatch(sub) end
+                    -- Belt and braces: a sub must never carry a seq (the envelope's is the
+                    -- dedup key); UIWidgets/RulesEngine would otherwise drop it silently.
+                    for _, sub in ipairs(cmd.commands) do
+                        if type(sub) == "table" then sub.seq = nil end
+                        dispatch(sub)
+                    end
                 end
             else
                 -- A lone (non-batch) command — route directly.
@@ -231,6 +307,7 @@ dstp.Init(env, {
     poll_interval = POLL_INTERVAL,
     debug_logs = GetModConfigData("DEBUG_LOGS") == true,
     allow_execute = GetModConfigData("ALLOW_EXECUTE") == true,
+    slot_count = SLOT_COUNT,
     events = {
         players = GetModConfigData("EVT_PLAYERS") ~= false,
         chat = GetModConfigData("EVT_CHAT") ~= false,
@@ -241,6 +318,7 @@ dstp.Init(env, {
         weather = GetModConfigData("EVT_WEATHER") == true,
         bosses = GetModConfigData("EVT_BOSSES") == true,
         gathering = GetModConfigData("EVT_GATHERING") == true,
+        interaction = GetModConfigData("EVT_INTERACTION") == true,
         survival = GetModConfigData("EVT_SURVIVAL") == true,
         health = GetModConfigData("EVT_HEALTH") == true,
         character = GetModConfigData("EVT_CHARACTER") == true,
@@ -311,15 +389,54 @@ local BIND_SOURCES = {
 -- The active bindings. Mob-HP is the first binding.
 -- Applied in a fixed id-sorted order so netvar declaration order matches.
 local BINDINGS = {
-    { id = "hp", source = "health", as = "dstp_hp", net = "ushortint" },
+    -- uint, not ushortint: Toadstool Misery has 99999 HP and a 16-bit clamp at 65535
+    -- made a full bar read 65%.
+    { id = "hp", source = "health", as = "dstp_hp", net = "uint" },
 }
 
 table.sort(BINDINGS, function(a, b) return a.id < b.id end)
-local function clamp16(v) v = math.floor(v or 0); if v < 0 then v = 0 end; if v > 65535 then v = 65535 end; return v end
+-- Clamp to the netvar's range: 16-bit for ushortint, 32-bit for uint.
+local NET_MAX = { ushortint = 65535, uint = 4294967295 }
+local function clampNet(v, net)
+    v = math.floor(v or 0)
+    local hi = NET_MAX[net] or 65535
+    if v < 0 then v = 0 end
+    if v > hi then v = hi end
+    return v
+end
+
+-- Per-instance container slots (flow-controlled, entity_set_slots): declare the transport
+-- netvar on BOTH sides for every prefab that has a container layout (pure data
+-- predicate → identical on server and client, the netvar positional rule). Server:
+-- persistence component + OnPreLoad re-apply; client: re-run WidgetSetup on dirty.
+local _ContainerSlots = GLOBAL.require("dstp/container_slots")
+local _ContainerParams = GLOBAL.require("containers").params
 
 AddPrefabPostInitAny(function(inst)
     if inst.prefab == nil or inst:HasTag("player") then return end
     local isServer = (not GLOBAL.TheWorld) or GLOBAL.TheWorld.ismastersim
+
+    if _ContainerParams[inst.prefab] ~= nil then
+        inst._dstp_slots = GLOBAL.net_byte(inst.GUID, "dstp.slots", "dstp_slots_dirty")
+        if isServer then
+            inst:AddComponent("dstp_slots")
+            local prevPre = inst.OnPreLoad
+            inst.OnPreLoad = function(ent, data, newents)
+                local n = data and data.dstp_slots and data.dstp_slots.n
+                if n then
+                    local ok, why = _ContainerSlots.SetInstance(ent, n, _ContainerParams, GLOBAL.Vector3)
+                    -- always visible: a failed grow here means items in the extra slots are lost on load
+                    if not ok then print("[DSTP] container slots OnPreLoad: could not grow " .. tostring(ent.prefab) .. " to " .. tostring(n) .. ": " .. tostring(why)) end
+                end
+                if prevPre then prevPre(ent, data, newents) end
+            end
+        else
+            inst:ListenForEvent("dstp_slots_dirty", function()
+                local n = inst._dstp_slots:value()
+                if n and n > 0 then _ContainerSlots.ApplyToInstance(inst, n, _ContainerParams, GLOBAL.Vector3, false) end
+            end)
+        end
+    end
 
     for _, b in ipairs(BINDINGS) do
         local src = BIND_SOURCES[b.source]
@@ -334,7 +451,7 @@ AddPrefabPostInitAny(function(inst)
                 local function push()
                     local cur, max = src.read(inst)
                     if cur == nil then return end
-                    nv:set(clamp16(cur)); nvmax:set(clamp16(max))
+                    nv:set(clampNet(cur, b.net)); nvmax:set(clampNet(max, b.net))
                 end
                 inst:DoTaskInTime(0, function()
                     local comp = inst.components and inst.components[src.hook.comp]
@@ -349,6 +466,36 @@ AddPrefabPostInitAny(function(inst)
                 local as, asmax = b.as, b.as .. "_max"
                 inst:ListenForEvent(as .. "_dirty", function() inst[as] = inst["_b_" .. as]:value() end)
                 inst:ListenForEvent(asmax .. "_dirty", function() inst[asmax] = inst["_b_" .. asmax]:value() end)
+            end
+        end
+    end
+
+    -- Slot pool: SLOT_COUNT generic net_floats, declared identically on both sides for
+    -- every prefab of the preset. Server: data_feed writes them. Client: each dirty
+    -- event hands (slot, value) to data_feed, which decodes it via the slot map.
+    if SLOT_PREFABS[inst.prefab] then
+        -- The composite ENTITY CHANNEL: one net_string per preset entity carrying its
+        -- flow-chosen fields + the events of each frame (data_feed.lua). This is the
+        -- default dynamic path; the float slots below are an optional fast path.
+        inst._dstp_ent = GLOBAL.net_string(inst.GUID, "dstp.ent", "dstp_ent_dirty")
+        if not isServer then
+            inst:ListenForEvent("dstp_ent_dirty", function()
+                local s = inst._dstp_ent:value()
+                if s and s ~= "" then GetDataFeed().OnEntity(inst, s) end
+            end)
+        end
+        if SLOT_COUNT > 0 then
+            inst._dstp_slot = {}
+            for i = 1, SLOT_COUNT do
+                inst._dstp_slot[i] = GLOBAL.net_float(inst.GUID, "dstp.slot" .. i, "dstp_slot" .. i .. "_dirty")
+            end
+            if not isServer then
+                for i = 1, SLOT_COUNT do
+                    local idx = i
+                    inst:ListenForEvent("dstp_slot" .. idx .. "_dirty", function()
+                        GetDataFeed().OnSlot(inst, idx, inst._dstp_slot[idx]:value())
+                    end)
+                end
             end
         end
     end

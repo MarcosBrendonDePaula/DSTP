@@ -9,6 +9,7 @@ export const ui = function UITextNode({ id, data, selected }: any) {
       {field('Cor [r,g,b,a]', data.params?.color ?? '', v => set('color', v), '[1,1,1,1]')}
       {field('Node ID (p/ atualizar)', data.params?.node_id ?? '', v => set('node_id', v), 'saldo_txt')}
       {field('Callback (clicável)', data.params?.callback ?? '', v => set('callback', v), '')}
+      {field('Bind (prop=entity.campo)', data.params?.bind ?? '', v => set('bind', v), 'text=entity.name')}
     </UIBox>
   )
 }

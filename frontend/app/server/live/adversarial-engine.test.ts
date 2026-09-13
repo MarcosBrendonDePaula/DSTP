@@ -294,11 +294,12 @@ describe('ATTACK 5 — evaluateCondition weird types', () => {
     expect(evaluateCondition({ field: '{{trigger.present}}', operator: 'contains', value: '{{trigger.missing}}' }, ctx)).toBe(false)
   })
 
-  it('exists on an unresolved template is TRUE (template text is non-null) — known foot-gun', () => {
+  it('exists on an unresolved template is FALSE (the literal "{{x}}" is not a value) — foot-gun fixed', () => {
     const ctx = { trigger: {} }
-    // {{trigger.nope}} stays literal "{{trigger.nope}}", which is != null → exists true.
-    // This is a foot-gun: "exists" on a missing field returns true. Documented.
-    expect(evaluateCondition({ field: '{{trigger.nope}}', operator: 'exists' }, ctx)).toBe(true)
+    // {{trigger.nope}} stays literal "{{trigger.nope}}" (kept for debuggability), but
+    // `exists` must not read that text as a value: a login flow opened "Login" for a
+    // never-registered player because memory's null became "{{acc.value}}".
+    expect(evaluateCondition({ field: '{{trigger.nope}}', operator: 'exists' }, ctx)).toBe(false)
   })
 
   it('a nonexistent operator passes (true) — fail-open, documented', () => {

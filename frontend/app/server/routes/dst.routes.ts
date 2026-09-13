@@ -43,6 +43,8 @@ export function handleDstSync(data: any) {
   // requested_keys; handleSync below puts it on the result.)
   if (!dstStateStore.isShardOnline(shard_id)) {
     try { (require("../live/LiveAutomation") as any).reconcileWatchKeys?.(server_id) } catch {}
+    // same for event categories: the mod restarted with the modinfo defaults
+    try { (require("../live/LiveAutomation") as any).reconcileEventCategories?.(server_id) } catch {}
   }
 
   // Prefab list: the mod sends it once per session. Cache it per server (only the

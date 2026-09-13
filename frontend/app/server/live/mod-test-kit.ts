@@ -37,8 +37,11 @@ export function runLuaHarness(spec: HarnessSpec): string {
   const L = lauxlib.luaL_newstate()
   lualib.luaL_openlibs(L)
 
-  // Inject module sources as MOD_<NAME> globals.
-  for (const [name, src] of Object.entries(spec.modules)) {
+  // Inject module sources as MOD_<NAME> globals. Pure sibling modules that production
+  // code pulls in by `require("dstp/<x>")` (served by the kit's require shim) are
+  // injected by default so every harness gets them without listing them.
+  const modules = { LAYOUT_MATH: modSource('layout_math.lua'), ...spec.modules }
+  for (const [name, src] of Object.entries(modules)) {
     lua.lua_pushstring(L, to_luastring(src))
     lua.lua_setglobal(L, to_luastring('MOD_' + name))
   }

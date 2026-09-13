@@ -4,6 +4,11 @@
 
 local UIWidgets = {}
 
+-- The flex arithmetic (justify/align/margin auto/grow) — a pure module shared with the
+-- panel preview via fixtures. Positions are computed in CSS space and converted to DST
+-- space ONCE (LayoutMath.ToDst); never mix the two conventions in the renderer again.
+local LayoutMath = require("dstp/layout_math")
+
 local _G = nil
 local _seq = -1  -- last processed sequence number (dedup net_string replays)
 
@@ -24,6 +29,10 @@ local function Log(msg)
     print("[DSTP UI] " .. msg)
 end
 
+-- Toggle verbose layout logging (box sizes/positions the renderer computes), so we can
+-- verify the HTML/CSS layout against what the game actually builds. OFF in prod.
+local LAYOUT_DEBUG = false
+
 local function InitFontMap()
     FONT_MAP = {
         NEWFONT           = _G.NEWFONT,
@@ -37,10 +46,28 @@ local function InitFontMap()
     }
 end
 
+-- Friendly font names (HTML `font: title`) → DST font globals; the raw global names
+-- (TITLEFONT…) keep working.
+local FONT_ALIAS = {
+    title = "TITLEFONT", body = "BODYTEXTFONT", ui = "UIFONT", outline = "NEWFONT_OUTLINE",
+    chat = "CHATFONT", talking = "TALKINGFONT", small = "NEWFONT_SMALL", default = "NEWFONT", new = "NEWFONT",
+}
 local function ResolveFont(name)
     if not name then return _G.NEWFONT_OUTLINE end
     if not FONT_MAP then InitFontMap() end
-    return FONT_MAP[name] or _G.NEWFONT_OUTLINE
+    local key = FONT_ALIAS[tostring(name):lower()] or name
+    return FONT_MAP[key] or _G.NEWFONT_OUTLINE
+end
+
+-- CSS alignment words → DST anchor constants (legacy constant names pass through).
+local ANCHOR_WORDS = {
+    left = "ANCHOR_LEFT", center = "ANCHOR_MIDDLE", middle = "ANCHOR_MIDDLE", right = "ANCHOR_RIGHT",
+    top = "ANCHOR_TOP", bottom = "ANCHOR_BOTTOM",
+}
+local function ResolveAnchor(v)
+    if v == nil then return nil end
+    local key = ANCHOR_WORDS[tostring(v):lower()] or v
+    return _G[key]
 end
 
 local function ResolveColor(c)
@@ -258,14 +285,17 @@ local function ResolveSize(value, ref, ctx, dim)
     local s = tostring(value)
     local pct = tonumber(s:match("^%s*(%-?%d+%.?%d*)%s*%%%s*$"))
     if not pct then return nil end              -- not a "<num>%" string
-    ref = (ref and tostring(ref):lower()) or "screen"
+    ref = (ref and tostring(ref):lower()) or "parent"  -- default: relative to the parent
     local base
+    local isW = (dim == "w")
     if ref == "screen" then
-        base = (dim == "w") and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
+        base = isW and (_G.RESOLUTION_X or 1280) or (_G.RESOLUTION_Y or 720)
     elseif ref == "panel" then
-        base = (dim == "w") and ctx and ctx.panel_w or (ctx and ctx.panel_h)
+        -- explicit if/else: the old `A and B and C or D` chain wrongly fell through to the
+        -- HEIGHT base when the width base was nil/0 (Lua and/or precedence).
+        if isW then base = ctx and ctx.panel_w else base = ctx and ctx.panel_h end
     elseif ref == "parent" then
-        base = (dim == "w") and ctx and ctx.parent_w or (ctx and ctx.parent_h)
+        if isW then base = ctx and ctx.parent_w else base = ctx and ctx.parent_h end
     end
     if not base or base <= 0 then return nil end -- unknown reference → caller's default
     return base * pct / 100
@@ -273,54 +303,146 @@ end
 local function ResolveW(node, ctx) return ResolveSize(node.width, node.width_ref, ctx, "w") end
 local function ResolveH(node, ctx) return ResolveSize(node.height, node.height_ref, ctx, "h") end
 
--- Render every child, then stack them along one axis with `gap`. `axis` is
--- "y" (column, top→down) or "x" (row, left→right). Returns total (w,h).
+-- A child's box prop, from the flat node OR its element `style` (children reach the
+-- parent's layout RAW — NormalizeElement only runs on them inside RenderNode).
+local function ChildProp(childdef, key)
+    local v = childdef[key]
+    if v == nil and type(childdef.style) == "table" then v = childdef.style[key] end
+    return v
+end
+
+-- One margin side: returns (px, isAuto). "auto" → (nil, true).
+local function MarginSide(childdef, key)
+    local v = ChildProp(childdef, key)
+    if v == "auto" then return nil, true end
+    return tonumber(v), false
+end
+
+-- Render every child, then lay them out along one axis with CSS flex semantics
+-- (justify/align/gap/margin incl. `auto`/grow/min/max) via LayoutMath. `axis` is "y"
+-- (column, top→down) or "x" (row, left→right). Returns the box (w,h) the container
+-- claims. Defaults (justify/align center) reproduce the legacy centered stack.
+--
+-- Everything is computed in CSS space (top-left origin, y DOWN, main/cross axis names)
+-- and converted to DST space (centered, y UP) exactly once, per child, by ToDst — the
+-- old renderer mixed the two conventions per axis and got the row cross axis inverted.
 local function LayoutChildren(node, container, ctx, axis)
     local gap = tonumber(node.gap) or 8
-    local kids = {}
+    local isCol = (axis == "y")
+    local kids, items = {}, {}
+    -- align:stretch — a child with NO explicit cross size is rendered at the container's
+    -- cross CONTENT size (CSS stretch). Needs the container's cross size to be known;
+    -- an auto-sized container can't stretch (nothing to stretch to).
+    local stretchTo = nil
+    if node.align == "stretch" then
+        local crossFixed = isCol and ResolveW(node, ctx) or ResolveH(node, ctx)
+        if crossFixed then stretchTo = crossFixed - 2 * (tonumber(node.padding) or 0) end
+    end
     -- children may be a non-table on the ui_builder literal-tree path (an author bound it
     -- to a template that resolved to a non-array); guard so ipairs doesn't crash.
     for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
-        local cw, ch
-        local cwidget
-        cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        local def = childdef
+        if stretchTo and type(childdef) == "table" then
+            local crossKey = isCol and "width" or "height"
+            if ChildProp(childdef, crossKey) == nil then
+                -- shallow copy (not a proxy: NormalizeElement walks pairs()) with the size imposed
+                def = {}
+                for k, v in pairs(childdef) do def[k] = v end
+                def[crossKey] = stretchTo
+            end
+        end
+        local cwidget, cw, ch = RenderNode(def, container, ctx)
         if cwidget then
-            table.insert(kids, { w = cwidget, width = cw or 0, height = ch or 0 })
+            cw, ch = cw or 0, ch or 0
+            -- z = render order (CSS z-index): higher draws on top.
+            local z = tonumber(ChildProp(childdef, "z")) or 0
+            table.insert(kids, { w = cwidget, width = cw, height = ch, z = z, order = #kids })
+            -- CSS box props → a LayoutMath line item. `margin` = all sides; margin_top/
+            -- right/bottom/left override a side and may be "auto"; grow (or `flex`) and
+            -- min/max on the MAIN axis (min_width/max_width for a row, *_height for a col).
+            local mAll = ChildProp(childdef, "margin")
+            local autoAll = (mAll == "auto")
+            local mt, at = MarginSide(childdef, "margin_top")
+            local mb, ab = MarginSide(childdef, "margin_bottom")
+            local ml, al = MarginSide(childdef, "margin_left")
+            local mr, ar = MarginSide(childdef, "margin_right")
+            local item = {
+                main = isCol and ch or cw, cross = isCol and cw or ch,
+                grow = tonumber(ChildProp(childdef, "grow")) or tonumber(ChildProp(childdef, "flex")) or 0,
+                shrink = tonumber(ChildProp(childdef, "shrink")),
+                margin = (not autoAll) and tonumber(mAll) or nil,
+            }
+            if isCol then
+                item.min, item.max = tonumber(ChildProp(childdef, "min_height")), tonumber(ChildProp(childdef, "max_height"))
+                item.marginMainStart, item.marginMainEnd = mt, mb
+                item.marginCrossStart, item.marginCrossEnd = ml, mr
+                item.autoMainStart, item.autoMainEnd = autoAll or at, autoAll or ab
+                item.autoCrossStart, item.autoCrossEnd = autoAll or al, autoAll or ar
+            else
+                item.min, item.max = tonumber(ChildProp(childdef, "min_width")), tonumber(ChildProp(childdef, "max_width"))
+                item.marginMainStart, item.marginMainEnd = ml, mr
+                item.marginCrossStart, item.marginCrossEnd = mt, mb
+                item.autoMainStart, item.autoMainEnd = autoAll or al, autoAll or ar
+                item.autoCrossStart, item.autoCrossEnd = autoAll or at, autoAll or ab
+            end
+            table.insert(items, item)
         end
     end
 
-    -- Total extent along the layout axis + max cross extent.
-    local total, cross = 0, 0
+    local pad = tonumber(node.padding) or 0
+    local justify = node.justify or "center"   -- main axis
+    local align = node.align or "center"        -- cross axis
+    -- A declared width/height is a MINIMUM (like CSS min-*): content larger than it
+    -- grows the box instead of spilling out. LayoutLine applies that rule.
+    local fixedMain, crossFixed
+    if isCol then fixedMain, crossFixed = ResolveH(node, ctx), ResolveW(node, ctx)
+    else fixedMain, crossFixed = ResolveW(node, ctx), ResolveH(node, ctx) end
+    -- wrap (flex-wrap: wrap) needs a fixed main size; row_gap / align_content place the lines.
+    local wrap = (node.wrap == true) or (node.wrap == "true") or (node.wrap == "wrap")
+    local res = LayoutMath.LayoutLines(items, {
+        track = fixedMain and (fixedMain - 2 * pad) or nil,
+        cross = crossFixed and (crossFixed - 2 * pad) or nil,
+        gap = gap, justify = justify, align = align,
+        wrap = wrap, row_gap = tonumber(node.row_gap), align_content = node.align_content,
+    })
+    -- The content box (W×H in CSS space) is centered on the container origin.
+    local W, H
+    if isCol then W, H = res.used.cross, res.used.main else W, H = res.used.main, res.used.cross end
     for i, k in ipairs(kids) do
-        if axis == "y" then
-            total = total + k.height
-            if k.width > cross then cross = k.width end
-        else
-            total = total + k.width
-            if k.height > cross then cross = k.height end
-        end
-        if i < #kids then total = total + gap end
+        local p = res.items[i]
+        local x, y, w, h
+        if isCol then x, y, w, h = p.cross, p.main, k.width, p.size
+        else x, y, w, h = p.main, p.cross, p.size, k.height end
+        -- A grown slot (flex-grow) centers the child's measured widget in it — the
+        -- widget itself is not resized (leaf textures keep their size).
+        local dx, dy = LayoutMath.ToDst(x, y, w, h, W, H)
+        k.w:SetPosition(dx, dy, 0)
     end
 
-    -- Place children centered on the cross axis, stacked on the main axis,
-    -- with the group centered around the container origin (0,0).
-    if axis == "y" then
-        local cursor = total / 2
-        for _, k in ipairs(kids) do
-            cursor = cursor - k.height / 2
-            k.w:SetPosition(0, cursor, 0)
-            cursor = cursor - k.height / 2 - gap
-        end
-        return cross, total
-    else
-        local cursor = -total / 2
-        for _, k in ipairs(kids) do
-            cursor = cursor + k.width / 2
-            k.w:SetPosition(cursor, 0, 0)
-            cursor = cursor + k.width / 2 + gap
-        end
-        return total, cross
+    -- z-index: re-stack children by z (stable: ties keep document order). DST draws in
+    -- child order with MoveToFront putting a widget last/top, so MoveToFront each child in
+    -- ascending z → higher z ends up drawn on top. No-op when all z are 0 (the default).
+    local anyZ = false
+    for _, k in ipairs(kids) do if k.z ~= 0 then anyZ = true break end end
+    if anyZ then
+        local ordered = {}
+        for i, k in ipairs(kids) do ordered[i] = k end
+        table.sort(ordered, function(a, b) if a.z == b.z then return a.order < b.order end return a.z < b.z end)
+        for _, k in ipairs(ordered) do if k.w.MoveToFront then k.w:MoveToFront() end end
     end
+
+    if LAYOUT_DEBUG then
+        Log(string.format("  layout axis=%s justify=%s align=%s pad=%d content=%dx%d fixedMain=%s crossFixed=%s kids=%d",
+            axis, tostring(justify), tostring(align), pad, math.floor(W), math.floor(H), tostring(fixedMain), tostring(crossFixed), #kids))
+        for i, k in ipairs(kids) do
+            local p = res.items[i]
+            Log(string.format("    kid[%d] %dx%d css main=%.1f cross=%.1f slot=%.1f", i, math.floor(k.width), math.floor(k.height), p.main, p.cross, p.size))
+        end
+    end
+
+    -- Report the actual box: grown to fit content if the fixed size was smaller.
+    if isCol then return W, math.max(fixedMain or 0, H) end
+    return math.max(fixedMain or 0, W), H
 end
 
 -- Canvas mode: place each child at its own absolute x,y (px in game space) relative to
@@ -340,11 +462,46 @@ local function CanvasChildren(node, container, ctx)
             -- (matches the editor). DST widgets are centered on their own origin, so the
             -- widget's CENTER must land at corner + half its own size. Container origin is
             -- its center → left edge = -W/2, top edge = +H/2 (y grows up).
-            local x = tonumber(childdef.x) or 0
-            local y = tonumber(childdef.y) or 0
+            local x = tonumber(ChildProp(childdef, "x")) or 0   -- flat prop OR element style
+            local y = tonumber(ChildProp(childdef, "y")) or 0
             cw, ch = cw or 0, ch or 0
             cwidget:SetPosition(-W / 2 + x + cw / 2, H / 2 - y - ch / 2, 0)
         end
+    end
+    return W, H
+end
+
+-- CSS grid: `grid_columns` (px / "1fr" / "25%"), `column_gap` / `row_gap` (default
+-- `gap`), `row_height`, `justify_items` / `align_items` per cell, child `span`. The
+-- math is LayoutMath.LayoutGrid (shared fixtures with the panel); positions are
+-- converted to DST space once, like LayoutChildren.
+local function GridChildrenCSS(node, container, ctx)
+    local gap = tonumber(node.gap) or 8
+    local pad = tonumber(node.padding) or 0
+    local kids, items = {}, {}
+    for _, childdef in ipairs(type(node.children) == "table" and node.children or {}) do
+        local cwidget, cw, ch = RenderNode(childdef, container, ctx)
+        if cwidget then
+            cw, ch = cw or 0, ch or 0
+            kids[#kids + 1] = { w = cwidget, width = cw, height = ch }
+            items[#items + 1] = { main = cw, cross = ch, span = tonumber(ChildProp(childdef, "span")) }
+        end
+    end
+    local fixedW = ResolveW(node, ctx)
+    local res = LayoutMath.LayoutGrid(items, {
+        columns = node.grid_columns,
+        track = fixedW and (fixedW - 2 * pad) or nil,
+        column_gap = tonumber(node.column_gap) or gap,
+        row_gap = tonumber(node.row_gap) or gap,
+        row_height = tonumber(node.row_height),
+        justify_items = node.justify_items,
+        align_items = node.align_items or node.align,
+    })
+    local W, H = res.used.main, res.used.cross
+    for i, k in ipairs(kids) do
+        local p = res.items[i]
+        local dx, dy = LayoutMath.ToDst(p.main, p.cross, k.width, k.height, W, H)
+        k.w:SetPosition(dx, dy, 0)
     end
     return W, H
 end
@@ -497,20 +654,83 @@ local function GridChildren(node, container, ctx)
     return totalW, gridH
 end
 
+-- ── Local data bindings ───────────────────────────────────────────────────────
+-- `node.bind = { <prop> = "<path>" }` is evaluated on the CLIENT, every frame, by whoever
+-- owns the tree (today: follow widgets, env = { entity = <inst> }) and patched in place
+-- through the node's Register patch — no backend round-trip. Paths are DATA, not code:
+--   entity.name | entity.prefab | entity.hp | entity.hp_max | entity.hp_pct |
+--   entity.has_hp | entity.distance | entity.<field>  (a plain number/string/boolean
+--   field on the inst, e.g. any dstp_* netvar cache — see modmain BINDINGS)
+-- A path that resolves to nil leaves the prop untouched (last good value stays).
+local function BindLookup(path, env)
+    if type(path) ~= "string" then return path end          -- literal value
+    local root, key = path:match("^(%w+)%.([%w_]+)$")
+    if not root then return nil end
+    local obj = env[root]
+    if obj == nil then return nil end
+    if root == "entity" then
+        local ent = obj
+        if key == "name" then
+            local ok, nm = _G.pcall(function() return ent.GetDisplayName and ent:GetDisplayName() end)
+            return (ok and nm) or ent.name or ent.prefab
+        elseif key == "prefab" then return ent.prefab
+        elseif key == "hp" then return ent.dstp_hp
+        elseif key == "hp_max" then return ent.dstp_hp_max
+        elseif key == "has_hp" then return ent.dstp_hp ~= nil and (ent.dstp_hp_max or 0) > 0
+        elseif key == "hp_pct" then
+            if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then return ent.dstp_hp / ent.dstp_hp_max end
+            return nil
+        elseif key == "distance" then
+            local p = _G.ThePlayer
+            if p and p.Transform and ent.Transform then
+                local px, _, pz = p.Transform:GetWorldPosition()
+                local ex, _, ez = ent.Transform:GetWorldPosition()
+                return math.sqrt((ex - px) * (ex - px) + (ez - pz) * (ez - pz))
+            end
+            return nil
+        end
+    end
+    local v = obj[key]
+    local t = type(v)
+    if t == "number" or t == "string" or t == "boolean" then return v end
+    return nil
+end
+
+-- Evaluate every bound node of a tree against `env` and patch only what changed.
+local function ApplyBindings(ctx, env)
+    if not ctx.bound then return end
+    for _, b in ipairs(ctx.bound) do
+        local props, changed = {}, false
+        for prop, path in pairs(b.bind) do
+            local v = BindLookup(path, env)
+            if v ~= nil and v ~= b.last[prop] then props[prop] = v; b.last[prop] = v; changed = true end
+        end
+        if changed then
+            local ok, err = _G.pcall(b.patch, props)
+            if not ok then Log("bind patch failed: " .. tostring(err)) end
+        end
+    end
+end
+
 -- Register an addressable node: ctx.byId[id] = { widget, patch }. `patch` is a
 -- per-type closure that applies prop updates in place. `visible` is handled
--- generically here (Show/Hide). This is what makes ui_set work on any node.
+-- generically here (Show/Hide). This is what makes ui_set work on any node — and
+-- what `bind` patches through locally (ctx.bound) when the tree owner ticks.
 local function Register(ctx, node, widget, patch)
+    local full = function(props)
+        if props.visible ~= nil and widget.inst:IsValid() then
+            if props.visible then widget:Show() else widget:Hide() end
+        end
+        if patch then patch(props) end
+    end
+    if type(node.bind) == "table" and ctx.bound then
+        table.insert(ctx.bound, { bind = node.bind, patch = full, last = {} })
+    end
+    -- `visible=false` in the DEFINITION starts hidden (what dom_toggle persists, so a
+    -- rebuild keeps a toggled-off node off).
+    if node.visible == false and widget.inst:IsValid() then widget:Hide() end
     if not (node.id and ctx.byId) then return end
-    ctx.byId[node.id] = {
-        widget = widget,
-        patch = function(props)
-            if props.visible ~= nil and widget.inst:IsValid() then
-                if props.visible then widget:Show() else widget:Hide() end
-            end
-            if patch then patch(props) end
-        end,
-    }
+    ctx.byId[node.id] = { widget = widget, patch = full }
 end
 
 -- Make a text/icon/image node clickable if it carries a callback (debounced 0.5s).
@@ -561,8 +781,26 @@ local function MakeHitTarget(parent, w, h, pad, debug)
     return hit
 end
 
+-- Hover as an event (task 7): focus on the HUD is granted by the engine hit-test to
+-- the hovered hit target (the same focus that gates clicks — see MakeHitTarget), so
+-- OnGainFocus/OnLoseFocus ARE mouse enter/leave for our purposes. Report them through
+-- UIWidgets._hover_fn(id, root_id, hovered, callback) → modmain → rules `ui_hover`.
+local function WireHover(hit, node, ctx)
+    if not (node.id or node.callback) then return end
+    local prevGain, prevLose = hit.OnGainFocus, hit.OnLoseFocus
+    hit.OnGainFocus = function(self, ...)
+        if prevGain then prevGain(self, ...) end
+        if UIWidgets._hover_fn then _G.pcall(UIWidgets._hover_fn, node.id, ctx.root_id, true, node.callback) end
+    end
+    hit.OnLoseFocus = function(self, ...)
+        if prevLose then prevLose(self, ...) end
+        if UIWidgets._hover_fn then _G.pcall(UIWidgets._hover_fn, node.id, ctx.root_id, false, node.callback) end
+    end
+end
+
 local function MaybeClickable(widget, node, ctx, w, h)
-    if not node.callback then return end
+    -- `hover=true` without a callback still gets an overlay, just to report ui_hover.
+    if not (node.callback or node.hover) then return end
     local cb = node.callback
     local last = -1
     local function fire()
@@ -578,7 +816,8 @@ local function MaybeClickable(widget, node, ctx, w, h)
     -- whole string is clickable. node.hit_pad tunes it; default 8.
     local pad = (node.hit_pad ~= nil) and node.hit_pad or 8
     local hit = MakeHitTarget(widget, w, h, pad, node.hit_debug)
-    hit:SetOnClick(fire)
+    if cb then hit:SetOnClick(fire) end
+    WireHover(hit, node, ctx)
 end
 
 -- Make a window draggable by a title-bar hit target. `dragArea` is the invisible
@@ -637,6 +876,52 @@ local function MakeDraggable(dragArea, target)
     end
 end
 
+-- Visual box for a container: a tinted square.tex behind the children = CSS
+-- background; an optional larger frame behind that = CSS border. opacity folds into
+-- the bg alpha. No-op when neither background nor border is set, so untouched trees
+-- get nothing extra. `w`/`h` are the container's resolved box size. Inserted at the
+-- BACK so children render on top.
+-- True if any direct child declares an absolute x/y — i.e. canvas placement is intended.
+local function HasChildXY(node)
+    if type(node.children) ~= "table" then return false end
+    for _, c in ipairs(node.children) do
+        -- flat x/y OR element-model style.x/y (children are still raw here)
+        if type(c) == "table" and (ChildProp(c, "x") ~= nil or ChildProp(c, "y") ~= nil) then return true end
+    end
+    return false
+end
+
+local function AddBox(container, w, h, node)
+    if not (node.background or node.border) and node.opacity == nil then return end
+    local Image = _G.require("widgets/image")
+    if not (w and h and w > 0 and h > 0) then return end
+    local op = tonumber(node.opacity)
+    -- Add bg first then the frame, each MoveToBack — the LAST MoveToBack lands furthest
+    -- back, so the frame ends up behind the bg, both behind the children.
+    if node.background then
+        local c = ResolveColor(node.background)
+        local bg = container:AddChild(Image("images/global.xml", "square.tex"))
+        bg:SetSize(w, h)
+        bg:SetTint(c[1], c[2], c[3], (c[4] or 1) * (op or 1))
+        bg:MoveToBack()
+    end
+    -- border: { width, color } or a bare width (HTML `border:2`); colour defaults.
+    if node.border ~= nil and node.border ~= false then
+        local bw, bc
+        if type(node.border) == "table" then
+            bw = tonumber(node.border.width) or 2
+            bc = ResolveColor(node.border.color or { 1, 1, 1, 0.6 })
+        else
+            bw = tonumber(node.border) or 2
+            bc = ResolveColor({ 1, 1, 1, 0.6 })
+        end
+        local frame = container:AddChild(Image("images/global.xml", "square.tex"))
+        frame:SetSize(w + bw * 2, h + bw * 2)
+        frame:SetTint(bc[1], bc[2], bc[3], (bc[4] or 1) * (op or 1))
+        frame:MoveToBack()
+    end
+end
+
 RenderNodeImpl = function(node, parent, ctx)
     if not node or not node.type then return nil, 0, 0 end
     local Widget      = _G.require("widgets/widget")
@@ -647,19 +932,71 @@ RenderNodeImpl = function(node, parent, ctx)
 
     if t == "col" or t == "row" then
         local c = parent:AddChild(Widget("col_row"))
-        -- Canvas mode: absolute x,y per child instead of stacking. Needs fixed width/height.
-        if node.mode == "canvas" then
+        -- Canvas mode: absolute x,y per child. But if NO child declares x/y, canvas would
+        -- stack everything at (0,0) — fall back to normal layout so a stray
+        -- display:absolute without coords still lays out sanely.
+        if node.mode == "canvas" and HasChildXY(node) then
             local w, h = CanvasChildren(node, c, ctx)
+            AddBox(c, w, h, node)   -- background/border/opacity behind the placed children
             return c, w, h
         elseif node.mode == "grid" then
-            local w, h = GridChildren(node, c, ctx)
-            return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+            -- CSS grid (grid_columns: px / "1fr" / "25%") via LayoutMath; the legacy
+            -- uniform `cols` / `grid_rows` grid stays for trees without grid_columns.
+            local w, h
+            if type(node.grid_columns) == "table" then w, h = GridChildrenCSS(node, c, ctx)
+            else w, h = GridChildren(node, c, ctx) end
+            local fw, fh = ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+            AddBox(c, fw, fh, node)
+            return c, fw, fh
         end
-        local w, h = LayoutChildren(node, c, ctx, t == "col" and "y" or "x")
-        -- Optional fixed size: when width/height are set, REPORT that size to the parent
-        -- layout (overrides the measured content size). Content still lays out by gap; this
-        -- only changes the slot the container claims. Unset = auto-size (unchanged).
-        return c, ResolveW(node, ctx) or w, ResolveH(node, ctx) or h
+        -- If THIS container has a fixed (resolvable) size, expose its CONTENT box as the
+        -- parent reference so children with width_ref:parent / "100%" resolve against it
+        -- (top-down, non-circular). Restore after — auto-size parents keep the old ref.
+        -- CSS-like sizing: WIDTH flows top-down (a block fills its parent's width unless
+        -- it has its own), HEIGHT is bottom-up (auto = sum of children). So the content
+        -- box width passed to children = (own width or inherited parent width) − padding;
+        -- children's width:100% resolves against it even when THIS container is auto.
+        local prevPW, prevPH = ctx.parent_w, ctx.parent_h
+        local selfW, selfH = ResolveW(node, ctx), ResolveH(node, ctx)
+        local pad2 = (tonumber(node.padding) or 0) * 2
+        local contentW = (selfW or ctx.parent_w)   -- inherit parent width when auto
+        if contentW then ctx.parent_w = contentW - pad2 end
+        if selfH then ctx.parent_h = selfH - pad2 end
+        -- overflow:scroll (task 8): lay the children out in an ORPHAN content widget so
+        -- it can be handed to Klei's TrueScrollArea (a scissored viewport + wheel/drag
+        -- scrollbar) when the content is taller than the fixed height. No scroll needed
+        -- (auto height, or it fits) → the content is simply parented to `c`.
+        local scroll = (node.overflow == "scroll") and selfH ~= nil
+        local inner = scroll and Widget("scroll_content") or c
+        local w, h = LayoutChildren(node, inner, ctx, t == "col" and "y" or "x")
+        ctx.parent_w, ctx.parent_h = prevPW, prevPH
+        -- Reported width: own fixed width, else the measured content (keeps auto-grow
+        -- so a small box doesn't silently stretch to the whole screen).
+        local fw, fh = selfW or w, selfH or h
+        if scroll then
+            if h > selfH + 0.5 then
+                -- Our content is centred on (0,0) (children span -h/2..+h/2, y up); the
+                -- viewport is the box (-fw/2..fw/2, -selfH/2..selfH/2). Offset the content so
+                -- its TOP sits at the viewport's top; scrolling adds to y (moves it up).
+                local TrueScrollArea = _G.require("widgets/truescrollarea")
+                local area = c:AddChild(TrueScrollArea(
+                    { widget = inner, offset = { x = 0, y = selfH / 2 - h / 2 }, size = { w = fw, height = h } },
+                    { x = -fw / 2, y = -selfH / 2, width = fw, height = selfH },
+                    { scroll_per_click = tonumber(node.scroll_step) or 40 }))
+                area:SetPosition(0, 0, 0)
+                if LAYOUT_DEBUG then Log(string.format("scroll id=%s viewport %dx%d content %d", tostring(node.id or "?"), math.floor(fw), math.floor(selfH), math.floor(h))) end
+            else
+                c:AddChild(inner)
+            end
+        end
+        if LAYOUT_DEBUG then
+            Log(string.format("%s id=%s -> box %dx%d (selfW=%s selfH=%s measured %dx%d) parent=%sx%s kids=%d",
+                t, tostring(node.id or "?"), math.floor(fw), math.floor(fh),
+                tostring(selfW), tostring(selfH), math.floor(w), math.floor(h),
+                tostring(prevPW), tostring(prevPH), type(node.children)=="table" and #node.children or 0))
+        end
+        AddBox(c, fw, fh, node)   -- CSS background/border/opacity behind the children
+        return c, fw, fh
 
     elseif t == "tabs" then
         -- Tab bar (row of buttons) on top + a content stack below; only the
@@ -714,7 +1051,8 @@ RenderNodeImpl = function(node, parent, ctx)
                 "images/global_redux.xml",
                 "button_carny_long_normal.tex", "button_carny_long_hover.tex",
                 "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
-            btn:SetScale(btnW / 340, barH / 70)
+            -- exact px (the carny long tex is 320x89, not 340x70 — see dst-atlas-sizes.ts)
+            if btn.ForceImageSize then btn:ForceImageSize(btnW, barH) else btn:SetScale(btnW / 320, barH / 89) end
             local lbl = bwrap:AddChild(Text(_G.NEWFONT_OUTLINE, 18, tab.label or ("Aba " .. i)))
             bwrap:SetPosition(barX + (i - 1) * (btnW + gap), barY, 0)
             local idx = i
@@ -745,9 +1083,11 @@ RenderNodeImpl = function(node, parent, ctx)
             txt:SetRegionSize(fixW, fixH or 60)
             txt:EnableWordWrap(true)
         end
-        -- Optional alignment within a sized region (used by the folded panel body).
-        if node.halign and txt.SetHAlign and _G[node.halign] then txt:SetHAlign(_G[node.halign]) end
-        if node.valign and txt.SetVAlign and _G[node.valign] then txt:SetVAlign(_G[node.valign]) end
+        -- Optional alignment within a sized region: CSS words (left/center/right,
+        -- top/middle/bottom) or the legacy DST constant names (ANCHOR_LEFT…).
+        local ha, va = ResolveAnchor(node.halign), ResolveAnchor(node.valign)
+        if ha ~= nil and txt.SetHAlign then txt:SetHAlign(ha) end
+        if va ~= nil and txt.SetVAlign then txt:SetVAlign(va) end
         local rw, rh = txt:GetRegionSize()
         -- LAYOUT size: an explicit width/height wins; else the measured region (with a
         -- per-char/size fallback if nil/0). node.text may be a NUMBER (template), so
@@ -830,7 +1170,10 @@ RenderNodeImpl = function(node, parent, ctx)
             "images/global_redux.xml",
             "button_carny_long_normal.tex", "button_carny_long_hover.tex",
             "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
-        btn:SetScale(bw / 340, bh / 70)
+        -- Exact px size, texture-independent (the carny long tex is 320x89 — the old
+        -- SetScale(bw/340, bh/70) assumed 340x70 and squashed every button:
+        -- `bun run scripts/dst-atlas-sizes.ts` reads the real sizes from the game files).
+        if btn.ForceImageSize then btn:ForceImageSize(bw, bh) else btn:SetScale(bw / 320, bh / 89) end
         local label = holder:AddChild(Text(_G.NEWFONT_OUTLINE, node.size or 20, tostring(node.text or "OK")))
         local col = ResolveColor(node.color)
         label:SetColour(col[1], col[2], col[3], col[4])
@@ -843,6 +1186,7 @@ RenderNodeImpl = function(node, parent, ctx)
             if ctx.fire then ctx.fire(cb, { id = node.id, data = node.data })
             elseif cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, { data = node.data }) end
         end)
+        WireHover(btn, node, ctx)
         Register(ctx, node, holder, function(props)
             if props.text ~= nil and label.inst:IsValid() then label:SetString(tostring(props.text)) end
             if props.color and label.inst:IsValid() then local c = ResolveColor(props.color); label:SetColour(c[1], c[2], c[3], c[4]) end
@@ -980,13 +1324,18 @@ RenderNodeImpl = function(node, parent, ctx)
         local fixed = fw ~= nil and fh ~= nil
         local pw, ph
         local title_txt, body_txt
+        -- Title STRIP: a titled panel reserves `title_h` at the top (title font + 16),
+        -- the content box shrinks by it and shifts down by half, and the min-size growth
+        -- includes it — so the title never draws over the first row (in-game 2026-09-12:
+        -- the wallet's "Carteira" sat on top of its coin line). The title is positioned
+        -- from the FINAL height, after growth. `title_h` overrides the strip height.
+        local title_size = tonumber(node.title_size) or 24
+        local title_h = 0
+        if node.title ~= nil and tostring(node.title) ~= "" then
+            title_h = tonumber(node.title_h) or (title_size + 16)
+        end
         if fixed then
             pw, ph = fw, fh
-            if node.title then
-                title_txt = holder:AddChild(Text(_G.TITLEFONT, tonumber(node.title_size) or 24, tostring(node.title)))
-                title_txt:SetColour(1, 1, 0.8, 1)
-                title_txt:SetPosition(0, ph / 2 - 25, 0)
-            end
             if node.body then
                 body_txt = holder:AddChild(Text(_G.BODYTEXTFONT, tonumber(node.body_size) or 18, tostring(node.body)))
                 body_txt:SetColour(1, 1, 1, 1)
@@ -997,10 +1346,28 @@ RenderNodeImpl = function(node, parent, ctx)
                 body_txt:SetPosition(0, -10, 0)
             end
             -- Render any children too (composed nodes), centered as a col (or canvas).
+            -- Expose the panel's CONTENT box as the parent reference so children with
+            -- width:100% resolve against the PANEL (pw), not the screen (top-down width).
             local content = holder:AddChild(Widget("content"))
-            if node.mode == "canvas" then CanvasChildren(node, content, ctx)
+            local prevPW, prevPH = ctx.parent_w, ctx.parent_h
+            ctx.parent_w, ctx.parent_h = pw - 40, ph - 40 - title_h
+            local ccw, cch = 0, 0
+            if node.mode == "canvas" and HasChildXY(node) then CanvasChildren(node, content, ctx)
             elseif node.mode == "grid" then GridChildren(node, content, ctx)
-            else LayoutChildren(node, content, ctx, "y") end
+            else
+                -- Lay the children out in the panel's CONTENT box (pw-40 × ph-40-title), not
+                -- in the panel's own box: LayoutChildren reads the node's width/height as the
+                -- track, so handing it the panel node made the content report the FULL
+                -- panel width, and the "+40 grow" below inflated every fixed panel by 40px
+                -- (a 200x84 wallet rendered 240x124).
+                local inner = setmetatable({ width = pw - 40, height = ph - 40 - title_h, width_ref = nil, height_ref = nil }, { __index = node })
+                ccw, cch = LayoutChildren(inner, content, ctx, "y")
+            end
+            ctx.parent_w, ctx.parent_h = prevPW, prevPH
+            -- The fixed size is a MINIMUM: grow the panel so its content never spills out.
+            pw = math.max(pw, (ccw or 0) + 40)
+            ph = math.max(ph, (cch or 0) + 40 + title_h)
+            if title_h > 0 then content:SetPosition(0, -title_h / 2, 0) end
         else
             local content = holder:AddChild(Widget("content"))
             local cw, ch
@@ -1009,7 +1376,14 @@ RenderNodeImpl = function(node, parent, ctx)
             else cw, ch = LayoutChildren(node, content, ctx, "y") end
             local padX, padY = 28, 28
             pw = math.max(tonumber(node.min_width) or 160, cw + padX * 2)
-            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2)
+            ph = math.max(tonumber(node.min_height) or 80, ch + padY * 2 + title_h)
+            if title_h > 0 then content:SetPosition(0, -title_h / 2, 0) end
+        end
+        -- Title text: centred in the reserved strip, from the FINAL size (both modes).
+        if title_h > 0 then
+            title_txt = holder:AddChild(Text(_G.TITLEFONT, title_size, tostring(node.title)))
+            title_txt:SetColour(1, 1, 0.8, 1)
+            title_txt:SetPosition(0, ph / 2 - title_h / 2, 0)
         end
         bg:SetSize(pw, ph); bg:SetTint(0.08, 0.08, 0.1, 0.92)
         border:SetSize(pw + 4, ph + 4); border:SetTint(0.35, 0.3, 0.5, 0.7); border:MoveToBack()
@@ -1029,10 +1403,12 @@ RenderNodeImpl = function(node, parent, ctx)
         if node.closeable ~= false then
             local close_btn = holder:AddChild(ImageButton(
                 "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
-            close_btn:SetScale(0.4)
-            -- Give the X an explicit, generous hit region (the scaled tex alone can be a
-            -- tiny target) and force it into the hit-test, mirroring MakeHitTarget.
-            if close_btn.ForceImageSize then close_btn:ForceImageSize(64, 64) end
+            -- Exact px: close.tex is 39x39; draw it at 28x28 (`close_size` overrides). The
+            -- old SetScale(0.4) + ForceImageSize(64,64) LOOKED like a 64px hit box but the
+            -- 0.4 scale applied to it too — the real target was ~26px. Now the size you
+            -- read is the size you get, for both the image and the hit region.
+            local cs = tonumber(node.close_size) or 28
+            if close_btn.ForceImageSize then close_btn:ForceImageSize(cs, cs) else close_btn:SetScale(cs / 39) end
             if close_btn.SetClickable then close_btn:SetClickable(true) end
             close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
@@ -1055,7 +1431,58 @@ end
 -- COMPOSES with the user factor by reading the widget's current scale and
 -- multiplying, never overwriting. Reported (w,h) is multiplied so the parent
 -- layout reserves the scaled slot.
+-- ── Element model (HTML/CSS-like) → legacy node ─────────────────────────────
+-- New UIs may use { tag, style, children } (see specs/ui-element-model.md). We DON'T
+-- rewrite the renderer: we normalize an element into the legacy node shape RenderNodeImpl
+-- already understands. Legacy nodes (no `tag`) pass through untouched, so both models
+-- render through the same path. `tag:'div'` + style.display maps to col/row/grid/canvas.
+local DISPLAY_TO_LEGACY = {
+    -- display → { type, mode }  (direction handled below)
+    flex = { type = "col" },      -- direction decides col vs row
+    grid = { type = "col", mode = "grid" },
+    block = { type = "col" },
+    -- a plain canvas container (children at x/y): NOT `panel` — that drew a frame
+    -- and a close button on every display:absolute div and dropped its background.
+    absolute = { type = "col", mode = "canvas" },
+}
+local function NormalizeElement(node)
+    if type(node) ~= "table" or node.tag == nil then return node end
+    local st = node.style or {}
+    local out = {}
+    -- carry non-style/non-tag fields (id, callback, text, prefab, value, children, tabs, ...)
+    for k, v in pairs(node) do
+        if k ~= "tag" and k ~= "style" then out[k] = v end
+    end
+    -- map the box-model style onto the flat props the legacy renderer reads. A key set
+    -- in `style` wins; a flat attribute (<panel width="200">) is KEPT when style lacks
+    -- it (mirrors elementModel.ts — assigning nil here wiped HTML width/height/gap attrs).
+    for _, k in ipairs({ "width", "height", "width_ref", "height_ref", "gap", "scale", "x", "y",
+                         "padding", "justify", "align", "margin", "background", "border", "opacity", "z",
+                         "wrap", "row_gap", "align_content",
+                         "halign", "valign", "font", "line_height",
+                         "grid_columns", "column_gap", "justify_items", "span", "row_height",
+                         "grow", "flex", "shrink", "min_width", "max_width", "min_height", "max_height",
+                         "margin_top", "margin_right", "margin_bottom", "margin_left" }) do
+        if st[k] ~= nil then out[k] = st[k] end
+    end
+    if st.color ~= nil then out.color = st.color end
+    if node.tag == "div" then
+        local disp = st.display or "flex"
+        local map = DISPLAY_TO_LEGACY[disp] or DISPLAY_TO_LEGACY.flex
+        out.type = map.type
+        if map.mode then out.mode = map.mode end
+        if disp == "flex" and (st.direction == "row") then out.type = "row" end
+        if disp == "grid" and st.cols then out.cols = st.cols end
+        if disp == "grid" and st.grid_template then out.grid_rows = st.grid_template end
+    else
+        -- leaf tags map almost 1:1; `input` was `text_input`.
+        out.type = (node.tag == "input") and "text_input" or node.tag
+    end
+    return out
+end
+
 RenderNode = function(node, parent, ctx)
+    node = NormalizeElement(node)
     local widget, w, h = RenderNodeImpl(node, parent, ctx)
     local s = node and tonumber(node.scale)
     if widget and s and s ~= 1 and widget.SetScale then
@@ -1086,8 +1513,10 @@ CreateTree = function(cmd)
         local tree = cmd.tree or {}
         ctx.panel_w = tonumber(tree.width)
         ctx.panel_h = tonumber(tree.height)
-        ctx.parent_w = ctx.panel_w
-        ctx.parent_h = ctx.panel_h
+        -- At the ROOT the "parent" is the screen (default ref = parent). Children update
+        -- ctx.parent_w/h as they descend into fixed-size containers (col/row branch).
+        ctx.parent_w = _G.RESOLUTION_X or 1280
+        ctx.parent_h = _G.RESOLUTION_Y or 720
     end
     -- fire(cb, data): send a callback, ALWAYS enriching callback_data with `fields` = every
     -- text_input's current value keyed by its id. So a button click ships the whole form.
@@ -1109,17 +1538,29 @@ CreateTree = function(cmd)
     --      flipped because DST's UI space grows UP. Gives free placement anywhere.
     --   2. ANCHOR (legacy): the old 9-anchor + x/y offset model, kept so existing flows
     --      keep working.
+    if LAYOUT_DEBUG then
+        local sw, sh = "?", "?"
+        if _G.TheSim and _G.TheSim.GetScreenSize then local a, b = _G.TheSim:GetScreenSize(); sw, sh = tostring(a), tostring(b) end
+        local sc = (w.GetScale and w:GetScale()) or "?"
+        Log(string.format("scale-info RESOLUTION=%sx%s screen=%sx%s rootScale=%s",
+            tostring(_G.RESOLUTION_X), tostring(_G.RESOLUTION_Y), sw, sh, tostring(sc)))
+    end
     if cmd.pct_x ~= nil and cmd.pct_y ~= nil then
         local resx = _G.RESOLUTION_X or 1280
         local resy = _G.RESOLUTION_Y or 720
         local px = (tonumber(cmd.pct_x) / 100 - 0.5) * resx
         local py = (0.5 - tonumber(cmd.pct_y) / 100) * resy
         w:SetPosition(px + (cmd.x or 0), py + (cmd.y or 0))
+        if LAYOUT_DEBUG then Log(string.format("CreateTree id=%s placed by PERCENT %s%%,%s%% -> screen(%d,%d)", tostring(cmd.id), tostring(cmd.pct_x), tostring(cmd.pct_y), math.floor(px), math.floor(py))) end
     else
         local ax, ay = AnchorOffset(cmd.anchor or "center")
         w:SetPosition(ax + (cmd.x or 0), ay + (cmd.y or 0))
+        if LAYOUT_DEBUG then Log(string.format("CreateTree id=%s placed by ANCHOR %s -> screen(%d,%d)", tostring(cmd.id), tostring(cmd.anchor or "center"), math.floor(ax), math.floor(ay))) end
     end
-    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields }
+    -- `tree` + `cmd` are kept so the micro-DOM (dom_append/dom_remove/...) can mutate
+    -- the DEFINITION and rebuild the tree in place with the same placement.
+    return { widget = w, type = "tree", group = cmd.group, byId = ctx.byId, text_fields = ctx.text_fields,
+             tree = cmd.tree, cmd = cmd }
 end
 
 -- Release the keyboard grab of any editing text_input in an entry, so destroying a tree
@@ -1162,6 +1603,96 @@ local function UpdateTree(entry, cmd)
         if fresh then fresh.group = group end
         return fresh
     end
+end
+
+-------------------------------------------------
+-- MICRO-DOM — mutate a live tree by node id (data, not code)
+-------------------------------------------------
+-- The tree DEFINITION lives next to the widgets (entry.tree). dom_append / dom_remove
+-- edit the definition and rebuild the whole tree in place (same id, same placement —
+-- simple and always correct; a tree is small). dom_set / dom_toggle patch the live
+-- node through `byId` AND persist into the definition, so a later rebuild keeps them.
+-- Nodes arrive as tree JSON (the backend parses HTML) — the client never parses HTML.
+
+-- Find a node definition by id: returns def, parent_list, index (walks children + tabs).
+local function FindDef(def, id, parent_list, index)
+    if type(def) ~= "table" then return nil end
+    if def.id == id then return def, parent_list, index end
+    if type(def.children) == "table" then
+        for i, c in ipairs(def.children) do
+            local f, pl, ix = FindDef(c, id, def.children, i)
+            if f then return f, pl, ix end
+        end
+    end
+    if type(def.tabs) == "table" then
+        for _, t in ipairs(def.tabs) do
+            local f, pl, ix = FindDef(t and t.child, id, nil, nil)
+            if f then return f, pl, ix end
+        end
+    end
+    return nil
+end
+
+local function RebuildTree(id)
+    local entry = active_widgets[id]
+    if not (entry and entry.type == "tree" and entry.cmd) then return end
+    ReleaseTextFields(entry)
+    if entry.widget and entry.widget.inst:IsValid() then entry.widget:Kill() end
+    entry.cmd.tree = entry.tree
+    local fresh = CreateTree(entry.cmd)
+    if fresh then
+        fresh.group = entry.group
+        active_widgets[id] = fresh
+    else
+        active_widgets[id] = nil
+    end
+end
+
+--- dom_append: cmd = { id = <tree id>, parent = <node id | nil = root>, node = {def}, index = n? }
+function UIWidgets.DomAppend(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree and type(cmd.node) == "table") then return end
+    local parent = cmd.parent and FindDef(entry.tree, cmd.parent) or entry.tree
+    if not parent then return end
+    parent.children = parent.children or {}
+    local n = #parent.children
+    local at = tonumber(cmd.index)
+    if at and at >= 1 and at <= n then table.insert(parent.children, at, cmd.node)
+    else table.insert(parent.children, cmd.node) end
+    RebuildTree(cmd.id)
+end
+
+--- dom_remove: cmd = { id = <tree id>, node = <node id> }
+function UIWidgets.DomRemove(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree) then return end
+    local def, list, ix = FindDef(entry.tree, cmd.node)
+    if not (def and list and ix) then return end   -- root / tab child: not removable
+    table.remove(list, ix)
+    RebuildTree(cmd.id)
+end
+
+--- dom_set: like ui_set (live patch) but ALSO persisted into the definition.
+--- cmd = { id = <tree id>, node = <node id>, props = {...} }
+function UIWidgets.DomSet(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree and type(cmd.props) == "table") then return end
+    local def = FindDef(entry.tree, cmd.node)
+    if def then for k, v in pairs(cmd.props) do def[k] = v end end
+    UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
+end
+
+--- dom_toggle: flip a node's visibility (persisted). cmd = { id, node, visible = bool? }
+function UIWidgets.DomToggle(cmd)
+    local entry = active_widgets[cmd.id]
+    if not (entry and entry.tree) then return end
+    local def = FindDef(entry.tree, cmd.node)
+    if not def then return end
+    local vis
+    if cmd.visible ~= nil then vis = cmd.visible and true or false
+    else vis = (def.visible == false) end
+    def.visible = vis
+    UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = { visible = vis } })
 end
 
 -------------------------------------------------
@@ -1209,33 +1740,45 @@ local function FindFollowTarget(follow)
     return best
 end
 
-local function CreateFollow(cmd)
-    local player = _G.ThePlayer
-    if not player or not player.HUD or not player.HUD.controls then return nil end
+-- The visual of ONE follower, built inside `w`. Two shapes:
+--   * cmd.tree  — a template rendered through the generic tree renderer; its `bind`
+--                 props are re-evaluated every frame against { entity = ent } (the
+--                 flow draws the bar, the client feeds it — no round-trip).
+--   * legacy    — a bar + optional label. The bar is HIDDEN while the entity has no
+--                 HP data (no dstp_hp netvar and no health replica): a bar that can't
+--                 know the value must not show a full one.
+-- Returns { update = fn(ent) }.
+local function BuildFollowVisual(w, cmd)
+    local Image = _G.require("widgets/image")
+    local Text  = _G.require("widgets/text")
 
-    local Widget = _G.require("widgets/widget")
-    local Image  = _G.require("widgets/image")
-    local Text   = _G.require("widgets/text")
+    if type(cmd.tree) == "table" then
+        local ctx = { callback_fn = UIWidgets._callback_fn, root_id = cmd.group or cmd.id,
+                      byId = {}, bound = {},
+                      parent_w = _G.RESOLUTION_X or 1280, parent_h = _G.RESOLUTION_Y or 720 }
+        ctx.fire = function(cb, data)
+            if cb and ctx.callback_fn then ctx.callback_fn(cb, ctx.root_id, data) end
+        end
+        RenderNode(cmd.tree, w, ctx)
+        return { update = function(ent) ApplyBindings(ctx, { entity = ent }) end, ctx = ctx }
+    end
 
-    local follow = cmd.follow or {}
+    -- `label` following an entity = TEXT ONLY, fixed (damage numbers, tags). The bar +
+    -- name-tracking label below is the `progress_bar` shape. (Drawing the bar for every
+    -- type put a full HP bar under each "-30" in-game, and the name overwrote the text.)
+    if cmd.type == "label" then
+        local txt = w:AddChild(Text(_G.NEWFONT_OUTLINE, tonumber(cmd.size) or 22, tostring(cmd.text or cmd.label or "")))
+        if cmd.color then local c = ResolveColor(cmd.color); txt:SetColour(c[1], c[2], c[3], c[4]) end
+        return { update = function() end }
+    end
+
     local bw = cmd.width or 80
     local bh = cmd.height or 10
-    local offset_y = follow.offset_y or 60
-
-    -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
-    local w = player.HUD.controls:AddChild(Widget("dstp_follow_" .. cmd.id))
-    w:SetScaleMode(_G.SCALEMODE_PROPORTIONAL)
-    w:SetMaxPropUpscale(_G.MAX_HUD_SCALE or 1)
-    w:MoveToFront()
-
-    -- progress bar
     local bgc = ResolveColor(cmd.bg_color or {0.1, 0.1, 0.1, 0.8})
     local bg = w:AddChild(Image("images/global.xml", "square.tex"))
     bg:SetSize(bw, bh); bg:SetTint(bgc[1], bgc[2], bgc[3], bgc[4])
     local fgc = ResolveColor(cmd.color or {0.9, 0.2, 0.2, 1})
     local fg = w:AddChild(Image("images/global.xml", "square.tex"))
-    -- setBarPct receives a 0..1 fraction directly (mob health is only available
-    -- client-side as a percent for entities that replicate it).
     local function setBarPct(pct)
         pct = math.max(0, math.min(pct or 1, 1))
         local fw = math.max(1, bw * pct)
@@ -1250,9 +1793,137 @@ local function CreateFollow(cmd)
         label:SetPosition(0, bh + 6)
     end
 
-    -- Per-frame reposition + track the entity's health PERCENT (the only thing
-    -- the client reliably knows for replicated mobs).
-    local entry = { widget = w, type = "follow", group = cmd.group, bar = fg, label = label }
+    local barShown, lastname = true, nil
+    local function showBar(v)
+        if v == barShown then return end
+        barShown = v
+        if v then bg:Show(); fg:Show() else bg:Hide(); fg:Hide() end
+    end
+    return { update = function(ent)
+        -- Live health: DSTP's own netvar cache (dstp_hp/dstp_hp_max, see modmain
+        -- BINDINGS) first; the health replica as a fallback (works for players).
+        local pct = nil
+        if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then
+            pct = ent.dstp_hp / ent.dstp_hp_max
+        else
+            local h = ent.replica and ent.replica.health
+            if h and h.GetPercent then
+                local ok, p = _G.pcall(function() return h:GetPercent() end)
+                if ok and type(p) == "number" then pct = p end
+            end
+        end
+        if pct then setBarPct(pct); showBar(true) else showBar(false) end
+        if label and label.inst:IsValid() and ent.GetDisplayName then
+            local nm = ent:GetDisplayName()
+            if nm and nm ~= lastname then label:SetString(nm); lastname = nm end
+        end
+    end }
+end
+
+-- Every entity around the player that a `mode="all"` follow should track: within
+-- `radius`, matching `prefabs` (list) / `prefab` (one) / `tags` (any of), and — with
+-- `require_hp` — only those carrying the HP netvar cache (so no bar ever lies).
+local function FindNearby(follow)
+    local player = _G.ThePlayer
+    if not (player and player.Transform) then return {} end
+    local px, py, pz = player.Transform:GetWorldPosition()
+    local radius = tonumber(follow.radius) or tonumber(follow.max_dist) or 30
+    local prefabs = nil
+    if type(follow.prefabs) == "table" and #follow.prefabs > 0 then
+        prefabs = {}
+        for _, p in ipairs(follow.prefabs) do prefabs[tostring(p)] = true end
+    elseif follow.prefab then
+        prefabs = { [tostring(follow.prefab)] = true }
+    end
+    local oneof = nil
+    if type(follow.tags) == "table" and #follow.tags > 0 then oneof = follow.tags
+    elseif not prefabs then oneof = { "_combat", "monster", "animal", "hostile", "epic" } end
+    local ents = _G.TheSim:FindEntities(px, py, pz, radius, nil, { "INLIMBO", "FX", "player", "playerghost" }, oneof)
+    local out = {}
+    for _, ent in ipairs(ents) do
+        if ent ~= player and ent:IsValid() and not ent:HasTag("player")
+           and ((not prefabs) or prefabs[ent.prefab])
+           and ((not follow.require_hp) or (ent.dstp_hp ~= nil and (ent.dstp_hp_max or 0) > 0)) then
+            out[#out + 1] = ent
+        end
+    end
+    return out
+end
+
+local function CreateFollow(cmd)
+    local player = _G.ThePlayer
+    if not player or not player.HUD or not player.HUD.controls then return nil end
+    local Widget = _G.require("widgets/widget")
+    local follow = cmd.follow or {}
+    local offset_y = follow.offset_y or 60
+    -- ttl: self-destruct after N seconds (floating damage numbers, hit flashes…)
+    local ttl = tonumber(cmd.ttl)
+    if ttl and ttl > 0 and player.DoTaskInTime then
+        player:DoTaskInTime(ttl, function() UIWidgets.DestroyWidget({ id = cmd.id }) end)
+    end
+
+    -- Attached to the HUD with proportional scale so GetScreenPos maps directly.
+    local function newHolder(name)
+        local w = player.HUD.controls:AddChild(Widget(name))
+        w:SetScaleMode(_G.SCALEMODE_PROPORTIONAL)
+        w:SetMaxPropUpscale(_G.MAX_HUD_SCALE or 1)
+        w:MoveToFront()
+        return w
+    end
+    local function place(w, ent)
+        local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
+        w:SetPosition(sx, sy + offset_y, 0)
+    end
+
+    if follow.mode == "all" then
+        -- One follower per entity in range, keyed by GUID: created on enter, killed on
+        -- leave/invalid. The scan (FindEntities) runs every `scan_every` frames; the
+        -- reposition + bind refresh runs every frame. All local — the flow sent ONE
+        -- command and the client does the rest.
+        local scanEvery = math.max(1, tonumber(follow.scan_every) or 10)
+        local holder = newHolder("dstp_follow_" .. cmd.id)
+        local entry = { widget = holder, type = "follow", group = cmd.group, followers = {} }
+        local frame = 0
+        local function drop(guid)
+            local f = entry.followers[guid]
+            if not f then return end
+            if f.widget.inst:IsValid() then f.widget:Kill() end
+            entry.followers[guid] = nil
+        end
+        entry.task = player:DoPeriodicTask(0, function()
+            frame = frame + 1
+            if frame == 1 or frame % scanEvery == 0 then
+                local seen = {}
+                for _, ent in ipairs(FindNearby(follow)) do
+                    local guid = ent.GUID or ent
+                    seen[guid] = true
+                    if not entry.followers[guid] then
+                        -- Each follower is its OWN HUD child (newHolder), NOT a child of
+                        -- `holder`: GetScreenPos coords only map 1:1 on a direct child of
+                        -- HUD.controls. Under a proportionally-scaled parent the position
+                        -- gets multiplied by that scale (1.5x on 1080p) and the bar lands
+                        -- far from the mob — seen in-game. `holder` stays only as the
+                        -- entry's anchor for DestroyWidget; followers are killed explicitly.
+                        local w = newHolder("dstp_follow_" .. cmd.id .. ":" .. tostring(guid))
+                        entry.followers[guid] = { widget = w, ent = ent, visual = BuildFollowVisual(w, cmd) }
+                    end
+                end
+                for guid, _ in pairs(entry.followers) do
+                    if not seen[guid] then drop(guid) end
+                end
+            end
+            for guid, f in pairs(entry.followers) do
+                if not (f.ent and f.ent:IsValid()) then drop(guid)
+                else place(f.widget, f.ent); f.visual.update(f.ent) end
+            end
+        end)
+        return entry
+    end
+
+    -- Single target (guid / prefab / nearest / combat_target).
+    local w = newHolder("dstp_follow_" .. cmd.id)
+    local visual = BuildFollowVisual(w, cmd)
+    local entry = { widget = w, type = "follow", group = cmd.group }
     local lost = 0
     local task
     local dynamic = follow.mode == "combat_target"  -- alvo muda → re-resolve sempre
@@ -1273,25 +1944,8 @@ local function CreateFollow(cmd)
         end
         lost = 0
         w:Show()
-        -- Live health. DST doesn't replicate mob HP, so DSTP injects its own
-        -- netvar (dstp_hp/dstp_hp_max, see modmain) that the client reads here.
-        -- Fall back to the player health replica (works for players).
-        if ent.dstp_hp and ent.dstp_hp_max and ent.dstp_hp_max > 0 then
-            setBarPct(ent.dstp_hp / ent.dstp_hp_max)
-        else
-            local h = ent.replica and ent.replica.health
-            if h and h.GetPercent then
-                local ok, pct = _G.pcall(function() return h:GetPercent() end)
-                if ok and type(pct) == "number" then setBarPct(pct) end
-            end
-        end
-        -- keep the label on the current target's name (dynamic modes)
-        if label and label.inst:IsValid() and ent.GetDisplayName then
-            local nm = ent:GetDisplayName()
-            if nm and nm ~= entry._lastname then label:SetString(nm); entry._lastname = nm end
-        end
-        local sx, sy = _G.TheSim:GetScreenPos(ent.Transform:GetWorldPosition())
-        w:SetPosition(sx, sy + offset_y, 0)
+        visual.update(ent)
+        place(w, ent)
     end)
     entry.task = task
     return entry
@@ -1356,6 +2010,11 @@ end
 --- fn(callback_name, widget_id) — should send an event to the backend
 function UIWidgets.SetCallbackHandler(fn)
     UIWidgets._callback_fn = fn
+end
+
+--- fn(node_id, root_id, hovered, callback) — hit targets report focus in/out (hover).
+function UIWidgets.SetHoverHandler(fn)
+    UIWidgets._hover_fn = fn
 end
 
 function UIWidgets.CreateWidget(cmd)
@@ -1434,7 +2093,14 @@ function UIWidgets.DestroyWidget(cmd)
     -- left unable to move if the tree is destroyed mid-edit.
     ReleaseTextFields(entry)
 
-    -- Kill the widget tree
+    -- Kill the widget tree (+ per-entity followers of a mode=all follow, which live
+    -- directly on the HUD rather than under entry.widget)
+    if entry.followers then
+        for _, f in pairs(entry.followers) do
+            if f.widget and f.widget.inst:IsValid() then f.widget:Kill() end
+        end
+        entry.followers = {}
+    end
     if entry.widget and entry.widget.inst:IsValid() then
         entry.widget:Kill()
     end
@@ -1480,6 +2146,14 @@ function UIWidgets.ProcessCommand(cmd)
     elseif cmd.action == "set" or cmd.action == "ui_set" then
         -- Generic in-place prop patch on any addressable node.
         UIWidgets.SetProps({ id = cmd.id, node = cmd.node, props = cmd.props })
+    elseif cmd.action == "dom_append" then
+        UIWidgets.DomAppend(cmd)
+    elseif cmd.action == "dom_remove" then
+        UIWidgets.DomRemove(cmd)
+    elseif cmd.action == "dom_set" then
+        UIWidgets.DomSet(cmd)
+    elseif cmd.action == "dom_toggle" then
+        UIWidgets.DomToggle(cmd)
     elseif cmd.action == "clear" then
         UIWidgets.ClearAll()
     -- NOTE: the "batch" envelope is no longer fanned out HERE. The client router in

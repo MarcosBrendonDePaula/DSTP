@@ -96,6 +96,15 @@ player, the mod must **coalesce them into one `batch`** before `:set()` (see
 `ProcessCommands` in client.lua). Symptom of getting this wrong: only one of
 several UI updates lands (e.g. live HUD showing stale/empty fields).
 
+**Across syncs too (2026-09-12):** with a 0.1 s poll, two envelopes from two
+consecutive syncs can `:set()` inside the same network tick and the first one
+never replicates — in-game the login panel's envelope, sent one poll after the
+wallet's, silently vanished (no error anywhere). So `Core.ProcessCommands` does not
+`:set()` directly: it queues into a per-player **outbox** and flushes once per
+`ui_flush_delay` (0.15 s, `TheWorld:DoTaskInTime`), merging whatever arrived
+meanwhile into one envelope with one seq. Coalescing per sync is necessary, not
+sufficient.
+
 ## HUD coordinate space
 
 Widgets under a root with `SCALEMODE_PROPORTIONAL` + `ANCHOR_MIDDLE` use DST's

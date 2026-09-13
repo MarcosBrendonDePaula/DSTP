@@ -1,0 +1,1232 @@
+{
+  "name": "Pet inicial — Chester coletor por jogador (cérebro pelo flow; itens preservados ao sair; renasce ao morrer)",
+  "version": "2.0",
+  "exportedAt": "2026-09-12T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "t_spawn",
+      "type": "trigger",
+      "data": {
+        "event_type": "player_spawn",
+        "alias": "p"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spawn_pet",
+      "type": "spawn_at_player",
+      "data": {
+        "action_type": "spawn_at_player",
+        "alias": "pet",
+        "params": {
+          "userid": "{{p.userid}}",
+          "prefab": "chester",
+          "count": "1",
+          "offset_x": "2",
+          "offset_z": "0",
+          "token": "pet:{{p.userid}}",
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{p.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 160
+      }
+    },
+    {
+      "id": "t_result",
+      "type": "trigger",
+      "data": {
+        "event_type": "spawn_result",
+        "alias": "sr"
+      },
+      "position": {
+        "x": 400,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_pet",
+      "type": "condition",
+      "data": {
+        "field": "sr.token",
+        "operator": "starts_with",
+        "value": "pet:",
+        "alias": "is_pet"
+      },
+      "position": {
+        "x": 400,
+        "y": 160
+      }
+    },
+    {
+      "id": "tok",
+      "type": "split",
+      "data": {
+        "alias": "tk",
+        "params": {
+          "value": "{{sr.token}}",
+          "separator": ":",
+          "trim": "true"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 320
+      }
+    },
+    {
+      "id": "mem_pet",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_pet",
+        "params": {
+          "key": "pet:{{tk.part2}}",
+          "value": "{{sr.id}}"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 480
+      }
+    },
+    {
+      "id": "mem_owner",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_owner",
+        "params": {
+          "key": "owner:{{sr.id}}",
+          "value": "{{tk.part2}}"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 640
+      }
+    },
+    {
+      "id": "t_left",
+      "type": "trigger",
+      "data": {
+        "event_type": "player_left",
+        "alias": "left"
+      },
+      "position": {
+        "x": 800,
+        "y": 0
+      }
+    },
+    {
+      "id": "read_pet",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem",
+        "params": {
+          "key": "pet:{{left.userid}}"
+        }
+      },
+      "position": {
+        "x": 800,
+        "y": 160
+      }
+    },
+    {
+      "id": "has_pet",
+      "type": "condition",
+      "data": {
+        "field": "mem.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pet"
+      },
+      "position": {
+        "x": 800,
+        "y": 320
+      }
+    },
+    {
+      "id": "t_dead",
+      "type": "trigger",
+      "data": {
+        "event_type": "brain_dead",
+        "alias": "dead"
+      },
+      "position": {
+        "x": 1200,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_chester",
+      "type": "condition",
+      "data": {
+        "field": "dead.prefab",
+        "operator": "equals",
+        "value": "chester",
+        "alias": "is_chester"
+      },
+      "position": {
+        "x": 1200,
+        "y": 160
+      }
+    },
+    {
+      "id": "read_owner",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "own",
+        "params": {
+          "key": "owner:{{dead.id}}"
+        }
+      },
+      "position": {
+        "x": 1200,
+        "y": 320
+      }
+    },
+    {
+      "id": "has_owner",
+      "type": "condition",
+      "data": {
+        "field": "own.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_owner"
+      },
+      "position": {
+        "x": 1200,
+        "y": 480
+      }
+    },
+    {
+      "id": "wait",
+      "type": "delay",
+      "data": {
+        "alias": "wait",
+        "params": {
+          "delay_ms": "3000"
+        }
+      },
+      "position": {
+        "x": 1200,
+        "y": 640
+      }
+    },
+    {
+      "id": "respawn_pet",
+      "type": "spawn_at_player",
+      "data": {
+        "action_type": "spawn_at_player",
+        "alias": "respawn",
+        "params": {
+          "userid": "{{own.value}}",
+          "prefab": "chester",
+          "count": "1",
+          "offset_x": "2",
+          "offset_z": "0",
+          "token": "pet:{{own.value}}",
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{own.value}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+        }
+      },
+      "position": {
+        "x": 1200,
+        "y": 800
+      }
+    },
+    {
+      "id": "t_chat",
+      "type": "trigger",
+      "data": {
+        "event_type": "chat_message",
+        "alias": "chat"
+      },
+      "position": {
+        "x": -400,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_pet_cmd",
+      "type": "condition",
+      "data": {
+        "field": "chat.message",
+        "operator": "equals",
+        "value": "!pet",
+        "alias": "is_pet_cmd"
+      },
+      "position": {
+        "x": -400,
+        "y": 160
+      }
+    },
+    {
+      "id": "spawn_pet_cmd",
+      "type": "spawn_at_player",
+      "data": {
+        "action_type": "spawn_at_player",
+        "alias": "pet_cmd",
+        "params": {
+          "userid": "{{chat.userid}}",
+          "prefab": "chester",
+          "count": "1",
+          "offset_x": "2",
+          "offset_z": "0",
+          "token": "pet:{{chat.userid}}",
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{chat.userid}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+        }
+      },
+      "position": {
+        "x": -400,
+        "y": 320
+      }
+    },
+    {
+      "id": "t_nopet",
+      "type": "trigger",
+      "data": {
+        "event_type": "chat_message",
+        "alias": "c2"
+      },
+      "position": {
+        "x": -800,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_nopet",
+      "type": "condition",
+      "data": {
+        "field": "c2.message",
+        "operator": "starts_with",
+        "value": "!nopet",
+        "alias": "is_nopet"
+      },
+      "position": {
+        "x": -800,
+        "y": 160
+      }
+    },
+    {
+      "id": "read_pet2",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem2",
+        "params": {
+          "key": "pet:{{c2.userid}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 320
+      }
+    },
+    {
+      "id": "has_pet2",
+      "type": "condition",
+      "data": {
+        "field": "mem2.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pet2"
+      },
+      "position": {
+        "x": -800,
+        "y": 480
+      }
+    },
+    {
+      "id": "kill_pet2",
+      "type": "entity_kill",
+      "data": {
+        "action_type": "entity_kill",
+        "alias": "kill2",
+        "params": {
+          "id": "{{mem2.value}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 640
+      }
+    },
+    {
+      "id": "forget_pet2",
+      "type": "memory",
+      "data": {
+        "action": "delete",
+        "alias": "forget2",
+        "params": {
+          "key": "pet:{{c2.userid}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 800
+      }
+    },
+    {
+      "id": "mem0",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem0",
+        "params": {
+          "key": "pet:{{p.userid}}"
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 80
+      }
+    },
+    {
+      "id": "has_mem0",
+      "type": "condition",
+      "data": {
+        "field": "mem0.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_mem0"
+      },
+      "position": {
+        "x": 0,
+        "y": 120
+      }
+    },
+    {
+      "id": "probe",
+      "type": "get_entity",
+      "data": {
+        "action_type": "get_entity",
+        "alias": "probe",
+        "params": {
+          "id": "{{mem0.value}}",
+          "token": "pet:{{p.userid}}"
+        }
+      },
+      "position": {
+        "x": 150,
+        "y": 160
+      }
+    },
+    {
+      "id": "t_probe",
+      "type": "trigger",
+      "data": {
+        "event_type": "entity_data",
+        "alias": "ed"
+      },
+      "position": {
+        "x": 1600,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_probe",
+      "type": "condition",
+      "data": {
+        "field": "ed.token",
+        "operator": "starts_with",
+        "value": "pet:",
+        "alias": "is_probe"
+      },
+      "position": {
+        "x": 1600,
+        "y": 160
+      }
+    },
+    {
+      "id": "tok2",
+      "type": "split",
+      "data": {
+        "alias": "tk2",
+        "params": {
+          "value": "{{ed.token}}",
+          "separator": ":",
+          "trim": "true"
+        }
+      },
+      "position": {
+        "x": 1600,
+        "y": 320
+      }
+    },
+    {
+      "id": "alive",
+      "type": "condition",
+      "data": {
+        "field": "ed.found",
+        "operator": "equals",
+        "value": "true",
+        "alias": "alive"
+      },
+      "position": {
+        "x": 1600,
+        "y": 480
+      }
+    },
+    {
+      "id": "rebind",
+      "type": "entity_brain",
+      "data": {
+        "action_type": "entity_set_brain",
+        "alias": "rebind",
+        "params": {
+          "guid": "",
+          "mode": "collect",
+          "target": "{{tk2.part2}}",
+          "follow_min": "2",
+          "follow_dist": "3",
+          "follow_max": "6",
+          "id": "{{ed.id}}"
+        }
+      },
+      "position": {
+        "x": 1500,
+        "y": 640
+      }
+    },
+    {
+      "id": "respawn2",
+      "type": "spawn_at_player",
+      "data": {
+        "action_type": "spawn_at_player",
+        "alias": "respawn2",
+        "params": {
+          "userid": "{{tk2.part2}}",
+          "prefab": "chester",
+          "count": "1",
+          "offset_x": "2",
+          "offset_z": "0",
+          "token": "pet:{{tk2.part2}}",
+          "brain": "{\"mode\":\"collect\",\"target\":\"{{tk2.part2}}\",\"follow_min\":\"2\",\"follow_dist\":\"3\",\"follow_max\":\"6\"}"
+        }
+      },
+      "position": {
+        "x": 1750,
+        "y": 640
+      }
+    },
+    {
+      "id": "park_pet",
+      "type": "entity_brain",
+      "data": {
+        "action_type": "entity_set_brain",
+        "alias": "park",
+        "params": {
+          "id": "{{mem.value}}",
+          "mode": "stay"
+        }
+      },
+      "position": {
+        "x": 800,
+        "y": 480
+      }
+    },
+    {
+      "id": "t_restored",
+      "type": "trigger",
+      "data": {
+        "event_type": "brain_restored",
+        "alias": "br"
+      },
+      "position": {
+        "x": 2000,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_pet_restored",
+      "type": "condition",
+      "data": {
+        "field": "br.prefab",
+        "operator": "equals",
+        "value": "chester",
+        "alias": "is_pet_restored"
+      },
+      "position": {
+        "x": 2000,
+        "y": 160
+      }
+    },
+    {
+      "id": "has_owner_r",
+      "type": "condition",
+      "data": {
+        "field": "br.target_userid",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_owner_r"
+      },
+      "position": {
+        "x": 2000,
+        "y": 320
+      }
+    },
+    {
+      "id": "mem_pet_r",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_pet_r",
+        "params": {
+          "key": "pet:{{br.target_userid}}",
+          "value": "{{br.id}}"
+        }
+      },
+      "position": {
+        "x": 2000,
+        "y": 480
+      }
+    },
+    {
+      "id": "mem_owner_r",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "mem_owner_r",
+        "params": {
+          "key": "owner:{{br.id}}",
+          "value": "{{br.target_userid}}"
+        }
+      },
+      "position": {
+        "x": 2000,
+        "y": 640
+      }
+    },
+    {
+      "id": "alive_prefab",
+      "type": "condition",
+      "data": {
+        "field": "ed.prefab",
+        "operator": "equals",
+        "value": "chester",
+        "alias": "alive_prefab"
+      },
+      "position": {
+        "x": 1600,
+        "y": 560
+      }
+    },
+    {
+      "id": "pet_slots",
+      "type": "entity_set_slots",
+      "data": {
+        "action_type": "entity_set_slots",
+        "alias": "pet_slots",
+        "params": {
+          "guid": "",
+          "slots": "16",
+          "token": "pet_slots",
+          "id": "{{sr.id}}"
+        }
+      },
+      "position": {
+        "x": 550,
+        "y": 1000
+      }
+    },
+    {
+      "id": "t_slots",
+      "type": "trigger",
+      "data": {
+        "event_type": "chat_message",
+        "alias": "c3"
+      },
+      "position": {
+        "x": -1200,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_slots",
+      "type": "condition",
+      "data": {
+        "field": "c3.message",
+        "operator": "starts_with",
+        "value": "!petslots",
+        "alias": "is_slots"
+      },
+      "position": {
+        "x": -1200,
+        "y": 160
+      }
+    },
+    {
+      "id": "slots_words",
+      "type": "split",
+      "data": {
+        "alias": "sw",
+        "params": {
+          "value": "{{c3.message}}",
+          "separator": "",
+          "trim": "true"
+        }
+      },
+      "position": {
+        "x": -1200,
+        "y": 320
+      }
+    },
+    {
+      "id": "read_pet3",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem3",
+        "params": {
+          "key": "pet:{{c3.userid}}"
+        }
+      },
+      "position": {
+        "x": -1200,
+        "y": 480
+      }
+    },
+    {
+      "id": "has_pet3",
+      "type": "condition",
+      "data": {
+        "field": "mem3.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pet3"
+      },
+      "position": {
+        "x": -1200,
+        "y": 640
+      }
+    },
+    {
+      "id": "set_slots3",
+      "type": "entity_set_slots",
+      "data": {
+        "action_type": "entity_set_slots",
+        "alias": "set_slots3",
+        "params": {
+          "id": "{{mem3.value}}",
+          "slots": "{{sw.part2}}",
+          "token": "petslots:{{c3.userid}}"
+        }
+      },
+      "position": {
+        "x": -1200,
+        "y": 800
+      }
+    },
+    {
+      "id": "no_pet3",
+      "type": "action",
+      "data": {
+        "action_type": "private_message",
+        "alias": "no_pet3",
+        "params": {
+          "userid": "{{c3.userid}}",
+          "message": "Voce nao tem pet. Use !pet."
+        }
+      },
+      "position": {
+        "x": -1000,
+        "y": 800
+      }
+    },
+    {
+      "id": "t_slots_ack",
+      "type": "trigger",
+      "data": {
+        "event_type": "entity_slots",
+        "alias": "sa"
+      },
+      "position": {
+        "x": -1600,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_petslots_ack",
+      "type": "condition",
+      "data": {
+        "field": "sa.token",
+        "operator": "starts_with",
+        "value": "petslots:",
+        "alias": "is_petslots_ack"
+      },
+      "position": {
+        "x": -1600,
+        "y": 160
+      }
+    },
+    {
+      "id": "ack_who",
+      "type": "split",
+      "data": {
+        "alias": "aw",
+        "params": {
+          "value": "{{sa.token}}",
+          "separator": ":",
+          "trim": "true"
+        }
+      },
+      "position": {
+        "x": -1600,
+        "y": 320
+      }
+    },
+    {
+      "id": "ack_ok3",
+      "type": "condition",
+      "data": {
+        "field": "sa.ok",
+        "operator": "equals",
+        "value": "true",
+        "alias": "ack_ok3"
+      },
+      "position": {
+        "x": -1600,
+        "y": 480
+      }
+    },
+    {
+      "id": "pm_ok3",
+      "type": "action",
+      "data": {
+        "action_type": "private_message",
+        "alias": "pm_ok3",
+        "params": {
+          "userid": "{{aw.part2}}",
+          "message": "Pet agora com {{sa.slots}} slots."
+        }
+      },
+      "position": {
+        "x": -1700,
+        "y": 640
+      }
+    },
+    {
+      "id": "pm_fail3",
+      "type": "action",
+      "data": {
+        "action_type": "private_message",
+        "alias": "pm_fail3",
+        "params": {
+          "userid": "{{aw.part2}}",
+          "message": "Nao deu ({{sa.reason}}). O tamanho so aumenta e o maximo e 36."
+        }
+      },
+      "position": {
+        "x": -1500,
+        "y": 640
+      }
+    },
+    {
+      "id": "save_pref",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "save_pref",
+        "params": {
+          "key": "petslots:{{c3.userid}}",
+          "value": "{{sw.part2}}"
+        }
+      },
+      "position": {
+        "x": -1200,
+        "y": 960
+      }
+    },
+    {
+      "id": "read_pref",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "pref",
+        "params": {
+          "key": "petslots:{{tk.part2}}"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 760
+      }
+    },
+    {
+      "id": "has_pref",
+      "type": "condition",
+      "data": {
+        "field": "pref.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pref"
+      },
+      "position": {
+        "x": 400,
+        "y": 880
+      }
+    },
+    {
+      "id": "pet_slots_pref",
+      "type": "entity_set_slots",
+      "data": {
+        "action_type": "entity_set_slots",
+        "alias": "pet_slots_pref",
+        "params": {
+          "id": "{{sr.id}}",
+          "slots": "{{pref.value}}",
+          "token": "pet_slots"
+        }
+      },
+      "position": {
+        "x": 250,
+        "y": 1000
+      }
+    },
+    {
+      "id": "mem_cmd",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "memc",
+        "params": {
+          "key": "pet:{{chat.userid}}"
+        }
+      },
+      "position": {
+        "x": -400,
+        "y": 240
+      }
+    },
+    {
+      "id": "has_mem_cmd",
+      "type": "condition",
+      "data": {
+        "field": "memc.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_memc"
+      },
+      "position": {
+        "x": -400,
+        "y": 300
+      }
+    },
+    {
+      "id": "probe_cmd",
+      "type": "get_entity",
+      "data": {
+        "action_type": "get_entity",
+        "alias": "probe_cmd",
+        "params": {
+          "id": "{{memc.value}}",
+          "token": "pet:{{chat.userid}}"
+        }
+      },
+      "position": {
+        "x": -250,
+        "y": 360
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e2",
+      "source": "t_result",
+      "target": "is_pet"
+    },
+    {
+      "id": "e3",
+      "source": "is_pet",
+      "sourceHandle": "true",
+      "target": "tok"
+    },
+    {
+      "id": "e4",
+      "source": "tok",
+      "target": "mem_pet"
+    },
+    {
+      "id": "e5",
+      "source": "mem_pet",
+      "target": "mem_owner"
+    },
+    {
+      "id": "e6",
+      "source": "t_left",
+      "target": "read_pet"
+    },
+    {
+      "id": "e7",
+      "source": "read_pet",
+      "target": "has_pet"
+    },
+    {
+      "id": "e10",
+      "source": "t_dead",
+      "target": "is_chester"
+    },
+    {
+      "id": "e11",
+      "source": "is_chester",
+      "sourceHandle": "true",
+      "target": "read_owner"
+    },
+    {
+      "id": "e12",
+      "source": "read_owner",
+      "target": "has_owner"
+    },
+    {
+      "id": "e13",
+      "source": "has_owner",
+      "sourceHandle": "true",
+      "target": "wait"
+    },
+    {
+      "id": "e14",
+      "source": "wait",
+      "target": "respawn_pet"
+    },
+    {
+      "id": "e15",
+      "source": "t_chat",
+      "target": "is_pet_cmd"
+    },
+    {
+      "id": "e17",
+      "source": "t_nopet",
+      "target": "is_nopet"
+    },
+    {
+      "id": "e18",
+      "source": "is_nopet",
+      "sourceHandle": "true",
+      "target": "read_pet2"
+    },
+    {
+      "id": "e19",
+      "source": "read_pet2",
+      "target": "has_pet2"
+    },
+    {
+      "id": "e20",
+      "source": "has_pet2",
+      "sourceHandle": "true",
+      "target": "kill_pet2"
+    },
+    {
+      "id": "e21",
+      "source": "kill_pet2",
+      "target": "forget_pet2"
+    },
+    {
+      "id": "e1",
+      "source": "t_spawn",
+      "target": "mem0"
+    },
+    {
+      "id": "e1b",
+      "source": "mem0",
+      "target": "has_mem0"
+    },
+    {
+      "id": "e1c",
+      "source": "has_mem0",
+      "sourceHandle": "true",
+      "target": "probe"
+    },
+    {
+      "id": "e1d",
+      "source": "has_mem0",
+      "sourceHandle": "false",
+      "target": "spawn_pet"
+    },
+    {
+      "id": "e8",
+      "source": "has_pet",
+      "sourceHandle": "true",
+      "target": "park_pet"
+    },
+    {
+      "id": "e22",
+      "source": "t_probe",
+      "target": "is_probe"
+    },
+    {
+      "id": "e23",
+      "source": "is_probe",
+      "sourceHandle": "true",
+      "target": "tok2"
+    },
+    {
+      "id": "e24",
+      "source": "tok2",
+      "target": "alive"
+    },
+    {
+      "id": "e30",
+      "source": "t_restored",
+      "target": "is_pet_restored"
+    },
+    {
+      "id": "e31",
+      "source": "is_pet_restored",
+      "sourceHandle": "true",
+      "target": "has_owner_r"
+    },
+    {
+      "id": "e32",
+      "source": "has_owner_r",
+      "sourceHandle": "true",
+      "target": "mem_pet_r"
+    },
+    {
+      "id": "e33",
+      "source": "mem_pet_r",
+      "target": "mem_owner_r"
+    },
+    {
+      "id": "e25",
+      "source": "alive",
+      "sourceHandle": "true",
+      "target": "alive_prefab"
+    },
+    {
+      "id": "e26",
+      "source": "alive",
+      "sourceHandle": "false",
+      "target": "respawn2"
+    },
+    {
+      "id": "e27",
+      "source": "alive_prefab",
+      "sourceHandle": "true",
+      "target": "rebind"
+    },
+    {
+      "id": "e28",
+      "source": "alive_prefab",
+      "sourceHandle": "false",
+      "target": "respawn2"
+    },
+    {
+      "id": "e50",
+      "source": "t_slots",
+      "target": "is_slots"
+    },
+    {
+      "id": "e51",
+      "source": "is_slots",
+      "sourceHandle": "true",
+      "target": "slots_words"
+    },
+    {
+      "id": "e52",
+      "source": "slots_words",
+      "target": "read_pet3"
+    },
+    {
+      "id": "e53",
+      "source": "read_pet3",
+      "target": "has_pet3"
+    },
+    {
+      "id": "e54",
+      "source": "has_pet3",
+      "sourceHandle": "true",
+      "target": "set_slots3"
+    },
+    {
+      "id": "e55",
+      "source": "has_pet3",
+      "sourceHandle": "false",
+      "target": "no_pet3"
+    },
+    {
+      "id": "e56",
+      "source": "t_slots_ack",
+      "target": "is_petslots_ack"
+    },
+    {
+      "id": "e57",
+      "source": "is_petslots_ack",
+      "sourceHandle": "true",
+      "target": "ack_who"
+    },
+    {
+      "id": "e58",
+      "source": "ack_who",
+      "target": "ack_ok3"
+    },
+    {
+      "id": "e59",
+      "source": "ack_ok3",
+      "sourceHandle": "true",
+      "target": "pm_ok3"
+    },
+    {
+      "id": "e60",
+      "source": "ack_ok3",
+      "sourceHandle": "false",
+      "target": "pm_fail3"
+    },
+    {
+      "id": "e61",
+      "source": "set_slots3",
+      "target": "save_pref"
+    },
+    {
+      "id": "e40",
+      "source": "mem_owner",
+      "target": "read_pref"
+    },
+    {
+      "id": "e41",
+      "source": "read_pref",
+      "target": "has_pref"
+    },
+    {
+      "id": "e42",
+      "source": "has_pref",
+      "sourceHandle": "true",
+      "target": "pet_slots_pref"
+    },
+    {
+      "id": "e43",
+      "source": "has_pref",
+      "sourceHandle": "false",
+      "target": "pet_slots"
+    },
+    {
+      "id": "e16",
+      "source": "is_pet_cmd",
+      "sourceHandle": "true",
+      "target": "mem_cmd"
+    },
+    {
+      "id": "e16b",
+      "source": "mem_cmd",
+      "target": "has_mem_cmd"
+    },
+    {
+      "id": "e16c",
+      "source": "has_mem_cmd",
+      "sourceHandle": "true",
+      "target": "probe_cmd"
+    },
+    {
+      "id": "e16d",
+      "source": "has_mem_cmd",
+      "sourceHandle": "false",
+      "target": "spawn_pet_cmd"
+    }
+  ]
+}

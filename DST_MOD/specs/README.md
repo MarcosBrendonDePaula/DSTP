@@ -19,6 +19,8 @@ techniques that cost real debugging time to discover.
 |------|---------------|
 | [entity-events-catalog.md](entity-events-catalog.md) | Adding a trigger that fires on a non-player entity (mob/structure/world object). The ranked survey of 26 candidates + the hook mechanism for each. The IMPLEMENTED set (14 + the `creatures` category) is the low/medium-effort tier. |
 | [entity-control-catalog.md](entity-control-catalog.md) | Adding an ACTION that READS or CONTROLS an entity by GUID (get_entity, set_target/leader/sleep, fire/freeze/fuel, container ops, the spawn→control→react "NPC by flow" core). 88 ops with source + verified danger/keying corrections in §9. |
+| [flow-brain.md](flow-brain.md) | Controlling a mob's behaviour from a flow (modes, one-shot tasks, item primitives, events back), stable entity ids and the one-pet-per-player pattern. |
+| [container-slots.md](container-slots.md) | Growing chests/Chester/backpacks: world defaults, per-instance runtime slots from the flow, the netvar pool cap (36) and why bigger crashes. |
 | [research/](research/) | The raw multi-agent sweeps behind the catalogs (entity-events, type-bug, dead-listener, HUD-click, drag, text-input studies). Conclusions live in the sibling specs; this is the evidence. |
 
 ### Feasibility studies (what the engine does / doesn't allow)
