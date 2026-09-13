@@ -133,4 +133,16 @@ describe('example: Pet Chester', () => {
     expect(commands.find(c => c.type === 'entity_set_slots')).toBeUndefined()
     expect(String(commands.find(c => c.type === 'private_message')?.data?.message)).toContain('!pet')
   })
+
+  it('!pet does not duplicate: with a remembered pet it probes (and the entity_data branch re-binds), only spawns when nothing is remembered', async () => {
+    const mem = new FlowMemoryRepository(SERVER)
+    mem.set(FLOW_ID, 'pet:KU_1', 'e_pet1')
+    await fire('chat_message', { userid: 'KU_1', message: '!pet' })
+    expect(spawns()).toHaveLength(0)
+    expect(commands.find(c => c.type === 'get_entity')?.data).toMatchObject({ id: 'e_pet1', token: 'pet:KU_1' })
+    commands.length = 0
+    mem.delete(FLOW_ID, 'pet:KU_1')
+    await fire('chat_message', { userid: 'KU_1', message: '!pet' })
+    expect(spawns()).toHaveLength(1)
+  })
 })

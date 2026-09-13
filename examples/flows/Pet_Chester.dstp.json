@@ -889,6 +889,51 @@
         "x": 250,
         "y": 1000
       }
+    },
+    {
+      "id": "mem_cmd",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "memc",
+        "params": {
+          "key": "pet:{{chat.userid}}"
+        }
+      },
+      "position": {
+        "x": -400,
+        "y": 240
+      }
+    },
+    {
+      "id": "has_mem_cmd",
+      "type": "condition",
+      "data": {
+        "field": "memc.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_memc"
+      },
+      "position": {
+        "x": -400,
+        "y": 300
+      }
+    },
+    {
+      "id": "probe_cmd",
+      "type": "get_entity",
+      "data": {
+        "action_type": "get_entity",
+        "alias": "probe_cmd",
+        "params": {
+          "id": "{{memc.value}}",
+          "token": "pet:{{chat.userid}}"
+        }
+      },
+      "position": {
+        "x": -250,
+        "y": 360
+      }
     }
   ],
   "edges": [
@@ -954,12 +999,6 @@
       "id": "e15",
       "source": "t_chat",
       "target": "is_pet_cmd"
-    },
-    {
-      "id": "e16",
-      "source": "is_pet_cmd",
-      "sourceHandle": "true",
-      "target": "spawn_pet_cmd"
     },
     {
       "id": "e17",
@@ -1165,6 +1204,29 @@
       "source": "has_pref",
       "sourceHandle": "false",
       "target": "pet_slots"
+    },
+    {
+      "id": "e16",
+      "source": "is_pet_cmd",
+      "sourceHandle": "true",
+      "target": "mem_cmd"
+    },
+    {
+      "id": "e16b",
+      "source": "mem_cmd",
+      "target": "has_mem_cmd"
+    },
+    {
+      "id": "e16c",
+      "source": "has_mem_cmd",
+      "sourceHandle": "true",
+      "target": "probe_cmd"
+    },
+    {
+      "id": "e16d",
+      "source": "has_mem_cmd",
+      "sourceHandle": "false",
+      "target": "spawn_pet_cmd"
     }
   ]
 }
