@@ -43,6 +43,8 @@ do
     }
     local ok, err = GLOBAL.pcall(function()
         local changed = GLOBAL.require("dstp/container_slots").Apply(GLOBAL.require("containers").params, overrides, GLOBAL.Vector3)
+        -- reserve the item-netvar pool so entity_set_slots can grow any container up to MAX_SLOTS
+        GLOBAL.require("dstp/container_slots").ReservePool(GLOBAL.require("containers"))
         if #changed > 0 then print("[DSTP] container slots grown: " .. table.concat(changed, ", ")) end
     end)
     if not ok then print("[DSTP] container_slots failed: " .. tostring(err)) end

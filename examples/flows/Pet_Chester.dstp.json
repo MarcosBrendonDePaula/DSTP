@@ -258,7 +258,7 @@
       "type": "condition",
       "data": {
         "field": "chat.message",
-        "operator": "starts_with",
+        "operator": "equals",
         "value": "!pet",
         "alias": "is_pet_cmd"
       },

@@ -13,6 +13,20 @@
 -- grid for big counts). Cosmetic only; the frame anim is left as-is.
 local M = {}
 
+--- Hard cap for a runtime size. The number of item netvars a container can ever use is
+--- fixed when its container_classified is created (containers.MAXITEMSLOTS, a pool)
+--- — growing past the pool crashes in InitializeSlots. So the pool is reserved for
+--- this many at load (M.ReservePool) and any bigger request is refused as "too_big".
+M.MAX_SLOTS = 36
+
+--- Reserve the per-container netvar pool for MAX_SLOTS. Must run on BOTH sides at
+--- load, before any container_classified exists (netvars are positional).
+function M.ReservePool(containers)
+    if not containers then return 0 end
+    containers.MAXITEMSLOTS = math.max(tonumber(containers.MAXITEMSLOTS) or 0, M.MAX_SLOTS)
+    return containers.MAXITEMSLOTS
+end
+
 --- Columns for n slots: 3 up to 9, 4 up to 16, 5 up to 25, else 6.
 function M.Cols(n)
     if n <= 9 then return 3 elseif n <= 16 then return 4 elseif n <= 25 then return 5 else return 6 end
@@ -90,6 +104,7 @@ function M.ApplyToInstance(inst, n, params, Vector3, isServer)
     if not target then return false, "no_container" end
     local cur = isServer and target.numslots or (target.GetNumSlots and target:GetNumSlots()) or 0
     if n <= (cur or 0) then return false, "not_bigger" end
+    if n > M.MAX_SLOTS then return false, "too_big" end
     local data = M.Data(params, inst.prefab, n, Vector3)
     if not data then return false, "no_params" end
     target:WidgetSetup(inst.prefab, data)

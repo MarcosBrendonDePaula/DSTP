@@ -643,7 +643,10 @@ function Commands.RegisterAll(core)
         if not (CS and params) then return end
         local inst, reason = ResolveEntity(data)
         local ok, why = false, reason
-        if inst then ok, why = CS.SetInstance(inst, data.slots, params, _G.Vector3) end
+        if inst then
+            local pok, r1, r2 = _G.pcall(CS.SetInstance, inst, data.slots, params, _G.Vector3)
+            if pok then ok, why = r1, r2 else ok, why = false, "error: " .. tostring(r1) end
+        end
         if not ok then LogError("entity_set_slots: " .. tostring(why)) end
         if data.token then
             DSTP.PushEvent("entity_slots", { token = data.token, ok = ok and true or false, reason = ok and nil or why,

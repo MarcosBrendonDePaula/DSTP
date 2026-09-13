@@ -117,6 +117,9 @@ describe('example: Pet Chester', () => {
     expect(String(d?.id)).toBe('e_pet1')
     expect(Number(d?.slots)).toBe(25)
     expect(d?.token).toBe('petslots:KU_1')
+    // '!petslots' must NOT fall into the '!pet' branch (it starts with !pet) — no spawn, no probe
+    expect(spawns()).toHaveLength(0)
+    expect(commands.find(c => c.type === 'get_entity')).toBeUndefined()
     // the choice is remembered and used for the NEXT pet of this player
     expect(String(mem.get(FLOW_ID, 'petslots:KU_1'))).toBe('25')
     commands.length = 0
