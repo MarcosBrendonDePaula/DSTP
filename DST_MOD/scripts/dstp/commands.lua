@@ -515,6 +515,26 @@ function Commands.RegisterAll(core)
         inst.components.freezable:AddColdness(tonumber(data.coldness) or 1)
     end)
 
+    -- entity_set_brain: hand a mob's brain to the flow (dstp/flow_brain). data = the
+    -- resolver keys (guid | prefab+x+z+radius) + the brain spec: mode (follow/guard/
+    -- attack/flee/wander/stay/default), target (userid|guid), anchor_x/anchor_z,
+    -- brain_radius, tags, prefabs, attack_players. `default` restores the original brain.
+    DSTP.RegisterCommand("entity_set_brain", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then LogError("entity_set_brain: flow_brain not initialised") return end
+        local inst, reason = ResolveEntity(data)
+        if not inst then
+            if data.token then DSTP.PushEvent("brain_result", { token = data.token, ok = false, reason = reason }) end
+            return
+        end
+        local ok, err = FlowBrain.Apply(inst, data)
+        if not ok then LogError("entity_set_brain: " .. tostring(err)) end
+        if data.token then
+            DSTP.PushEvent("brain_result", { token = data.token, ok = ok and true or false, reason = ok and nil or err,
+                guid = inst.GUID, prefab = inst.prefab, mode = ok and tostring(data.mode) or nil })
+        end
+    end)
+
     -- entity_unfreeze: thaw a frozen mob.
     DSTP.RegisterCommand("entity_unfreeze", function(data)
         local inst = ResolveEntity(data)
@@ -980,7 +1000,22 @@ function Commands.RegisterAll(core)
     -- Report a spawned entity's GUID back so a flow can then control it (the
     -- spawn -> control -> react loop). Echoes the token for correlation; fired only
     -- when the spawn provided a token, so existing fire-and-forget spawns are unchanged.
+    -- spawn_* `brain` param: a mob can be BORN with a flow brain ({ mode=..., ... } table,
+    -- or a JSON string of it) so spawn → control needs no second command.
+    local function ApplySpawnBrain(data, ent)
+        local spec = data.brain
+        if type(spec) == "string" and spec ~= "" then
+            local ok, dec = _G.pcall(_G.json.decode, spec)
+            spec = ok and dec or nil
+        end
+        if type(spec) == "table" and core.FlowBrain and ent then
+            local ok, err = core.FlowBrain.Apply(ent, spec)
+            if not ok then LogError("spawn brain: " .. tostring(err)) end
+        end
+    end
+
     local function ReportSpawn(data, ent)
+        ApplySpawnBrain(data, ent)
         if not (data.token and ent) then return end
         local x, _, z = 0, 0, 0
         if ent.Transform then x, _, z = ent.Transform:GetWorldPosition() end

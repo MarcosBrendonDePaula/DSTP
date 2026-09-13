@@ -119,6 +119,10 @@ function DSTP.Init(mod_env, mod_config)
     })
     Core.LandClaims = LandClaims  -- share with core (commands will read it from there)
 
+    -- Flow-driven mob brain (entity_set_brain / spawn `brain`): the BT runs in-frame,
+    -- the flow only writes its state. Shared with commands through core, like claims.
+    Core.FlowBrain = _G.require("dstp/flow_brain").Init({ GLOBAL = _G, core = Core })
+
     -- Data feed (flow-defined server→client entity data over _dstp_feed). Registers
     -- the feed_start / feed_stop commands on core.
     DataFeed.Init({ GLOBAL = _G, core = Core, slot_count = mod_config.slot_count })

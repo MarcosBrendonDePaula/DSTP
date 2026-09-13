@@ -220,6 +220,8 @@ import { meta as entitySetFuelMeta } from '@shared/automation/nodes/actions/enti
 import { ui as entitySetFuelUi } from '@shared/automation/nodes/actions/entity/entity_set_fuel/ui'
 import { meta as entityFreezeMeta } from '@shared/automation/nodes/actions/entity/entity_freeze/meta'
 import { ui as entityFreezeUi } from '@shared/automation/nodes/actions/entity/entity_freeze/ui'
+import { meta as entityBrainMeta } from '@shared/automation/nodes/actions/entity/entity_brain/meta'
+import { ui as entityBrainUi } from '@shared/automation/nodes/actions/entity/entity_brain/ui'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -338,6 +340,7 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: entityIgniteMeta, ui: entityIgniteUi },
   { meta: entitySetFuelMeta, ui: entitySetFuelUi },
   { meta: entityFreezeMeta, ui: entityFreezeUi },
+  { meta: entityBrainMeta, ui: entityBrainUi },
   { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
   { meta: uiNotificationMeta, ui: uiNotificationUi },
   { meta: uiLabelMeta, ui: uiLabelUi },
