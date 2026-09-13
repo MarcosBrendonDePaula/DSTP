@@ -421,7 +421,11 @@ AddPrefabPostInitAny(function(inst)
             local prevPre = inst.OnPreLoad
             inst.OnPreLoad = function(ent, data, newents)
                 local n = data and data.dstp_slots and data.dstp_slots.n
-                if n then _ContainerSlots.SetInstance(ent, n, _ContainerParams, GLOBAL.Vector3) end
+                if n then
+                    local ok, why = _ContainerSlots.SetInstance(ent, n, _ContainerParams, GLOBAL.Vector3)
+                    -- always visible: a failed grow here means items in the extra slots are lost on load
+                    if not ok then print("[DSTP] container slots OnPreLoad: could not grow " .. tostring(ent.prefab) .. " to " .. tostring(n) .. ": " .. tostring(why)) end
+                end
                 if prevPre then prevPre(ent, data, newents) end
             end
         else

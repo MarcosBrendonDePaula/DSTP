@@ -13,8 +13,20 @@ function DstpSlots:OnSave()
 end
 
 function DstpSlots:OnLoad(data)
-    -- the layout itself was applied in OnPreLoad; just keep the number for the next save
-    if data and data.n then self.n = data.n end
+    if not (data and data.n) then return end
+    self.n = data.n
+    -- Primary re-apply is modmain's OnPreLoad hook (before Container:OnLoad). Belt and
+    -- braces: if the container is still smaller than the saved count here, grow it now
+    -- (component OnLoad order is pairs() order — this may run before or after the
+    -- container's own OnLoad; before = items land fine, after = nothing left to fix).
+    local c = self.inst.components and self.inst.components.container
+    if c and (c.numslots or 0) < data.n then
+        local CS = require("dstp/container_slots")
+        local params = require("containers").params
+        local ok, why = CS.ApplyToInstance(self.inst, data.n, params, Vector3, true)
+        if not ok then print("[DSTP] dstp_slots OnLoad: could not grow " .. tostring(self.inst.prefab) .. ": " .. tostring(why)) end
+        if self.inst._dstp_slots and self.inst._dstp_slots.set then self.inst._dstp_slots:set(data.n) end
+    end
 end
 
 return DstpSlots
