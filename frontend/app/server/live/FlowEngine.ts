@@ -1684,7 +1684,8 @@ export class FlowEngine {
 
   // ─── Auto-enable event categories ──────────────────
 
-  ensureEventCategories(flow: any) {
+  /** The DST event categories a flow's triggers gate on (pure — no toggles requested). */
+  neededCategories(flow: any): Set<string> {
     const categoryMap: Record<string, string> = {
       player_spawn: 'players', player_left: 'players', player_death: 'players',
       player_ghost: 'players', player_respawn: 'players', player_disconnected: 'players',
@@ -1741,8 +1742,12 @@ export class FlowEngine {
     // NOTE: key_pressed is intentionally NOT in categoryMap. Keys are not a DST
     // event category (no Lua listener gates on them) — they're a parallel channel
     // reconciled by collectWatchKeys() below.
+    return needed
+  }
 
-    for (const cat of needed) {
+  /** Request every event category the flow's triggers need (delivered on the next sync). */
+  ensureEventCategories(flow: any) {
+    for (const cat of this.neededCategories(flow)) {
       this.host.requestEventToggle(flow.server_id, cat, true)
     }
   }
