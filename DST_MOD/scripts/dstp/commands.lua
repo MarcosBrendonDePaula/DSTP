@@ -585,6 +585,72 @@ function Commands.RegisterAll(core)
         end
     end)
 
+    -- One-shot brain tasks (any flow-brained mob, any mode; a mob without a flow brain
+    -- gets one in `stay` first). Outcome → brain_task_done { kind, ok, reason, token }.
+    --   entity_collect { resolver, item_guid | item (prefab) + brain_radius, store, timeout, token }
+    --   entity_goto    { resolver, target_guid | x + z, timeout, token }
+    local function EnsureFlowBrain(inst)
+        if inst._dstp_brain then return true end
+        return core.FlowBrain.Apply(inst, { mode = "stay" })
+    end
+    DSTP.RegisterCommand("entity_collect", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local function fail(why) if data.token then DSTP.PushEvent("brain_task_done", { kind = "pickup", ok = false, reason = why, token = data.token, guid = inst and inst.GUID or nil }) end end
+        if not inst then fail(reason) return end
+        local ok, err = EnsureFlowBrain(inst)
+        if not ok then fail(err) return end
+        local item_guid = tonumber(data.item_guid)
+        if not item_guid and data.item then
+            -- nearest matching ground item around the mob
+            local st = { mode = "collect", radius = tonumber(data.brain_radius or data.radius) or 8, prefabs = { data.item }, store = "event" }
+            local it = FlowBrain.FindPickup(inst, st)
+            item_guid = it and it.GUID or nil
+        end
+        if not item_guid then fail("no_item") return end
+        local it = _G.Ents[item_guid]
+        if not (it and it:IsValid()) then fail("gone") return end
+        local ok2, err2 = FlowBrain.SetTask(inst, { kind = "pickup", item_guid = item_guid, store = data.store, timeout = data.timeout, token = data.token })
+        if not ok2 then fail(err2) end
+    end)
+    DSTP.RegisterCommand("entity_goto", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local function fail(why) if data.token then DSTP.PushEvent("brain_task_done", { kind = "goto", ok = false, reason = why, token = data.token, guid = inst and inst.GUID or nil }) end end
+        if not inst then fail(reason) return end
+        local ok, err = EnsureFlowBrain(inst)
+        if not ok then fail(err) return end
+        -- goto_x/goto_z (the node) or x/z (raw command) — x/z also serve the mob RESOLVER, so
+        -- the node uses goto_* to keep "where the mob is" apart from "where to go"
+        local ok2, err2 = FlowBrain.SetTask(inst, { kind = "goto", target_guid = data.target_guid, x = data.goto_x or data.x, z = data.goto_z or data.z, timeout = data.timeout, token = data.token })
+        if not ok2 then fail(err2) end
+    end)
+
+    -- entity_can_accept: capability query — how many of `item_guid` (a world item) or of a
+    -- fresh `item` prefab fit in the entity's container/inventory now (free slots + room
+    -- in stacks). Answer: entity_capacity { count, is_full, num_items } (token).
+    DSTP.RegisterCommand("entity_can_accept", function(data)
+        local FlowBrain = core.FlowBrain
+        if not FlowBrain then return end
+        local inst, reason = ResolveEntity(data)
+        local out = { token = data.token, ok = inst ~= nil, reason = inst and nil or reason, guid = inst and inst.GUID or nil, count = 0 }
+        if inst then
+            local item = tonumber(data.item_guid) and _G.Ents[tonumber(data.item_guid)] or nil
+            local temp = nil
+            if not item and data.item and _G.SpawnPrefab then temp = _G.SpawnPrefab(data.item); item = temp end
+            if item then out.count = FlowBrain.CanAccept(inst, item) end
+            if temp and temp.Remove then temp:Remove() end
+            local c = inst.components and (inst.components.container or inst.components.inventory)
+            if c then
+                out.is_full = c.IsFull and c:IsFull() or false
+                out.num_items = c.NumItems and c:NumItems() or nil
+            end
+        end
+        DSTP.PushEvent("entity_capacity", out)
+    end)
+
     -- entity_drop_item: drop `item` (prefab | item guid | "all") from the entity's
     -- container/inventory onto the ground.
     DSTP.RegisterCommand("entity_drop_item", function(data)

@@ -37,6 +37,11 @@ function DSTPFlowBrain:OnStart()
     local root = PriorityNode({
         BrainCommon.PanicTrigger(inst),
 
+        -- one-shot task from the flow (entity_collect / entity_goto): top priority,
+        -- whatever the mode; FlowBrain.TaskAction reports brain_task_done and clears it
+        WhileNode(function() return FlowBrain.GetTask(inst) ~= nil end, "FlowTask",
+            DoAction(inst, function() return FlowBrain.TaskAction(inst) end, "Task", true, 20)),
+
         WhileNode(function() return mode(inst) == "attack" end, "FlowAttack",
             ChaseAndAttack(inst, MAX_CHASE_TIME, GIVE_UP_DIST)),
 

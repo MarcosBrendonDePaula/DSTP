@@ -135,13 +135,12 @@ function M.CanCollect(inst, item, state)
     if not ii or ii.canbepickedup == false then return false end
     if ii.owner ~= nil or (ii.IsHeld and ii:IsHeld()) then return false end       -- someone holds it
     if item.components and item.components.burnable and item.components.burnable.IsBurning and item.components.burnable:IsBurning() then return false end
-    if state.store ~= "event" then
-        -- self-store: the mob must be able to hold it (container or inventory)
-        local c = inst.components and (inst.components.container or inst.components.inventory)
-        if not c then return false end
-        if c.IsFull and c:IsFull() then return false end
-        if c.CanTakeItemInSlot and not c:CanTakeItemInSlot(item) then return false end
-    end
+    -- NO capacity policy here (owner's rule: Lua = primitives, the flow decides). The mob
+    -- walks to the item and TRIES; if it does not fit the flow hears
+    -- brain_item_reached { reason } and decides (unload, drop, stop). The only guard is
+    -- an anti-spam cooldown per item after a failed attempt (mechanism, not policy).
+    local now = (_G and _G.GetTime and _G.GetTime()) or 0
+    if item._dstp_skip_until and now < item._dstp_skip_until then return false end
     if state.tags then
         local ok = false
         for _, t in ipairs(state.tags) do if item.HasTag and item:HasTag(t) then ok = true break end end
@@ -168,6 +167,16 @@ function M.FindPickup(inst, state)
         if M.CanCollect(inst, e, state) then return e end
     end
     return nil
+end
+
+--- Capability query (a primitive for flows / commands): how many of `item` fit in
+--- `inst`'s container/inventory right now (free slots + room in stacks). 0 = none.
+function M.CanAccept(inst, item)
+    local c = inst and inst.components and (inst.components.container or inst.components.inventory)
+    if not (c and item) then return 0 end
+    if c.CanAcceptCount then return c:CanAcceptCount(item) or 0 end
+    if c.IsFull and c:IsFull() then return 0 end
+    return 1
 end
 
 local function StackOf(item)
@@ -249,6 +258,73 @@ function M.TransferItems(src, dst, what)
     return moved, refused
 end
 
+-- ── one-shot TASKS: "go get THAT item" / "go to X,Z" — generic, any mode ────────
+-- The flow issues a task (entity_collect / entity_goto); the brain runs it with top
+-- priority, then falls back to the current mode. Outcome → brain_task_done
+-- { kind, ok, reason, token, item, item_guid }. A task times out after `timeout` s
+-- (default 20) via the monitor. Primitives, no policy: what to do next is the flow's.
+function M.SetTask(inst, task)
+    if not (inst and task and task.kind) then return false, "bad_task" end
+    local st = inst._dstp_brain
+    if not st then return false, "not_flow_brained" end
+    local now = (_G and _G.GetTime and _G.GetTime()) or 0
+    st.task = {
+        kind = task.kind, token = task.token, store = task.store,
+        item_guid = tonumber(task.item_guid), target_guid = tonumber(task.target_guid),
+        x = tonumber(task.x), z = tonumber(task.z),
+        deadline = now + (tonumber(task.timeout) or 20),
+        started = now,
+    }
+    if inst.brain and inst.brain.bt and inst.brain.bt.Reset then inst.brain.bt:Reset() end
+    return true
+end
+
+function M.GetTask(inst) return inst and inst._dstp_brain and inst._dstp_brain.task or nil end
+
+function M.FinishTask(inst, ok, reason, extra)
+    local st = inst and inst._dstp_brain
+    local task = st and st.task
+    if not task then return end
+    st.task = nil
+    local d = { kind = task.kind, ok = ok and true or false, reason = ok and nil or (reason or "failed"), token = task.token }
+    for k, v in pairs(extra or {}) do d[k] = v end
+    Push(inst, "brain_task_done", d)
+end
+
+--- The task's BufferedAction for the brain's DoAction (nil = no task / target gone).
+function M.TaskAction(inst)
+    local task = M.GetTask(inst)
+    if not task then return nil end
+    if task.kind == "pickup" then
+        local item = task.item_guid and _G.Ents[task.item_guid] or nil
+        if not (item and item:IsValid()) then M.FinishTask(inst, false, "gone") return nil end
+        local ba = _G.BufferedAction(inst, item, _G.ACTIONS.WALKTO, nil, nil, nil, 1.5)
+        ba:AddSuccessAction(function()
+            if M.GetTask(inst) ~= task then return end
+            if task.store == "event" then
+                M.FinishTask(inst, true, nil, { item = item.prefab, item_guid = item.GUID, count = StackOf(item) })
+                return
+            end
+            local ok, why = M.TakeItem(inst, item)
+            M.FinishTask(inst, ok, why, { item = item.prefab, item_guid = item.GUID, count = StackOf(item) })
+        end)
+        ba:AddFailAction(function() if M.GetTask(inst) == task then M.FinishTask(inst, false, "unreachable") end end)
+        return ba
+    elseif task.kind == "goto" then
+        local target = task.target_guid and _G.Ents[task.target_guid] or nil
+        if task.target_guid and not (target and target:IsValid()) then M.FinishTask(inst, false, "gone") return nil end
+        local ba
+        if target then ba = _G.BufferedAction(inst, target, _G.ACTIONS.WALKTO, nil, nil, nil, 2)
+        elseif task.x and task.z then ba = _G.BufferedAction(inst, nil, _G.ACTIONS.WALKTO, nil, _G.Vector3(task.x, 0, task.z), nil, 1)
+        else M.FinishTask(inst, false, "bad_target") return nil end
+        ba:AddSuccessAction(function() if M.GetTask(inst) == task then M.FinishTask(inst, true) end end)
+        ba:AddFailAction(function() if M.GetTask(inst) == task then M.FinishTask(inst, false, "unreachable") end end)
+        return ba
+    end
+    M.FinishTask(inst, false, "bad_kind")
+    return nil
+end
+
 --- On arrival at a pickup. store="self": stash it and report `brain_collected`;
 --- store="event": only report `brain_item_reached` and let the flow act.
 function M.Collect(inst, item)
@@ -262,9 +338,19 @@ function M.Collect(inst, item)
             x = x and math.floor(x + 0.5) or nil, z = z and math.floor(z + 0.5) or nil })
         return true
     end
-    local ok = M.TakeItem(inst, item)
-    if ok then Push(inst, "brain_collected", { item = prefab, count = count }) end
-    return ok
+    local ok, why = M.TakeItem(inst, item)
+    if ok then
+        Push(inst, "brain_collected", { item = prefab, count = count })
+        return true
+    end
+    -- did not fit: report with the reason and back off from THIS item for a while, so
+    -- the flow can act (unload / drop / stop) without the mob pacing to the same item
+    item._dstp_skip_until = ((_G and _G.GetTime and _G.GetTime()) or 0) + 10
+    local x, z
+    if item.Transform then x, _, z = item.Transform:GetWorldPosition() end
+    Push(inst, "brain_item_reached", { item = prefab, item_guid = item.GUID, count = count, reason = why or "refused",
+        x = x and math.floor(x + 0.5) or nil, z = z and math.floor(z + 0.5) or nil })
+    return false
 end
 
 --- For the brain's DoAction: a WALKTO to the nearest pickup that collects on arrival.
@@ -304,6 +390,11 @@ function M.Monitor(inst)
     if not st then return end
     local mon = inst._dstp_brain_mon or {}
     inst._dstp_brain_mon = mon
+    -- task timeout (the brain's DoAction has its own, but this one always reports)
+    if st.task and st.task.deadline then
+        local now = (_G and _G.GetTime and _G.GetTime()) or 0
+        if now > st.task.deadline then M.FinishTask(inst, false, "timeout") end
+    end
     if st.mode ~= "follow" and st.mode ~= "collect" then mon.arrived, mon.leader_lost = nil, nil return end
     if st.mode == "collect" and not (st.target_userid or st.target_guid) then return end
     local leader = M.ResolveLeader(st)

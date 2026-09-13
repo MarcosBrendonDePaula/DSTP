@@ -194,6 +194,12 @@ import { meta as entityGiveItemMeta } from '@shared/automation/nodes/actions/ent
 import { handler as entityGiveItemHandler } from '@shared/automation/nodes/actions/entity/entity_give_item/exec'
 import { meta as entityTransferItemMeta } from '@shared/automation/nodes/actions/entity/entity_transfer_item/meta'
 import { handler as entityTransferItemHandler } from '@shared/automation/nodes/actions/entity/entity_transfer_item/exec'
+import { meta as entityCanAcceptMeta } from '@shared/automation/nodes/actions/entity/entity_can_accept/meta'
+import { handler as entityCanAcceptHandler } from '@shared/automation/nodes/actions/entity/entity_can_accept/exec'
+import { meta as entityCollectMeta } from '@shared/automation/nodes/actions/entity/entity_collect/meta'
+import { handler as entityCollectHandler } from '@shared/automation/nodes/actions/entity/entity_collect/exec'
+import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/entity_goto/meta'
+import { handler as entityGotoHandler } from '@shared/automation/nodes/actions/entity/entity_goto/exec'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { handler as entityUnfreezeHandler } from '@shared/automation/nodes/actions/entity/entity_unfreeze/exec'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -332,6 +338,9 @@ const ENTRIES: BackendNodeEntry[] = [
   { meta: entityDropItemMeta, handler: entityDropItemHandler },
   { meta: entityGiveItemMeta, handler: entityGiveItemHandler },
   { meta: entityTransferItemMeta, handler: entityTransferItemHandler },
+  { meta: entityCanAcceptMeta, handler: entityCanAcceptHandler },
+  { meta: entityCollectMeta, handler: entityCollectHandler },
+  { meta: entityGotoMeta, handler: entityGotoHandler },
   { meta: entityUnfreezeMeta, handler: entityUnfreezeHandler },
   { meta: uiNotificationMeta, handler: uiNotificationHandler },
   { meta: uiLabelMeta, handler: uiLabelHandler },

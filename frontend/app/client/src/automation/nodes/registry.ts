@@ -230,6 +230,12 @@ import { meta as entityGiveItemMeta } from '@shared/automation/nodes/actions/ent
 import { ui as entityGiveItemUi } from '@shared/automation/nodes/actions/entity/entity_give_item/ui'
 import { meta as entityTransferItemMeta } from '@shared/automation/nodes/actions/entity/entity_transfer_item/meta'
 import { ui as entityTransferItemUi } from '@shared/automation/nodes/actions/entity/entity_transfer_item/ui'
+import { meta as entityCanAcceptMeta } from '@shared/automation/nodes/actions/entity/entity_can_accept/meta'
+import { ui as entityCanAcceptUi } from '@shared/automation/nodes/actions/entity/entity_can_accept/ui'
+import { meta as entityCollectMeta } from '@shared/automation/nodes/actions/entity/entity_collect/meta'
+import { ui as entityCollectUi } from '@shared/automation/nodes/actions/entity/entity_collect/ui'
+import { meta as entityGotoMeta } from '@shared/automation/nodes/actions/entity/entity_goto/meta'
+import { ui as entityGotoUi } from '@shared/automation/nodes/actions/entity/entity_goto/ui'
 import { meta as entityUnfreezeMeta } from '@shared/automation/nodes/actions/entity/entity_unfreeze/meta'
 import { ui as entityUnfreezeUi } from '@shared/automation/nodes/actions/entity/entity_unfreeze/ui'
 import { meta as uiNotificationMeta } from '@shared/automation/nodes/actions/interface/ui_notification/meta'
@@ -353,6 +359,9 @@ const ENTRIES: FrontendNodeEntry[] = [
   { meta: entityDropItemMeta, ui: entityDropItemUi },
   { meta: entityGiveItemMeta, ui: entityGiveItemUi },
   { meta: entityTransferItemMeta, ui: entityTransferItemUi },
+  { meta: entityCanAcceptMeta, ui: entityCanAcceptUi },
+  { meta: entityCollectMeta, ui: entityCollectUi },
+  { meta: entityGotoMeta, ui: entityGotoUi },
   { meta: entityUnfreezeMeta, ui: entityUnfreezeUi },
   { meta: uiNotificationMeta, ui: uiNotificationUi },
   { meta: uiLabelMeta, ui: uiLabelUi },

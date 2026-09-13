@@ -142,8 +142,9 @@ check("Restore on a plain mob is a no-op error", select(2, FlowBrain.Restore(rab
 
 -- ── collect ──
 mock_G.BufferedAction = function(doer, target, action, inv, pos, recipe, dist)
-    local ba = { doer = doer, target = target, action = action, distance = dist, onsuccess = {} }
+    local ba = { doer = doer, target = target, action = action, pos = pos, distance = dist, onsuccess = {}, onfail = {} }
     ba.AddSuccessAction = function(self, fn) self.onsuccess[#self.onsuccess + 1] = fn end
+    ba.AddFailAction = function(self, fn) self.onfail[#self.onfail + 1] = fn end
     ba.Succeed = function(self) for _, f in ipairs(self.onsuccess) do f() end end
     return ba
 end
@@ -178,8 +179,25 @@ local ba = FlowBrain.CollectAction(chester)
 check("CollectAction: a WALKTO BufferedAction to the pickup, arrive at 1.5", ba and ba.action.id == "WALKTO" and ba.distance == 1.5 and ba.target == pick)
 ba:Succeed()
 check("arrival → container:GiveItem + brain_collected {item,count}", #given == 1 and given[1] == pick and lastEvent("brain_collected") and lastEvent("brain_collected").item == pick.prefab)
+-- NO capacity policy in Lua (owner's rule): a full mob still walks to the item and tries;
+-- the failed attempt is reported (brain_item_reached reason=full) and THAT item gets a
+-- 10 s cooldown so the mob does not pace to it — the flow decides what to do.
 chester.components.container.full = true
-check("container full → nothing to collect", FlowBrain.CollectAction(chester) == nil)
+local rock = mkItem(610, "rocks", 2, 2, {})
+check("full: the item is still a candidate (no policy in Lua)", FlowBrain.CanCollect(chester, rock, cst) == true)
+given = {}
+check("full: arrival → NOT taken, brain_item_reached reason=full", FlowBrain.Collect(chester, rock) == false and #given == 0
+    and lastEvent("brain_item_reached") and lastEvent("brain_item_reached").item == "rocks" and lastEvent("brain_item_reached").reason == "full")
+check("full: that item is on cooldown, others still candidates", FlowBrain.CanCollect(chester, rock, cst) == false and FlowBrain.CanCollect(chester, flint, cst) == true)
+check("CanAccept primitive: 0 when full", FlowBrain.CanAccept(chester, flint) == 0)
+chester.components.container.full = false
+check("CanAccept primitive: >0 with room", FlowBrain.CanAccept(chester, flint) > 0)
+run("entity_can_accept", { guid = 600, item_guid = 605, token = "cap1" })
+local cap = lastEvent("entity_capacity")
+check("entity_can_accept by item_guid → entity_capacity {count>0, is_full=false}", cap and cap.ok == true and cap.count > 0 and cap.is_full == false and cap.token == "cap1")
+chester.components.container.full = true
+run("entity_can_accept", { guid = 600, item_guid = 605, token = "cap2" })
+check("entity_can_accept when full → count 0, is_full true", lastEvent("entity_capacity").count == 0 and lastEvent("entity_capacity").is_full == true)
 chester.components.container.full = false
 FlowBrain.Apply(chester, { mode = "collect", prefabs = "flint" })
 check("collect with a prefabs filter: only flint", FlowBrain.FindPickup(chester, FlowBrain.GetState(chester)) == flint)
@@ -253,6 +271,47 @@ chest.components.container.GiveItem = function() return false end
 run("entity_transfer_item", { guid = 700, target_guid = 900, item = "log", token = "t3" })
 check("entity_transfer_item refused: item returned to the source, refused=1", #invGiven == 1 and lastEvent("entity_item_transferred").refused == 1 and lastEvent("entity_item_transferred").moved == 0)
 FlowBrain.Apply(chester, { mode = "stay" })
+
+-- ── one-shot tasks: entity_collect / entity_goto (any mode) ──
+mock_G.Vector3 = function(x, y, z) return { x = x, y = y, z = z } end
+mock_G.GetTime = function() return 100 end
+given = {}
+FlowBrain.Apply(chester, { mode = "stay" })
+local berry = mkItem(611, "berries", 4, 4, { stack = 3 })
+run("entity_collect", { guid = 600, item_guid = 611, token = "c1" })
+check("entity_collect: a pickup task is set (mode untouched: stay)", FlowBrain.GetTask(chester) and FlowBrain.GetTask(chester).kind == "pickup" and FlowBrain.GetState(chester).mode == "stay")
+local tba = FlowBrain.TaskAction(chester)
+check("TaskAction: WALKTO the item", tba and tba.target == berry and tba.action.id == "WALKTO")
+tba:Succeed()
+local done = lastEvent("brain_task_done")
+check("arrival → taken + brain_task_done ok with token/item/count, task cleared", #given == 1 and given[1] == berry and done and done.ok == true and done.token == "c1" and done.item == "berries" and done.count == 3 and FlowBrain.GetTask(chester) == nil)
+-- by prefab: nearest matching ground item around the mob
+local carrot = mkItem(612, "carrot", 1, 1, {})
+run("entity_collect", { guid = 600, item = "carrot", token = "c2" })
+check("entity_collect by prefab → task on the carrot", FlowBrain.GetTask(chester) and FlowBrain.GetTask(chester).item_guid == 612)
+FlowBrain.TaskAction(chester):Succeed()
+check("carrot taken", given[2] == carrot)
+-- store=event: arrival reported, not taken
+local gem = mkItem(613, "redgem", 1, 1, {})
+run("entity_collect", { guid = 600, item_guid = 613, store = "event", token = "c3" })
+FlowBrain.TaskAction(chester):Succeed()
+check("store=event task: brain_task_done ok, item NOT taken", #given == 2 and lastEvent("brain_task_done").ok == true and lastEvent("brain_task_done").item == "redgem")
+-- gone item → fails immediately; timeout via the monitor
+run("entity_collect", { guid = 600, item_guid = 424242, token = "c4" })
+check("entity_collect of a missing item → brain_task_done ok=false reason=gone", lastEvent("brain_task_done").ok == false and lastEvent("brain_task_done").reason == "gone" and FlowBrain.GetTask(chester) == nil)
+run("entity_goto", { guid = 600, x = 10, z = 20, timeout = 5, token = "g1" })
+local gba = FlowBrain.TaskAction(chester)
+check("entity_goto: WALKTO a point", gba and gba.target == nil and gba.pos and gba.pos.x == 10 and gba.pos.z == 20)
+mock_G.GetTime = function() return 200 end
+chester._task.fn()
+check("goto past its timeout → brain_task_done ok=false reason=timeout (monitor)", lastEvent("brain_task_done").reason == "timeout" and FlowBrain.GetTask(chester) == nil)
+mock_G.GetTime = function() return 100 end
+-- a mob WITHOUT a flow brain gets one (stay) so the task can run
+local pigPlain = mkEnt(710, "pigman", 0, 0, {})
+pigPlain.brainfn = orig
+pigPlain.components.inventory = { IsFull = function() return false end, GiveItem = function() return true end }
+run("entity_goto", { guid = 710, target_guid = 600, token = "g2" })
+check("entity_goto on a plain mob: flow brain applied in stay + goto task to the target", FlowBrain.GetState(pigPlain) and FlowBrain.GetState(pigPlain).mode == "stay" and FlowBrain.GetTask(pigPlain).target_guid == 600)
 
 -- ── command path ──
 run("entity_set_brain", { guid = 100, mode = "follow", target = "KU_1", token = "b1" })
