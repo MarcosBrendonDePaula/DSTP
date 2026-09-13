@@ -67,6 +67,33 @@ anti-pacing cooldown, nothing more.
   Installed once with the brain swap (a 0.5 s monitor + 3 listeners), removed on `default`.
   They are pushed only for flow-brained mobs, so there is no event category to enable.
 
+## Stable ids — never remember a mob by guid
+
+DST reassigns every guid on world load, so `memory pet:<userid> = {{spawn.guid}}` is stale
+after the first restart (worse: the number may now point at some other entity). The mod
+gives entities a `dstp_id` (`entity_ids.lua` + `components/dstp_id.lua`, format
+`e<time><rand><counter>`, saved with the entity, re-indexed on load). Every entity command
+resolves `id` FIRST (then `guid`, then `prefab` + `x/z`), and `spawn_result`, every
+`brain_*` event, `entity_data` and `entity_found` carry `id`. `Apply` ensures an id, so a
+flow-brained mob always has one. `entity_tag_id` tags any other entity; `entity_find
+{ prefab, owner_userid | near_userid | x,z, radius }` -> `entity_found { count, entities[] }`
+answers "is there already one of mine?".
+
+## Pattern — one pet per player (`examples/flows/Pet_Chester.dstp.json`)
+
+- `player_spawn` -> `memory pet:<userid>` -> exists? `get_entity { id }` (token `pet:<userid>`)
+  -> `entity_data` found and prefab == chester -> `entity_brain collect` by id; else
+  `spawn_at_player chester { brain: collect, token: pet:<userid> }`.
+- `spawn_result` token `pet:*` -> remember `pet:<userid> = {{sr.id}}` and
+  `owner:<id> = userid` -> `entity_set_slots { id, slots: petslots pref or 16 }`.
+- `player_left` -> `entity_brain stay` by id. `brain_dead` chester with an owner -> 3 s ->
+  respawn. `brain_restored` -> refresh memory (id, owner).
+- Chat: `!pet` (EXACT match: `!petslots` starts with the same letters) reuses or spawns;
+  `!nopet` -> `entity_kill` by id + forget; `!petslots N` -> `entity_set_slots` by id +
+  remember the preference, PM on the `entity_slots` ack.
+
+All of it is policy in the flow; the mod only offers the primitives.
+
 ## Example — a spider bodyguard that dies with the player's `!recall`
 
 `chat "!guard"` → `get_player` → `spawn_at_player { prefab: spider, token: g, brain:

@@ -8,6 +8,62 @@ The mod talks to the DSTP backend through the relay
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-09-13
+
+### Added
+- **Flow brain (`flow_brain.lua` + `brains/dstp_flowbrain.lua`).** Any mob's behaviour is
+  set by the flow as data: `entity_set_brain { mode, target, tags, prefabs, follow_min/
+  dist/max, brain_radius, store }` with modes follow / guard / attack / flee / wander /
+  stay / collect / default. `spawn_prefab`/`spawn_at_player` take a `brain` JSON so a mob
+  is born controlled. Persisted by `components/dstp_flowbrain.lua` (restored after a world
+  load -> `brain_restored`). Events back to the flow: `brain_result`, `brain_arrived`,
+  `brain_leader_lost`, `brain_target_acquired/lost`, `brain_dead`, `brain_collected`,
+  `brain_item_reached`, `brain_task_done`. No behaviour policy in Lua: a full mob still
+  reports and the flow decides.
+- **One-shot tasks:** `entity_collect` (go get THAT item, `store=event` only reports) and
+  `entity_goto` (point or entity) -> `brain_task_done { kind, ok, reason, token }`.
+- **Generic item primitives for ANY container/inventory entity:** `entity_take_item`,
+  `entity_drop_item`, `entity_give_item`, `entity_transfer_item` (holder -> holder, refused
+  items go back), `entity_can_accept` -> `entity_capacity { count, is_full }`.
+- **Stable entity ids (`entity_ids.lua` + `components/dstp_id.lua`).** DST guids change on
+  every world load; `dstp_id` is saved with the entity and re-indexed on load. Every
+  entity command resolves `id` first; `spawn_result`, brain events, `entity_data` and
+  `entity_found` carry it. `entity_tag_id` assigns/reads one, `entity_find { prefab,
+  owner_userid | near_userid | x,z, radius }` -> `entity_found` looks entities up.
+- **Bigger containers (`container_slots.lua`).** World defaults from modinfo
+  (`CHEST_SLOTS` / `CHESTER_SLOTS` / `BACKPACK_SLOTS` / `ICEBOX_SLOTS`) and per-instance
+  runtime growth from the flow: `entity_set_slots { id|guid, slots }` -> `entity_slots`
+  ack; layout replicated by a `net_byte dstp.slots`, persisted by `components/dstp_slots.lua`
+  and re-applied before `Container:OnLoad` so items in grown slots survive. Up to 36.
+- **`interaction` event category:** `player_action` (every `performaction` with the server
+  guid/prefab/x/z of the target, item, recipe) and `player_action_failed { reason }`.
+- **HTML UI engine:** HTML/CSS is the default authoring mode of `ui_builder`; CSS grid;
+  `ui_dom` micro-DOM (`append`/`remove`/`set`/`toggle` on an open UI, rebuilt in place);
+  runtime `<script>` on the backend (jsdom) building the tree; wildcard button callbacks
+  `cb:prefix:*`; hover events (`ui_hover`); `overflow: scroll` areas.
+- **Examples:** `Pet_Chester` (one pet per player: remembered by stable id, re-bound on
+  join, respawned on death, `!pet` / `!nopet` / `!petslots N`), `Baus_Grandes` (every
+  placed chest gets 25 slots), `Online_Lista` (script node building an HTML list).
+
+### Fixed
+- `entity_set_slots` past the container's netvar pool crashed
+  (`container_classified.lua: wrong number of arguments to 'insert'`): the pool
+  (`containers.MAXITEMSLOTS`) is now reserved for 36 on both sides at load, bigger
+  requests are refused as `too_big`, and the command is pcall'd so the ack carries the error.
+- Persisted flow-brain state was not restored on load (`add_component_if_missing`).
+- Flow brain refused on entities without a locomotor (a reused guid pointed at an
+  `inventoryitem_classified` and crashed the server).
+- Strict-mode crash: placeholder `_` in multi-assignments (`x, _, z = ...`) is an
+  undeclared global in DST. CI guard added (`strict-mode-guard.test.ts`).
+- Login panel dropped: the backend `seq` inside `_dstp_ui` sub-commands tripped the
+  widget dedup; stripped in the outbox and the router.
+- Panel title strip overlapped content; buttons/tabs/close squashed by scale-vs-texture
+  mismatch (`ForceImageSize` with the real atlas sizes).
+- Pet drifted away collecting: pickup search centred on the leader, follow before pick.
+- Event categories were not (re)enabled for flows inserted in the DB or after a DST
+  restart: reconciled on shard reconnect + a 30 s sweep.
+
+
 ### Added
 - **Data feed (`data_feed.lua`) — the generic server→client data path.** A flow
   sends `feed_start { userid, id, prefabs|tags, radius, fields, interval, max }`
