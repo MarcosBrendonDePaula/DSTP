@@ -117,6 +117,14 @@ describe('example: Pet Chester', () => {
     expect(String(d?.id)).toBe('e_pet1')
     expect(Number(d?.slots)).toBe(25)
     expect(d?.token).toBe('petslots:KU_1')
+    // the choice is remembered and used for the NEXT pet of this player
+    expect(String(mem.get(FLOW_ID, 'petslots:KU_1'))).toBe('25')
+    commands.length = 0
+    await fire('spawn_result', { token: 'pet:KU_1', guid: 9, id: 'e_pet2', prefab: 'chester', x: 0, z: 0 })
+    const next = commands.find(c => c.type === 'entity_set_slots')?.data
+    expect(String(next?.id)).toBe('e_pet2'); expect(Number(next?.slots)).toBe(25)
+    mem.delete(FLOW_ID, 'petslots:KU_1')
+    mem.set(FLOW_ID, 'pet:KU_1', 'e_pet1')
     await fire('entity_slots', { token: 'petslots:KU_1', ok: true, slots: 25, guid: 1 })
     expect(String(commands.find(c => c.type === 'private_message')?.data?.message)).toContain('25')
     commands.length = 0

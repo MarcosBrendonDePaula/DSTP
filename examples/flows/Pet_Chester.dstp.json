@@ -632,8 +632,8 @@
         }
       },
       "position": {
-        "x": 400,
-        "y": 800
+        "x": 550,
+        "y": 1000
       }
     },
     {
@@ -827,6 +827,68 @@
         "x": -1500,
         "y": 640
       }
+    },
+    {
+      "id": "save_pref",
+      "type": "memory",
+      "data": {
+        "action": "write",
+        "alias": "save_pref",
+        "params": {
+          "key": "petslots:{{c3.userid}}",
+          "value": "{{sw.part2}}"
+        }
+      },
+      "position": {
+        "x": -1200,
+        "y": 960
+      }
+    },
+    {
+      "id": "read_pref",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "pref",
+        "params": {
+          "key": "petslots:{{tk.part2}}"
+        }
+      },
+      "position": {
+        "x": 400,
+        "y": 760
+      }
+    },
+    {
+      "id": "has_pref",
+      "type": "condition",
+      "data": {
+        "field": "pref.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pref"
+      },
+      "position": {
+        "x": 400,
+        "y": 880
+      }
+    },
+    {
+      "id": "pet_slots_pref",
+      "type": "entity_set_slots",
+      "data": {
+        "action_type": "entity_set_slots",
+        "alias": "pet_slots_pref",
+        "params": {
+          "id": "{{sr.id}}",
+          "slots": "{{pref.value}}",
+          "token": "pet_slots"
+        }
+      },
+      "position": {
+        "x": 250,
+        "y": 1000
+      }
     }
   ],
   "edges": [
@@ -1017,11 +1079,6 @@
       "target": "respawn2"
     },
     {
-      "id": "e40",
-      "source": "mem_owner",
-      "target": "pet_slots"
-    },
-    {
       "id": "e50",
       "source": "t_slots",
       "target": "is_slots"
@@ -1081,6 +1138,33 @@
       "source": "ack_ok3",
       "sourceHandle": "false",
       "target": "pm_fail3"
+    },
+    {
+      "id": "e61",
+      "source": "set_slots3",
+      "target": "save_pref"
+    },
+    {
+      "id": "e40",
+      "source": "mem_owner",
+      "target": "read_pref"
+    },
+    {
+      "id": "e41",
+      "source": "read_pref",
+      "target": "has_pref"
+    },
+    {
+      "id": "e42",
+      "source": "has_pref",
+      "sourceHandle": "true",
+      "target": "pet_slots_pref"
+    },
+    {
+      "id": "e43",
+      "source": "has_pref",
+      "sourceHandle": "false",
+      "target": "pet_slots"
     }
   ]
 }
