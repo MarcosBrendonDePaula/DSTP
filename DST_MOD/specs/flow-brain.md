@@ -29,6 +29,21 @@ self-contained Lua module, policy in the flow.
 | `attack_players` | `true` to let `attack`/`guard` target players (default false — players are never targets) |
 | `follow_min`/`follow_dist`/`follow_max` | Follow distances (2 / 4 / 6): back off below min, stop at dist, START moving past max |
 
+## One-shot tasks (any mode) — primitives, the flow decides
+`entity_collect { guid, item_guid | item + brain_radius, store, timeout, token }` and
+`entity_goto { guid, target_guid | goto_x + goto_z, timeout, token }` set `state.task`; the
+BT runs it with top priority (after panic) through `FlowBrain.TaskAction` (a WALKTO
+BufferedAction; pickup takes the item on arrival unless `store=event`) and reports
+`brain_task_done { kind, ok, reason: gone|unreachable|timeout|full|refused, token, item,
+item_guid, count }`; the monitor enforces `timeout` (20 s). The mode resumes afterwards. A
+mob with no flow brain gets `stay` first. `entity_can_accept` → `entity_capacity { count,
+is_full, num_items }` (Klei's `CanAcceptCount`: free slots + stack room).
+
+**Owner's rule (2026-09-12):** Lua exposes primitives and emits data; behaviour policy
+("skip when full", "unload into a chest") lives in the flow. That is why there is no
+capacity check before a pickup — a failed attempt is reported and the item gets a short
+anti-pacing cooldown, nothing more.
+
 ## Mechanics worth knowing
 
 - **Swap once, restore exactly.** `Apply` stores `brainfn` + the combat `targetfn`/period
