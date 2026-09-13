@@ -59,14 +59,17 @@ function DSTPFlowBrain:OnStart()
         -- collect: walk to the nearest pickup and stash it (FlowBrain.CollectAction gives
         -- a WALKTO whose success action stores the item); nothing to pick → follow the
         -- leader (if any) → stand still
+        -- Follow comes FIRST: it only takes over when the mob is beyond follow_max from
+        -- the leader (Follow fails while in range, so the pickup runs) — the pet never
+        -- wanders off after items; FindPickup also centres its radius on the leader.
         WhileNode(function() return mode(inst) == "collect" end, "FlowCollect",
             PriorityNode({
-                DoAction(inst, function() return FlowBrain.CollectAction(inst) end, "Collect", true, 12),
                 WhileNode(function() return leader(inst) ~= nil end, "CollectFollow",
                     Follow(inst, function() return leader(inst) end,
                         function() return state(inst).follow_min end,
                         function() return state(inst).follow_dist end,
                         function() return state(inst).follow_max end, true)),
+                DoAction(inst, function() return FlowBrain.CollectAction(inst) end, "Collect", true, 12),
                 StandStill(inst),
             }, .25)),
 

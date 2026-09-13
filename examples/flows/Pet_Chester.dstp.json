@@ -317,6 +317,91 @@
         "x": -400,
         "y": 320
       }
+    },
+    {
+      "id": "t_nopet",
+      "type": "trigger",
+      "data": {
+        "event_type": "chat_message",
+        "alias": "c2"
+      },
+      "position": {
+        "x": -800,
+        "y": 0
+      }
+    },
+    {
+      "id": "is_nopet",
+      "type": "condition",
+      "data": {
+        "field": "c2.message",
+        "operator": "starts_with",
+        "value": "!nopet",
+        "alias": "is_nopet"
+      },
+      "position": {
+        "x": -800,
+        "y": 160
+      }
+    },
+    {
+      "id": "read_pet2",
+      "type": "memory",
+      "data": {
+        "action": "read",
+        "alias": "mem2",
+        "params": {
+          "key": "pet:{{c2.userid}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 320
+      }
+    },
+    {
+      "id": "has_pet2",
+      "type": "condition",
+      "data": {
+        "field": "mem2.value",
+        "operator": "exists",
+        "value": "",
+        "alias": "has_pet2"
+      },
+      "position": {
+        "x": -800,
+        "y": 480
+      }
+    },
+    {
+      "id": "kill_pet2",
+      "type": "entity_kill",
+      "data": {
+        "action_type": "entity_kill",
+        "alias": "kill2",
+        "params": {
+          "guid": "{{mem2.value}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 640
+      }
+    },
+    {
+      "id": "forget_pet2",
+      "type": "memory",
+      "data": {
+        "action": "delete",
+        "alias": "forget2",
+        "params": {
+          "key": "pet:{{c2.userid}}"
+        }
+      },
+      "position": {
+        "x": -800,
+        "y": 800
+      }
     }
   ],
   "edges": [
@@ -404,6 +489,33 @@
       "source": "is_pet_cmd",
       "sourceHandle": "true",
       "target": "spawn_pet_cmd"
+    },
+    {
+      "id": "e17",
+      "source": "t_nopet",
+      "target": "is_nopet"
+    },
+    {
+      "id": "e18",
+      "source": "is_nopet",
+      "sourceHandle": "true",
+      "target": "read_pet2"
+    },
+    {
+      "id": "e19",
+      "source": "read_pet2",
+      "target": "has_pet2"
+    },
+    {
+      "id": "e20",
+      "source": "has_pet2",
+      "sourceHandle": "true",
+      "target": "kill_pet2"
+    },
+    {
+      "id": "e21",
+      "source": "kill_pet2",
+      "target": "forget_pet2"
     }
   ]
 }

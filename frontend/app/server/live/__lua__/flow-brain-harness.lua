@@ -183,6 +183,14 @@ check("container full → nothing to collect", FlowBrain.CollectAction(chester) 
 chester.components.container.full = false
 FlowBrain.Apply(chester, { mode = "collect", prefabs = "flint" })
 check("collect with a prefabs filter: only flint", FlowBrain.FindPickup(chester, FlowBrain.GetState(chester)) == flint)
+-- the search is centred on the LEADER: an item next to the owner (5,5) but 30 away from the mob is found; one next to the mob but far from the owner is not
+local nearOwner = mkItem(606, "log", 6, 6, {})
+local nearMob = mkItem(607, "log", 25, 0, {})
+chester.Transform.SetPosition(chester.Transform, 25, 0, 0)
+FlowBrain.Apply(chester, { mode = "collect", target = "KU_1", prefabs = "log" })
+local found = FlowBrain.FindPickup(chester, FlowBrain.GetState(chester))
+check("FindPickup centres on the leader (never the item by the wandering mob, 20 away from the owner)", found ~= nil and found ~= nearMob)
+chester.Transform.SetPosition(chester.Transform, 0, 0, 0)
 FlowBrain.Apply(chester, { mode = "stay" })
 check("CollectAction outside collect mode → nil", FlowBrain.CollectAction(chester) == nil)
 

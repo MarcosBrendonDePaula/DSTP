@@ -146,10 +146,13 @@ function M.CanCollect(inst, item, state)
     return true
 end
 
---- Nearest collectable ground item within `radius` (or nil).
+--- Nearest collectable ground item within `radius` (or nil). The radius is centred on
+--- the LEADER when there is one (a pet gathers around its owner) — centred on the mob
+--- it drifted away item by item (in-game 2026-09-12: "ele saiu de perto de mim").
 function M.FindPickup(inst, state)
     if not (inst and state and _G and _G.TheSim and inst.Transform) then return nil end
-    local x, _, z = inst.Transform:GetWorldPosition()
+    local centre = M.ResolveLeader(state) or inst
+    local x, _, z = centre.Transform:GetWorldPosition()
     -- FindEntities returns nearest-first
     local ents = _G.TheSim:FindEntities(x, 0, z, state.radius or 12, { "_inventoryitem" }, { "INLIMBO", "NOCLICK", "fire", "heavy", "irreplaceable" }, nil) or {}
     for _, e in ipairs(ents) do
