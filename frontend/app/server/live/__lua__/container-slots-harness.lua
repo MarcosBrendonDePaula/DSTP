@@ -27,4 +27,28 @@ check("Apply: chest now 25 Vector3 slots, aliases follow (same table)", #params.
 check("Apply: chester untouched at 9, backpack untouched at 8", #params.chester.widget.slotpos == 9 and #params.backpack.widget.slotpos == 8)
 check("Apply: animbank kept (cosmetic frame untouched)", params.treasurechest.widget.animbank == "ui_chest_3x3")
 
+-- ── per-instance (runtime, flow-controlled) ──
+local base = { widget = { slotpos = { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, animbank = "ui_chest_3x3" }, type = "chest" }
+local P = { treasurechest = base }
+local d16 = CS.Data(P, "treasurechest", 16, V3)
+check("Data: a COPY with 16 Vector3 slots, base untouched", d16 and #d16.widget.slotpos == 16 and d16.widget.slotpos[1].isv3 and d16.type == "chest" and #base.widget.slotpos == 9 and d16.widget.animbank == "ui_chest_3x3")
+check("Data: unknown prefab → nil", CS.Data(P, "nope", 16, V3) == nil)
+
+-- server instance: component WidgetSetup called with the grown data; netvar + persistence updated
+local setups = {}
+local inst = { prefab = "treasurechest", GUID = 5,
+    components = { container = { numslots = 9, WidgetSetup = function(self, prefab, data) setups[#setups + 1] = { prefab, data }; self.numslots = #data.widget.slotpos end }, dstp_slots = {} },
+    _dstp_slots = { v = nil, set = function(self, n) self.v = n end } }
+local ok, why = CS.SetInstance(inst, 25, P, V3)
+check("SetInstance server: WidgetSetup(prefab, 25-slot data), netvar set, component n", ok == true and #setups == 1 and setups[1][1] == "treasurechest" and #setups[1][2].widget.slotpos == 25 and inst._dstp_slots.v == 25 and inst.components.dstp_slots.n == 25 and inst.components.container.numslots == 25)
+ok, why = CS.SetInstance(inst, 16, P, V3)
+check("SetInstance: shrinking refused (not_bigger), nothing applied", ok == false and why == "not_bigger" and #setups == 1)
+ok, why = CS.SetInstance({ prefab = "rabbit", GUID = 6, components = {} }, 16, P, V3)
+check("SetInstance: no container → no_container", ok == false and why == "no_container")
+
+-- client instance: the replica gets the same layout
+local rsetups = {}
+local cinst = { prefab = "treasurechest", GUID = 5, replica = { container = { n = 9, GetNumSlots = function(self) return self.n end, WidgetSetup = function(self, prefab, data) rsetups[#rsetups + 1] = data; self.n = #data.widget.slotpos end } } }
+check("ApplyToInstance client: replica WidgetSetup with 25 slots", CS.ApplyToInstance(cinst, 25, P, V3, false) == true and #rsetups == 1 and #rsetups[1].widget.slotpos == 25 and cinst.replica.container.n == 25)
+
 return C.report()

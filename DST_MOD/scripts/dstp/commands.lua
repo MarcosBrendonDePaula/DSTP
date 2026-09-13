@@ -628,6 +628,22 @@ function Commands.RegisterAll(core)
         if not ok2 then fail(err2) end
     end)
 
+    -- entity_set_slots: grow a container's slot count at RUNTIME (flow-controlled; a
+    -- per-instance layout replicated by netvar, persisted). Only grows. Ack:
+    -- entity_slots { guid, slots, ok, reason } (with token).
+    DSTP.RegisterCommand("entity_set_slots", function(data)
+        local CS, params = core.ContainerSlots, core.ContainerParams
+        if not (CS and params) then return end
+        local inst, reason = ResolveEntity(data)
+        local ok, why = false, reason
+        if inst then ok, why = CS.SetInstance(inst, data.slots, params, _G.Vector3) end
+        if not ok then LogError("entity_set_slots: " .. tostring(why)) end
+        if data.token then
+            DSTP.PushEvent("entity_slots", { token = data.token, ok = ok and true or false, reason = ok and nil or why,
+                guid = inst and inst.GUID or nil, prefab = inst and inst.prefab or nil, slots = tonumber(data.slots) })
+        end
+    end)
+
     -- entity_can_accept: capability query — how many of `item_guid` (a world item) or of a
     -- fresh `item` prefab fit in the entity's container/inventory now (free slots + room
     -- in stacks). Answer: entity_capacity { count, is_full, num_items } (token).

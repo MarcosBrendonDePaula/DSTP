@@ -56,4 +56,54 @@ function M.Apply(params, overrides, Vector3)
     return changed
 end
 
+-- ── per-INSTANCE slots, controlled by the flow (entity_set_slots) ─────────────
+-- Klei's Container:WidgetSetup(prefab, data) accepts a per-instance layout, but nothing
+-- ships that layout to clients (they draw from the static params). Our transport: a
+-- net_byte "dstp.slots" per container (declared on both sides in modmain for every prefab
+-- in containers.params); the server sets it, the client re-runs WidgetSetup with the
+-- grown grid on dirty. Persisted by components/dstp_slots.lua + an OnPreLoad hook, so
+-- the grown chest keeps its items across a save/load. Only grows (Klei asserts).
+
+--- A COPY of params[prefab] with n slots on the centred grid (never mutates the global).
+function M.Data(params, prefab, n, Vector3)
+    local base = params and params[prefab]
+    if not (base and base.widget) then return nil end
+    n = math.floor(tonumber(n) or 0)
+    local data = {}
+    for k, v in pairs(base) do data[k] = v end
+    local widget = {}
+    for k, v in pairs(base.widget) do widget[k] = v end
+    local slotpos = {}
+    for i, g in ipairs(M.Grid(n)) do slotpos[i] = Vector3 and Vector3(g.x, g.y, 0) or { x = g.x, y = g.y, z = 0 } end
+    widget.slotpos, widget.numslots = slotpos, nil
+    data.widget = widget
+    return data
+end
+
+--- Apply n slots to ONE live entity on this side. Server: the component; client: the
+--- replica. Returns true when applied, false + reason otherwise.
+function M.ApplyToInstance(inst, n, params, Vector3, isServer)
+    if not (inst and inst.prefab) then return false, "bad_inst" end
+    n = math.floor(tonumber(n) or 0)
+    local target = isServer and inst.components and inst.components.container
+        or (not isServer) and inst.replica and inst.replica.container
+    if not target then return false, "no_container" end
+    local cur = isServer and target.numslots or (target.GetNumSlots and target:GetNumSlots()) or 0
+    if n <= (cur or 0) then return false, "not_bigger" end
+    local data = M.Data(params, inst.prefab, n, Vector3)
+    if not data then return false, "no_params" end
+    target:WidgetSetup(inst.prefab, data)
+    return true
+end
+
+--- Server entry point (the command): apply, replicate through the netvar, persist.
+function M.SetInstance(inst, n, params, Vector3)
+    local ok, why = M.ApplyToInstance(inst, n, params, Vector3, true)
+    if not ok then return false, why end
+    n = math.floor(tonumber(n))
+    if inst._dstp_slots and inst._dstp_slots.set then inst._dstp_slots:set(n) end
+    if inst.components and inst.components.dstp_slots then inst.components.dstp_slots.n = n end
+    return true
+end
+
 return M

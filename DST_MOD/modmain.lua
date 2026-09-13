@@ -403,9 +403,34 @@ local function clampNet(v, net)
     return v
 end
 
+-- Per-instance container slots (flow-controlled, entity_set_slots): declare the transport
+-- netvar on BOTH sides for every prefab that has a container layout (pure data
+-- predicate → identical on server and client, the netvar positional rule). Server:
+-- persistence component + OnPreLoad re-apply; client: re-run WidgetSetup on dirty.
+local _ContainerSlots = GLOBAL.require("dstp/container_slots")
+local _ContainerParams = GLOBAL.require("containers").params
+
 AddPrefabPostInitAny(function(inst)
     if inst.prefab == nil or inst:HasTag("player") then return end
     local isServer = (not GLOBAL.TheWorld) or GLOBAL.TheWorld.ismastersim
+
+    if _ContainerParams[inst.prefab] ~= nil then
+        inst._dstp_slots = GLOBAL.net_byte(inst.GUID, "dstp.slots", "dstp_slots_dirty")
+        if isServer then
+            inst:AddComponent("dstp_slots")
+            local prevPre = inst.OnPreLoad
+            inst.OnPreLoad = function(ent, data, newents)
+                local n = data and data.dstp_slots and data.dstp_slots.n
+                if n then _ContainerSlots.SetInstance(ent, n, _ContainerParams, GLOBAL.Vector3) end
+                if prevPre then prevPre(ent, data, newents) end
+            end
+        else
+            inst:ListenForEvent("dstp_slots_dirty", function()
+                local n = inst._dstp_slots:value()
+                if n and n > 0 then _ContainerSlots.ApplyToInstance(inst, n, _ContainerParams, GLOBAL.Vector3, false) end
+            end)
+        end
+    end
 
     for _, b in ipairs(BINDINGS) do
         local src = BIND_SOURCES[b.source]
