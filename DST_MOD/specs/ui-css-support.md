@@ -114,7 +114,7 @@ drifted. All values are HUD px at the 1280×720 virtual resolution (`SCALEMODE_P
 |------|------|
 | `panel` (fixed: `width` **and** `height`) | frame `panel_fill_tiny.tex` = the box; **padding 20** every side; a `title` reserves a **title strip of `title_size + 16` px** (default 24 → 40) at the top, content shifts down by half of it; declared size is a **minimum** — the box grows to `content + 40 (+ strip)` |
 | `panel` (auto: no `height`) | **padding 28**; min **160 × 80**; same title strip |
-| `panel` `closeable` | the X (`close.tex` at 0.4) sits at `(pw/2 − 18, ph/2 − 18)`, hit box 64×64 → leave ~64 px free on the right of the title bar |
+| `panel` `closeable` | the X (`close.tex`) drawn at **28×28** exact (`close_size` overrides) at `(pw/2 − 18, ph/2 − 18)`; the drag bar leaves 64 px free on the right for it |
 | `col` / `row` | no implicit padding; `gap` default 8 (col) / 12 (row); `padding` is explicit |
 | `button` | `button_carny_long_*.tex` scaled to `width × height` (default 160 × 44); label `size` default 20 |
 | `text` | measured by the engine (`GetRegionSize`); a `width` gives a fixed region + word wrap |
@@ -134,9 +134,9 @@ every element. Numbers as of 2026-09-12 (atlases are 2048×2048):
 | Texture | Native px | How the mod sizes it |
 |---------|-----------|----------------------|
 | `fepanel_fills / panel_fill_tiny.tex` | 619 × 359 | `Image:SetSize(pw, ph)` — exact box, stretched |
-| `global_redux / button_carny_long_normal.tex` (+hover/down/disabled) | 320 × 89 | `ImageButton:ForceImageSize(w, h)` — exact px (the old `SetScale(w/340, h/70)` guessed 340×70 and squashed every button) |
+| `global_redux / button_carny_long_normal.tex` (+hover/down/disabled) | 320 × 89 | `ImageButton:ForceImageSize(w, h)` — exact px, for the tree `button` AND the `tabs` bar buttons (120×40) (the old `SetScale(w/340, h/70)` guessed 340×70 and squashed them) |
 | `global_redux / button_carny_square_normal.tex` | 129 × 129 | (unused yet) |
-| `global_redux / close.tex` | 39 × 39 | `SetScale(0.4)` → ~16 px, hit box forced to 64×64 |
+| `global_redux / close.tex` | 39 × 39 | `ForceImageSize(28, 28)` — image AND hit region 28 px (the old `SetScale(0.4)` + `ForceImageSize(64,64)` really gave ~26 px) |
 | `global_redux / scrollbar_arrow_up/down.tex` | 89 × 89 | Klei's `TrueScrollArea` scales to 0.3 → ~27 px |
 | `global_redux / scrollbar_handle.tex` / `scrollbar_bar.tex` | 59 × 56 / 32 × 1133 | Klei's scrollbar |
 | `global / square.tex` | 63 × 63 | hit-target overlay, `ForceImageSize(w+pad, h+pad)` |

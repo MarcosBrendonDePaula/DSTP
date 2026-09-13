@@ -73,6 +73,26 @@ local carny = find("ImageButton", function(w) return w.ctorArgs and w.ctorArgs[2
 check("button: ForceImageSize(130,30) " .. f2(carny and rawget(carny, "size")),
     carny and rawget(carny, "size") and carny.size[1] == 130 and carny.size[2] == 30)
 
+-- ── tabs: each tab button is sized exactly (120x40), the close X exactly 28x28 ──
+created = {}
+UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "t", tree = {
+    type = "panel", title = "Loja", width = 300, height = 200, tabs_test = true, children = {
+        { type = "tabs", tabs = { { label = "A", child = { type = "col", children = {} } }, { label = "B", child = { type = "col", children = {} } } } },
+    },
+} })
+local nTabBtn, tabOk = 0, true
+for _, w in ipairs(created) do
+    if w.kind == "ImageButton" and w.ctorArgs and w.ctorArgs[2] == "button_carny_long_normal.tex" then
+        nTabBtn = nTabBtn + 1
+        local sz = rawget(w, "size")
+        if not (sz and sz[1] == 120 and sz[2] == 40) then tabOk = false end
+    end
+end
+check("tabs: 2 tab buttons, each ForceImageSize(120,40)", nTabBtn == 2 and tabOk)
+local closeBtn = find("ImageButton", function(w) return w.ctorArgs and w.ctorArgs[2] == "close.tex" end)
+local csz = closeBtn and rawget(closeBtn, "size")
+check("close X: ForceImageSize(28,28) " .. f2(csz), csz and csz[1] == 28 and csz[2] == 28)
+
 -- ── auto-sized panel with a title draws it and reserves the strip ──
 created = {}
 UIWidgets.ProcessCommand({ action = "create", type = "tree", id = "a", tree = {

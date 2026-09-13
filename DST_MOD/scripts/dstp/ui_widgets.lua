@@ -1051,7 +1051,8 @@ RenderNodeImpl = function(node, parent, ctx)
                 "images/global_redux.xml",
                 "button_carny_long_normal.tex", "button_carny_long_hover.tex",
                 "button_carny_long_disabled.tex", "button_carny_long_down.tex"))
-            btn:SetScale(btnW / 340, barH / 70)
+            -- exact px (the carny long tex is 320x89, not 340x70 — see dst-atlas-sizes.ts)
+            if btn.ForceImageSize then btn:ForceImageSize(btnW, barH) else btn:SetScale(btnW / 320, barH / 89) end
             local lbl = bwrap:AddChild(Text(_G.NEWFONT_OUTLINE, 18, tab.label or ("Aba " .. i)))
             bwrap:SetPosition(barX + (i - 1) * (btnW + gap), barY, 0)
             local idx = i
@@ -1402,10 +1403,12 @@ RenderNodeImpl = function(node, parent, ctx)
         if node.closeable ~= false then
             local close_btn = holder:AddChild(ImageButton(
                 "images/global_redux.xml", "close.tex", "close.tex", "close.tex", "close.tex"))
-            close_btn:SetScale(0.4)
-            -- Give the X an explicit, generous hit region (the scaled tex alone can be a
-            -- tiny target) and force it into the hit-test, mirroring MakeHitTarget.
-            if close_btn.ForceImageSize then close_btn:ForceImageSize(64, 64) end
+            -- Exact px: close.tex is 39x39; draw it at 28x28 (`close_size` overrides). The
+            -- old SetScale(0.4) + ForceImageSize(64,64) LOOKED like a 64px hit box but the
+            -- 0.4 scale applied to it too — the real target was ~26px. Now the size you
+            -- read is the size you get, for both the image and the hit region.
+            local cs = tonumber(node.close_size) or 28
+            if close_btn.ForceImageSize then close_btn:ForceImageSize(cs, cs) else close_btn:SetScale(cs / 39) end
             if close_btn.SetClickable then close_btn:SetClickable(true) end
             close_btn:SetPosition(pw / 2 - 18, ph / 2 - 18, 0)
             close_btn:SetOnClick(function() UIWidgets.DestroyGroup(ctx.root_id) end)
